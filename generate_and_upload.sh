@@ -2,7 +2,7 @@
 
 # === SETTINGS ===
 PROJECT_DIR="$HOME/work/CASPER_repos/qcm_red_pitaya"
-TARGET_DIR=PROJECT_DIR + "/qcm_rp/myproj/myproj.runs/impl_1"
+TARGET_DIR="$HOME/work/CASPER_repos/qcm_red_pitaya/qcm_rp/myproj/myproj.runs/impl_1"
 REMOTE_USER="root"
 REMOTE_HOST="rp-f0ea58.local"
 REMOTE_PATH="/root"

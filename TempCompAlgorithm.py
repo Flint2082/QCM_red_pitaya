@@ -45,34 +45,12 @@ class TempCompAlgorithm:
         uncompensated_thickness_nm = (fM_dif / self.fM_0)*1000/(self.mat_dens * self.sens_area)
         compensated_thickness_nm = (M_dif*1000)/(self.mat_dens * self.sens_area)
         
-        return T, uncompensated_thickness_nm, compensated_thickness_nm
+        return T, T_dif[0], uncompensated_thickness_nm, compensated_thickness_nm
     
     def calibrate(self, parameter_file):
         # Placeholder for calibration method if needed
         pass
         
 
-# ### USER CALIBRATION INPUTS
-# fT_1 = -0.000146172 
-# fT_2 = 6.56675E-07
-# fT_3 = -1.77929E-09
 
-# fM_1 = 1.4117E-05
-# fM_2 = -1.61812E-07
-# fM_3 = 6.10868E-10
-
-
-# ### USER STARTING MEASUREMENT INPUTS
-# T_start = 23.0  
-# fT_start = 3.735242
-# fM_start = 9.99980336 
-
-# ### USER CONSTANTS
-# mat_dens = 2700 # kg/m^3  // Aluminum density
-# sens_area = 32.0E-6  # m^2
-
-
-# # mass sensitivity coefficients 
-# fT_0 = (fT_start * 2)/28.5 
-# fM_0 = (fM_start * 2)/28.5 
         

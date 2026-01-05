@@ -1,5 +1,6 @@
 import sympy as sp
 import csv
+import numpy as np
 
 class TempCompAlgorithm:
     def __init__(self, parameter_file, T_start, fT_start, fM_start, mat_dens=2700, sens_area=32.0E-6):
@@ -25,6 +26,13 @@ class TempCompAlgorithm:
         self.mat_dens = mat_dens # kg/m^3  // Material density
         self.sens_area = sens_area  # m^2  // Sensor area
         
+        # Coefficients for the cubic equation a*T_dif^3 + b*T_dif^2 + c*T_dif + d = 0
+        # with d calculated later
+        self.a = (self.fM_3*self.fT_0 - self.fT_3*self.fM_0)
+        self.b = (self.fM_2*self.fT_0 - self.fT_2*self.fM_0)
+        self.c = (self.fM_1*self.fT_0 - self.fT_1*self.fM_0) 
+        
+        
          
     def FreqToTemp(self, fT, fM):
 
@@ -37,15 +45,21 @@ class TempCompAlgorithm:
         fT_d = self.fT_start - self.fT_3 * self.T_start**3 - self.fT_2 * self.T_start**2 - self.fT_1 * self.T_start 
         fM_d = self.fM_start - self.fM_3 * self.T_start**3 - self.fM_2 * self.T_start**2 - self.fM_1 * self.T_start
         
-        dT= sp.symbols('dT')      
-        T_dif = sp.solve((self.fM_3*self.fT_0 - self.fT_3*self.fM_0) * (dT + self.T_start)**3 + (self.fM_2*self.fT_0 - self.fT_2*self.fM_0) * (dT + self.T_start)**2 + (self.fM_1*self.fT_0 - self.fT_1*self.fM_0) * (dT + self.T_start) + self.fM_0*(fT_dif-fT_d) - self.fT_0*(fM_dif - fM_d), dT)
-        M_dif = -(-fM_dif + (self.fM_3 * (T_dif[0] + self.T_start)**3 + self.fM_2 * (T_dif[0] + self.T_start)**2 + self.fM_1 * (T_dif[0] + self.T_start)) - (self.fM_3 * (self.T_start)**3 + self.fM_2 * (self.T_start)**2 + self.fM_1 * (self.T_start)))/ self.fM_0
+        # d coefficient for the cubic equation a*T_dif^3 + b*T_dif^2 + c*T_dif + d = 0
+        d = self.fM_0*(fT_dif-fT_d) - self.fT_0*(fM_dif - fM_d)
+        
+        # calculate the roots of the cubic equation
+        roots = np.roots([self.a, self.b, self.c, d])
+        T_dif = roots[np.isclose(roots.imag, 0)].real  # Select only the real root(s)
 
-        T = self.T_start+T_dif[0]
+        # Calculate the compensated mass change using the found temperature difference
+        M_dif = -(-fM_dif + (self.fM_3 * (T_dif[0])**3 + self.fM_2 * (T_dif[0])**2 + self.fM_1 * (T_dif[0])) - (self.fM_3 * (self.T_start)**3 + self.fM_2 * (self.T_start)**2 + self.fM_1 * (self.T_start)))/ self.fM_0
+
+
         uncompensated_thickness_nm = (fM_dif / self.fM_0)*1000/(self.mat_dens * self.sens_area)
         compensated_thickness_nm = (M_dif*1000)/(self.mat_dens * self.sens_area)
         
-        return T, uncompensated_thickness_nm, compensated_thickness_nm
+        return T_dif[0], uncompensated_thickness_nm, compensated_thickness_nm
     
     def calibrate(self, parameter_file):
         # Placeholder for calibration method if needed

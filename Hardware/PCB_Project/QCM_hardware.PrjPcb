@@ -68,7 +68,7 @@ GenerateClassCluster=0
 DocumentUniqueId=SJSUXARP
 
 [Document2]
-DocumentPath=PCB_Project.Annotation
+DocumentPath=QCM_hardware.Annotation
 AnnotationEnabled=1
 AnnotateStartValue=1
 AnnotationIndexControlEnabled=0

@@ -2,15 +2,15 @@
 
 # === SETTINGS ===
 PROJECT_DIR="$HOME/work/CASPER_repos/qcm_red_pitaya"
-TARGET_DIR="$HOME/work/CASPER_repos/qcm_red_pitaya/qcm_rp/myproj/myproj.runs/impl_1"
+TARGET_DIR="$PROJECT_DIR/qcm_rp/myproj/myproj.runs/impl_1"
 REMOTE_USER="root"
 REMOTE_HOST="rp-f0ea58.local"
 REMOTE_PATH="/root"
 BITFILE="top.bit"
 BIFFILE="top.bif"
 OUTPUT_BIN="top.bit.bin"
-VENV_DIR="$HOME/work/cfpga_venv"
-PYTHON_SCRIPT="$HOME/work/CASPER_repos/qcm_red_pitaya/startup.py"
+VENV_DIR="$PROJECT_DIR/cfpga_venv"
+PYTHON_SCRIPT="$PROJECT_DIR/startup.py"
 
 # === SCRIPT START ===
 
@@ -35,7 +35,7 @@ EOF
 cd "$PROJECT_DIR" || { echo "Directory not found: $PROJECT_DIR"; exit 1; }
 
 echo "Activating CASPERFPGA venv"
-source "$VENV_DIR/bin/activate" || { echo "Failed to activate virtual environment: $VENV_DIR"; exit 1; }
+#source "$VENV_DIR/bin/activate" || { echo "Failed to activate virtual environment: $VENV_DIR"; exit 1; }
 
 echo "Starting IPython session"
-ipython -i "$PYTHON_SCRIPT" || { echo "Failed to start IPython with script: $PYTHON_SCRIPT"; exit 1; }
+ipython -i "$PYTHON_SCRIPT" 

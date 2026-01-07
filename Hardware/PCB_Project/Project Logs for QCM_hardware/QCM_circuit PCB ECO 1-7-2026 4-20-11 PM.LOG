@@ -1,0 +1,18 @@
+Removed Pin From Net: NetName=NetC12_2 Pin=J7-1
+Removed Pin From Net: NetName=NetC13_2 Pin=J8-1
+Change Component Comment : Designator=R12 Old Comment=R_0805 New Comment=100k
+Change Component Designator: OldDesignator=J4 NewDesignator=J2
+Change Component Designator: OldDesignator=J5 NewDesignator=J3
+Change Component Designator: OldDesignator=J6 NewDesignator=J4
+Change Component Designator: OldDesignator=J7 NewDesignator=J5
+Change Component Designator: OldDesignator=J8 NewDesignator=J6
+Add component: Footprint Not Found R_0805
+Add component: Footprint Not Found R_0805
+Add Pin To Net: Unknown Pin: Pin R14-1
+Add Pin To Net: Unknown Pin: Pin R15-1
+Added Pin To Net: NetName=NetJ5_1 Pin=J5-1
+Added Net: Name=NetJ5_1
+Added Pin To Net: NetName=NetJ6_1 Pin=J6-1
+Added Net: Name=NetJ6_1
+Add Class Member: Failed to add class member : Component R14 10
+Add Class Member: Failed to add class member : Component R15 10

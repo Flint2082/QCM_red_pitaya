@@ -1,0 +1,14 @@
+Added Pin To Net: NetName=NetC7_2 Pin=C7-1
+Added Pin To Net: NetName=NetC7_2 Pin=U2-2
+Change Net Name : Old Net Name=NetC7_2 New Net Name=NetC7_1
+Added Member To Class: ClassName=QCM_circuit Member=Component C2 C_0805
+Added Member To Class: ClassName=QCM_circuit Member=Component C3 C_0805
+Added Member To Class: ClassName=QCM_circuit Member=Component C6 100nF
+Added Member To Class: ClassName=QCM_circuit Member=Component C8 100nF
+Added Member To Class: ClassName=QCM_circuit Member=Component C9 100nF
+Added Member To Class: ClassName=QCM_circuit Member=Component J2 FCR7350B
+Added Member To Class: ClassName=QCM_circuit Member=Component J4 SMA
+Added Member To Class: ClassName=QCM_circuit Member=Component J5 SMA
+Added Member To Class: ClassName=QCM_circuit Member=Component J7 SMA
+Added Member To Class: ClassName=QCM_circuit Member=Component J8 SMA
+Added Member To Class: ClassName=QCM_circuit Member=Component R8 10

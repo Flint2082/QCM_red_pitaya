@@ -1,0 +1,9 @@
+Add component: Footprint Not Found R_0805
+Add component: Footprint Not Found R_0805
+Add Pin To Net: Unknown Pin: Pin R14-1
+Add Pin To Net: Unknown Pin: Pin R14-2
+Add Pin To Net: Unknown Pin: Pin R15-1
+Add Pin To Net: Unknown Pin: Pin R15-2
+Added Member To Class: ClassName=QCM_circuit Member=Component J5 SMA
+Add Class Member: Failed to add class member : Component R14 10
+Add Class Member: Failed to add class member : Component R15 10

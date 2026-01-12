@@ -1,0 +1,13 @@
+Change Component Designator: OldDesignator=C? NewDesignator=C5
+Change Component Designator: OldDesignator=C? NewDesignator=C14
+Change Component Designator: OldDesignator=R? NewDesignator=R8
+Change Component Designator: OldDesignator=R? NewDesignator=R17
+Change Component Designator: OldDesignator=U? NewDesignator=U1
+Change Component Designator: OldDesignator=U? NewDesignator=U2
+Change Component Designator: OldDesignator=U? NewDesignator=U3
+Change Component Designator: OldDesignator=U? NewDesignator=U4
+Added Member To Class: ClassName=QCM_circuit Member=Component C14 CAP 68nF 100V 1206(3216)
+Added Member To Class: ClassName=QCM_circuit Member=Component R8 CRCW080550R0FKTA
+Added Member To Class: ClassName=QCM_circuit Member=Component U1 L78M09CDT-TR
+Added Member To Class: ClassName=QCM_circuit Member=Component U3 OPA656NB/250
+Added Member To Class: ClassName=QCM_circuit Member=Component U4 OPA656NB/250

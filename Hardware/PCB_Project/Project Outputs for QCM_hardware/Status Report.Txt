@@ -1,0 +1,41 @@
+Output: Gerber Files
+Type  : Gerber
+From  : Variant [[No Variations]] of Project [QCM_hardware.PrjPcb]
+   Generated File[QCM_circuit.GTO]
+   Generated File[QCM_circuit.GTP]
+   Generated File[QCM_circuit.GTS]
+   Generated File[QCM_circuit.GTL]
+   Generated File[QCM_circuit.GBL]
+   Generated File[QCM_circuit.GBS]
+   Generated File[QCM_circuit.GBP]
+   Generated File[QCM_circuit.GBO]
+   Generated File[QCM_circuit.GM1]
+   Generated File[QCM_circuit.GM2]
+   Generated File[QCM_circuit.GM3]
+   Generated File[QCM_circuit.GM5]
+   Generated File[QCM_circuit.GM7]
+   Generated File[QCM_circuit.GM8]
+   Generated File[QCM_circuit.GM9]
+   Generated File[QCM_circuit.GM13]
+   Generated File[QCM_circuit.GM15]
+   Generated File[QCM_circuit.GM16]
+   Generated File[QCM_circuit.GM20]
+   Generated File[QCM_circuit.GM21]
+   Generated File[QCM_circuit.GM23]
+   Generated File[QCM_circuit.GM24]
+   Generated File[QCM_circuit.GKO]
+   Generated File[QCM_circuit.GPT]
+   Generated File[QCM_circuit.GPB]
+   Generated File[QCM_circuit.2]
+   Generated File[QCM_circuit.GML]
+   Generated File[QCM_circuit.GD1]
+   Generated File[QCM_circuit.GG1]
+   Generated File[QCM_circuit.GM]
+   Generated File[QCM_circuit.EXTREP]
+   Generated File[QCM_circuit.REP]
+
+
+Files Generated   : 32
+Documents Printed : 0
+
+Finished Output Generation At 11:21:39 AM On 1/13/2026

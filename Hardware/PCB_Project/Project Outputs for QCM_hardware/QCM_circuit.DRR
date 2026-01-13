@@ -1,0 +1,19 @@
+----------------------------------------------------------------------------------------------------------------------------------
+NCDrill File Report For: QCM_circuit.PcbDoc   1/13/2026  11:20:59 AM
+----------------------------------------------------------------------------------------------------------------------------------
+
+Layer Pair : Top Layer to Bottom Layer
+ASCII RoundHoles File : QCM_circuit-RoundHoles.TXT
+ASCII SlotHoles File : QCM_circuit-SlotHoles.TXT
+
+Tool       Hole Size               Hole Tolerance               Hole Type       Hole Count   Plated         Tool Travel
+----------------------------------------------------------------------------------------------------------------------------------
+T1      0.5mm (20mil)                                             Round             195       PTH        867.53mm (34.15inch)
+T2      1mm (39mil)                                               Slot              3         PTH        32.17mm (1.27inch)
+T3      1.016mm (40mil)                                           Round             3         PTH        5.08mm (0.20inch)
+T4      1.3mm (51mil)                                             Round             3         PTH        12.91mm (0.51inch)
+T5      3mm (118mil)                                              Round             4         PTH        221.00mm (8.70inch)
+----------------------------------------------------------------------------------------------------------------------------------
+Totals                                                                              208
+
+Total Processing Time (hh:mm:ss) : 00:00:00

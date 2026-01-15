@@ -58,7 +58,7 @@ class TempCompAlgorithm:
 
         uncompensated_thickness_nm = (fM_dif / self.fM_0)*1000/(self.mat_dens * self.sens_area)
         compensated_thickness_nm = (M_dif*1000)/(self.mat_dens * self.sens_area)
-        
+
         return T_dif[0], uncompensated_thickness_nm, compensated_thickness_nm
     
     def calibrate(self, parameter_file):

@@ -1,3 +1,4 @@
+
 import casperfpga
 import os
 import time
@@ -31,16 +32,6 @@ def to_signed(value, bits):
     sign_bit = 1 << (bits - 1)
     return (value ^ sign_bit) - sign_bit
 
-def sweep(start, stop, step):
-    for f in range((start*64), (stop*64), (step*64)):
-        avg = 0
-        fpga.write_int(device_name='freq_adj',integer=int(f))
-        for i in range(100):
-            #time.sleep(0.0001)
-            avg += to_signed(fpga.read_int('phase_out'),29)
-        avg = avg / 100
-        print(f/64, ", ", avg)
-
 def setFreq(osc_index, freq):
     fpga.write_int(device_name='freq_'+str(osc_index),integer=int(freq*64))
 
@@ -56,7 +47,21 @@ def reset():
     fpga.write('reset',(0).to_bytes(4,'big'))
     
 def getFreq(osc_index):
-    return fpga.read_int('frequency_out_'+str(osc_index))/64
+    lsb = fpga.read_int(f'frequency_out_lsb_{osc_index}') & 0xFFFFFFFF
+    msb = fpga.read_int(f'frequency_out_msb_{osc_index}') & 0xFFFFFFFF
+
+    raw = (msb << 32) | lsb      # reconstruct full fixed-point integer
+    freq = raw / (1 << 10)       # apply fixed-point scaling
+
+    return freq
+
+def sweep(osc_index, start, stop, step):
+    setGain(osc_index, 0.01)
+    for f in range(start, stop, step):
+        reset()
+        setFreq(osc_index, f)
+        time.sleep(1)
+	
 
 
 def startMeasurement(T = 23,debug=False):
@@ -64,8 +69,8 @@ def startMeasurement(T = 23,debug=False):
     temp_comp = tca.TempCompAlgorithm(
         parameter_file='calParams.csv',
         T_start=T, # would be nice to measure this with a thermocouple
-        fT_start=3735744/1000000,  #getFreq(1),
-        fM_start=99997581/1000000  #getFreq(2)
+        fT_start= getFreq(1),
+        fM_start= getFreq(2)
     )
 
     # Initialize measurement loop
@@ -85,11 +90,11 @@ def startMeasurement(T = 23,debug=False):
     try:
         # Measurement loop
         while True:
-            fT = 3734505/1000000 #getFreq(1)
-            fM = 99998471/1000000#getFreq(2)
-            T, T_rel, uncompensated_thickness_nm, compensated_thickness_nm = temp_comp.FreqToTemp(fT, fM)
+            fT = getFreq(1)
+            fM = getFreq(2)
+            T, uncompensated_thickness_nm, compensated_thickness_nm = temp_comp.FreqToTemp(fT, fM)
             if(debug==True):
-                print(f"{calendar.timegm(time.gmtime())} \t {fT:.8f} \t {fM:.8f} \t {T:.2f} \t {T_rel:.2f} \t {uncompensated_thickness_nm:.4f} \t {compensated_thickness_nm:.4f}")
+                print(f"{calendar.timegm(time.gmtime())} \t {fT:.8f} \t {fM:.8f} \t {T:.2f} \t {uncompensated_thickness_nm:.4f} \t {compensated_thickness_nm:.4f}")
                 with open('output.csv', mode='a') as log_file:
                     log_file.write(f"{calendar.timegm(time.gmtime())},{fT},{fM},{T},{uncompensated_thickness_nm},{compensated_thickness_nm}\n")
             else:
@@ -109,21 +114,28 @@ def startMeasurement(T = 23,debug=False):
  
 ### STARTUP AUTOMATON (TEMP)
  
-setFreq(1,3772000)                                                                                                                                                      
+## 10 MHz crystal
+#setFreq(1,3730000)                                                                                                                                                   
+#setGain(1,0.001)
+#time.sleep(3)
+#setGain(1,0.00001)
+#setFreq(2,9990000)
+#setGain(2,0.001)
+#time.sleep(3)
+#setGain(2,0.00001)
 
-setFreq(2,10100000)                                                                                                                                                     
+## 6MHz crystal
+setFreq(1,5975000)                                                                                                                                                   
+setGain(1,0.001)
+time.sleep(1)
+setGain(1,0.00001)
+setFreq(2,6562000)
+setGain(2,0.001)
+time.sleep(1)
+setGain(2,0.00001)
 
-setGain(1,0.00000001)                                                                                                                                                   
 
-setGain(2,0.00000001) 
- 
- 
- 
- 
- 
- 
- 
- 
- 
- 
- 
+
+
+
+

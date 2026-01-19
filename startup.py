@@ -4,8 +4,8 @@ import os
 import time
 import TempCompAlgorithm as tca
 import calendar
-
-
+import matplotlib.pyplot as plt
+from collections import deque
 
 
 directory = os.path.expanduser(
@@ -37,6 +37,9 @@ def setFreq(osc_index, freq):
 
 def setGain(osc_index, gain):
     fpga.write_int(device_name='filter_gain_'+str(osc_index),integer=int(gain*4294967296))
+    
+def setLDGain(osc_index, gain):
+    fpga.write_int(device_name='leaky_gain_'+str(osc_index),integer=int(gain*4294967296))
 
 def setInv(osc_index, inv):
     fpga.write('inv_fb_'+str(osc_index),(inv).to_bytes(4,'big'))
@@ -55,6 +58,12 @@ def getFreq(osc_index):
 
     return freq
 
+def getLock(osc_index):
+    lock_val = to_signed(fpga.read_int(f'lock_detect_{osc_index}'),32)
+    return lock_val/2**31
+  
+    
+
 def sweep(osc_index, start, stop, step):
     setGain(osc_index, 0.01)
     for f in range(start, stop, step):
@@ -69,8 +78,8 @@ def startMeasurement(T = 23,debug=False):
     temp_comp = tca.TempCompAlgorithm(
         parameter_file='calParams.csv',
         T_start=T, # would be nice to measure this with a thermocouple
-        fT_start= getFreq(1),
-        fM_start= getFreq(2)
+        fT_start= getFreq(2),
+        fM_start= getFreq(1)
     )
 
     # Initialize measurement loop
@@ -83,28 +92,70 @@ def startMeasurement(T = 23,debug=False):
         with open('output.csv', mode='w') as log_file:
             log_file.write("Time,Freq_T,Freq_M,Temp_C,Uncomp_thick_nm,Comp_thick_nm\n")
     else:
-        print("Temp_C \t Comp_thick_nm")
-        with open('output.csv', mode='w') as log_file:
-            log_file.write("Temp_C,Comp_thick_nm\n")
+        print("Temp_freq \t Mass_freq")        
+        #with open('output.csv', mode='w') as log_file:
+        #    log_file.write("Temp_C,Comp_thick_nm\n")
             
     try:
+        # ---- Live plot setup ----
+        plt.ion()
+
+        fig, ax = plt.subplots()
+        ax.set_title("Live QCM Measurement")
+        ax.set_xlabel("Time [s]")
+        ax.set_ylabel("Delta Frequency [Hz]")
+
+        # Keep a rolling window of points
+        max_points = 1000
+        time_data = deque(maxlen=max_points)
+        temp_freq_data = deque(maxlen=max_points)
+        mass_freq_data = deque(maxlen=max_points)
+        thickness_data = deque(maxlen=max_points)
+
+        (line,) = ax.plot([], [], lw=2)
+        start_time = time.time()
+
+        fig.show()
+        fig.canvas.draw()
+
+    
         # Measurement loop
         while True:
-            fT = getFreq(1)
-            fM = getFreq(2)
+            fT = getFreq(2)
+            fM = getFreq(1)
+            
+            
             T, uncompensated_thickness_nm, compensated_thickness_nm = temp_comp.FreqToTemp(fT, fM)
             if(debug==True):
                 print(f"{calendar.timegm(time.gmtime())} \t {fT:.8f} \t {fM:.8f} \t {T:.2f} \t {uncompensated_thickness_nm:.4f} \t {compensated_thickness_nm:.4f}")
                 with open('output.csv', mode='a') as log_file:
                     log_file.write(f"{calendar.timegm(time.gmtime())},{fT},{fM},{T},{uncompensated_thickness_nm},{compensated_thickness_nm}\n")
             else:
-                print(f"{T:.2f} \t {compensated_thickness_nm:.4f}")
-                with open('output.csv', mode='a') as log_file:
-                    log_file.write(f"{T},{compensated_thickness_nm}\n")
+                print(f"{fT:.3f} \t {fM:.3f}")
+                
+                #with open('output.csv', mode='a') as log_file:
+                #    log_file.write(f"{T},{compensated_thickness_nm}\n")
+                    
+            
+            # ---- Update live plot ----
+            t_now = time.time() - start_time
+            time_data.append(t_now)
+            temp_freq_data.append(fT)
+            mass_freq_data.append(fM)
+            thickness_data.append(compensated_thickness_nm)
+
+            line.set_data(time_data, mass_freq_data)
+            ax.relim()
+            ax.autoscale_view()
+
+            fig.canvas.draw()
+            fig.canvas.flush_events()
+
+                    
                     
             time.sleep(0.1) # <-- set measurement interval here
     except KeyboardInterrupt:
-        print("\nMeasurement stopped by user")
+        print("\nMeasuremenFt stopped by user")
         
 
  
@@ -127,10 +178,12 @@ def startMeasurement(T = 23,debug=False):
 ## 6MHz crystal
 setFreq(1,5975000)                                                                                                                                                   
 setGain(1,0.001)
+setLDGain(1,0.001)
 time.sleep(1)
 setGain(1,0.00001)
 setFreq(2,6562000)
 setGain(2,0.001)
+setLDGain(2,0.001)
 time.sleep(1)
 setGain(2,0.00001)
 

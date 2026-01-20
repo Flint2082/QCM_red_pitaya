@@ -39,10 +39,15 @@ def setGain(osc_index, gain):
     fpga.write_int(device_name='filter_gain_'+str(osc_index),integer=int(gain*4294967296))
     
 def setLDGain(osc_index, gain):
-    fpga.write_int(device_name='leaky_gain_'+str(osc_index),integer=int(gain*4294967296))
+    fpga.write_int(device_name='ld_gain_'+str(osc_index),integer=int(gain*4294967296))
 
 def setInv(osc_index, inv):
     fpga.write('inv_fb_'+str(osc_index),(inv).to_bytes(4,'big'))
+    
+def standby(osc_index):
+    setFreq(osc_index)
+    setGain(osc_index)
+    reset()
 
 def reset():
     fpga.write('reset',(1).to_bytes(4,'big'))
@@ -61,10 +66,10 @@ def getFreq(osc_index):
 def getLock(osc_index):
     lock_val = to_signed(fpga.read_int(f'lock_detect_{osc_index}'),32)
     return lock_val/2**31
-  
     
 
 def sweep(osc_index, start, stop, step):
+    standby(2)
     setGain(osc_index, 0.01)
     for f in range(start, stop, step):
         reset()
@@ -100,10 +105,14 @@ def startMeasurement(T = 23,debug=False):
         # ---- Live plot setup ----
         plt.ion()
 
-        fig, ax = plt.subplots()
-        ax.set_title("Live QCM Measurement")
-        ax.set_xlabel("Time [s]")
-        ax.set_ylabel("Delta Frequency [Hz]")
+        fig, (ax1,ax2) = plt.subplots(2,1,sharex=True, hspace=0.4)
+        ax1.set_title("Mass mode measurement")
+        ax1.set_xlabel("Time [s]")
+        ax1.set_ylabel("Delta Frequency [Hz]")
+        ax2.set_title("Temp mode measurement")
+        ax2.set_xlabel("Time [s]")
+        ax2.set_ylabel("Delta Frequency [Hz]")
+        
 
         # Keep a rolling window of points
         max_points = 1000
@@ -112,7 +121,8 @@ def startMeasurement(T = 23,debug=False):
         mass_freq_data = deque(maxlen=max_points)
         thickness_data = deque(maxlen=max_points)
 
-        (line,) = ax.plot([], [], lw=2)
+        lineM, = ax1.plot([], [], lw=2)
+        lineT, = ax2.plot([], [], lw=2)
         start_time = time.time()
 
         fig.show()
@@ -144,9 +154,13 @@ def startMeasurement(T = 23,debug=False):
             mass_freq_data.append(fM)
             thickness_data.append(compensated_thickness_nm)
 
-            line.set_data(time_data, mass_freq_data)
-            ax.relim()
-            ax.autoscale_view()
+            lineM.set_data(time_data, mass_freq_data)
+            ax1.relim()
+            ax1.autoscale_view()
+            
+            lineT.set_data(time_data, temp_freq_data)
+            ax2.relim()
+            ax2.autoscale_view()
 
             fig.canvas.draw()
             fig.canvas.flush_events()
@@ -178,14 +192,14 @@ def startMeasurement(T = 23,debug=False):
 ## 6MHz crystal
 setFreq(1,5975000)                                                                                                                                                   
 setGain(1,0.001)
-setLDGain(1,0.001)
+setLDGain(1,0.01)
 time.sleep(1)
-setGain(1,0.00001)
+setGain(1,0.000001)
 setFreq(2,6562000)
 setGain(2,0.001)
-setLDGain(2,0.001)
+setLDGain(2,0.01)
 time.sleep(1)
-setGain(2,0.00001)
+setGain(2,0.0001)
 
 
 

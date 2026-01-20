@@ -76,9 +76,37 @@ def sweep(osc_index, start, stop, step):
         setFreq(osc_index, f)
         time.sleep(1)
 	
+def startup():
+    #STARTUP AUTOMATON (TEMP)
+    reset()
+    
+    ## 10 MHz crystal
+    #setFreq(1,3730000)                                                                                                                                                   
+    #setGain(1,0.001)
+    #time.sleep(3)
+    #setGain(1,0.00001)
+    #setFreq(2,9990000)
+    #setGain(2,0.001)
+    #time.sleep(3)
+    #setGain(2,0.00001)
 
+    ## 6MHz crystal
+    setFreq(1,5975000)                                                                                                                                                   
+    setGain(1,0.001)
+    setLDGain(1,0.01)
+    time.sleep(1)
+    setGain(1,0.000001)
+    setFreq(2,6562000)
+    setGain(2,0.001)
+    setLDGain(2,0.01)
+    time.sleep(1)
+    setGain(2,0.0001)
+    
 
 def startMeasurement(T = 23,debug=False):
+    # Measurement routine
+    startup()
+    
     # Initialize the temperature compensation algorithm with calibration and starting values
     temp_comp = tca.TempCompAlgorithm(
         parameter_file='calParams.csv',
@@ -172,34 +200,36 @@ def startMeasurement(T = 23,debug=False):
         print("\nMeasuremenFt stopped by user")
         
 
- 
- 
- 
- 
- 
-### STARTUP AUTOMATON (TEMP)
- 
-## 10 MHz crystal
-#setFreq(1,3730000)                                                                                                                                                   
-#setGain(1,0.001)
-#time.sleep(3)
-#setGain(1,0.00001)
-#setFreq(2,9990000)
-#setGain(2,0.001)
-#time.sleep(3)
-#setGain(2,0.00001)
+def startCalibration():
+    # confirm overwrite
+    if(input("This will overwrite 'calibration_data.csv'. Continue? (y/n): ") != 'y'):
+        print("Calibration aborted.")
+        return
+    
+    with open('calibration_data.csv', mode='w') as cal_file:
+            cal_file.write(f"Temp,Freq_T,Freq_M\n")
+    
+    # Calibration routine
+    startup()
+    while(True):
+        temp = input("Current Temperature (C): ")
+        if temp == 0:
+            break
+        freqM = getFreq(1)
+        freqT = getFreq(2)
+        print(f"Freq M: {freqM}, Freq T: {freqT} at Temp: {temp}")
+        with open('calibration_data.csv', mode='a') as cal_file:
+            cal_file.write(f"{temp},{freqT},{freqM}\n")
 
-## 6MHz crystal
-setFreq(1,5975000)                                                                                                                                                   
-setGain(1,0.001)
-setLDGain(1,0.01)
-time.sleep(1)
-setGain(1,0.000001)
-setFreq(2,6562000)
-setGain(2,0.001)
-setLDGain(2,0.01)
-time.sleep(1)
-setGain(2,0.0001)
+
+    
+            
+
+
+ 
+ 
+ 
+
 
 
 

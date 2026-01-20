@@ -1,11 +1,12 @@
 import sympy as sp
 import csv
 import numpy as np
+import matplotlib.pyplot as plt
 
 class TempCompAlgorithm:
-    def __init__(self, parameter_file, T_start, fT_start, fM_start, mat_dens=2700, sens_area=32.0E-6):
+    def __init__(self, coefficient_file, T_start, fT_start, fM_start, mat_dens=2700, sens_area=32.0E-6):
         # Load calibration parameters from the provided file
-        with open(parameter_file, mode='r') as file:
+        with open(coefficient_file, mode='r') as file:
             reader = csv.DictReader(file)
             params = {row['Name']: float(row['value']) for row in reader}
         
@@ -61,10 +62,28 @@ class TempCompAlgorithm:
 
         return T_dif[0], uncompensated_thickness_nm, compensated_thickness_nm
     
-    def calibrate(self, parameter_file):
-        # Placeholder for calibration method if needed
-        pass
+    def calculateCoefficients(self, calibration_file, coefficient_file):
         
-
-
+        with open(calibration_file, mode='r') as file:
+            reader = csv.DictReader(file)
+            calibration_data = [row for row in reader]
+            
+        fig, (ax1, ax2) = plt.subplots(1,2,)
         
+        ax1.set_title("Mass mode")
+        ax1.set_xlabel("Temperature [C]")
+        ax1.set_ylabel("Delta Frequency [Hz]")
+        ax1.scatter(
+            [float(row['Temp']) for row in calibration_data],
+            [float(row['Freq_M']) for row in calibration_data]
+        )
+        
+        ax2.set_title("Temp mode")
+        ax2.set_xlabel("Temperature [C]")
+        ax2.set_ylabel("Delta Frequency [Hz]")
+        ax2.scatter(
+            [float(row['Temp']) for row in calibration_data],
+            [float(row['Freq_T']) for row in calibration_data]
+        )
+        
+        plt.show()

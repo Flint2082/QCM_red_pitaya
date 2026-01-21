@@ -5,6 +5,7 @@ import time
 import TempCompAlgorithm as tca
 import calendar
 import matplotlib.pyplot as plt
+from matplotlib.widgets import Slider
 from collections import deque
 
 
@@ -35,8 +36,11 @@ def to_signed(value, bits):
 def setFreq(osc_index, freq):
     fpga.write_int(device_name='freq_'+str(osc_index),integer=int(freq*64))
 
-def setGain(osc_index, gain):
-    fpga.write_int(device_name='filter_gain_'+str(osc_index),integer=int(gain*4294967296))
+def setProp(osc_index, gain):
+    fpga.write_int(device_name='proportional_'+str(osc_index),integer=int(gain*4294967296))
+
+def setInt(osc_index, gain):
+    fpga.write_int(device_name='integral_'+str(osc_index),integer=int(gain*4294967296))
     
 def setLDGain(osc_index, gain):
     fpga.write_int(device_name='ld_gain_'+str(osc_index),integer=int(gain*4294967296))
@@ -46,7 +50,7 @@ def setInv(osc_index, inv):
     
 def standby(osc_index):
     setFreq(osc_index)
-    setGain(osc_index)
+    setInt(osc_index)
     reset()
 
 def reset():
@@ -70,7 +74,7 @@ def getLock(osc_index):
 
 def sweep(osc_index, start, stop, step):
     standby(2)
-    setGain(osc_index, 0.01)
+    setInt(osc_index, 0.01)
     for f in range(start, stop, step):
         reset()
         setFreq(osc_index, f)
@@ -80,36 +84,26 @@ def startup():
     #STARTUP AUTOMATON (TEMP)
     reset()
     
-    ## 10 MHz crystal
-    #setFreq(1,3730000)                                                                                                                                                   
-    #setGain(1,0.001)
-    #time.sleep(3)
-    #setGain(1,0.00001)
-    #setFreq(2,9990000)
-    #setGain(2,0.001)
-    #time.sleep(3)
-    #setGain(2,0.00001)
 
     ## 6MHz crystal
     setFreq(1,5975000)                                                                                                                                                   
-    setGain(1,0.001)
+    setInt(1,0.001)
     setLDGain(1,0.01)
     time.sleep(1)
-    setGain(1,0.000001)
+    setInt(1,0.000001)
     setFreq(2,6562000)
-    setGain(2,0.001)
+    setInt(2,0.001)
     setLDGain(2,0.01)
     time.sleep(1)
-    setGain(2,0.0001)
+    setInt(2,0.0001)
     
 
 def startMeasurement(T = 23,debug=False):
     # Measurement routine
-    startup()
-    
+
     # Initialize the temperature compensation algorithm with calibration and starting values
     temp_comp = tca.TempCompAlgorithm(
-        parameter_file='calParams.csv',
+        coefficient_file = "coeffecients.csv",
         T_start=T, # would be nice to measure this with a thermocouple
         fT_start= getFreq(2),
         fM_start= getFreq(1)
@@ -133,7 +127,28 @@ def startMeasurement(T = 23,debug=False):
         # ---- Live plot setup ----
         plt.ion()
 
-        fig, (ax1,ax2) = plt.subplots(2,1,sharex=True, hspace=0.4)
+        fig, (ax1,ax2) = plt.subplots(2,1,sharex=True)
+        plt.subplots_adjust(bottom=0.30) 
+        
+        ax_slider1 = plt.axes([0.15, 0.18, 0.7, 0.03])
+        ax_slider2 = plt.axes([0.15, 0.10, 0.7, 0.03])
+        
+        slider1 = Slider(
+            ax=ax_slider1,
+            label="Integral control",
+            valmin=-10,
+            valmax=0,
+            valinit=1
+        )
+
+        slider2 = Slider(
+            ax=ax_slider2,
+            label="Proportional control",
+            valmin=-10,
+            valmax=0,
+            valinit=2
+        )
+                
         ax1.set_title("Mass mode measurement")
         ax1.set_xlabel("Time [s]")
         ax1.set_ylabel("Delta Frequency [Hz]")
@@ -153,6 +168,7 @@ def startMeasurement(T = 23,debug=False):
         lineT, = ax2.plot([], [], lw=2)
         start_time = time.time()
 
+        fig.tight_layout() # adjust graph spacing
         fig.show()
         fig.canvas.draw()
 
@@ -200,13 +216,13 @@ def startMeasurement(T = 23,debug=False):
         print("\nMeasuremenFt stopped by user")
         
 
-def startCalibration():
+def startCalibration(cal_file_name):
     # confirm overwrite
-    if(input("This will overwrite 'calibration_data.csv'. Continue? (y/n): ") != 'y'):
+    if(input(f"This will overwrite {cal_file_name}. Continue? (y/n): ") != 'y'):
         print("Calibration aborted.")
         return
     
-    with open('calibration_data.csv', mode='w') as cal_file:
+    with open(cal_file_name, mode='w') as cal_file:
             cal_file.write(f"Temp,Freq_T,Freq_M\n")
     
     # Calibration routine
@@ -226,6 +242,8 @@ def startCalibration():
             
 
 
+
+startup()
  
  
  

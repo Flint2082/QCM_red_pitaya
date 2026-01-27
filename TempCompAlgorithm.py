@@ -61,29 +61,96 @@ class TempCompAlgorithm:
         compensated_thickness_nm = (M_dif*1000)/(self.mat_dens * self.sens_area)
 
         return T_dif[0], uncompensated_thickness_nm, compensated_thickness_nm
+        
+        
     
-    def calculateCoefficients(self, calibration_file, coefficient_file):
+def calculateCoefficients(calibration_file, coeffecient_file):
+    
+    with open(calibration_file, mode='r') as file:
+        reader = csv.DictReader(file)
+        calibration_data = [row for row in reader]
         
-        with open(calibration_file, mode='r') as file:
-            reader = csv.DictReader(file)
-            calibration_data = [row for row in reader]
-            
-        fig, (ax1, ax2) = plt.subplots(1,2,)
+    mass_coef = np.polyfit(
+        [float(row['Temp']) for row in calibration_data],
+        [float(row['Freq_M']) for row in calibration_data],
+        deg = 3
+    )
+    
+    temp_coef = np.polyfit(
+        [float(row['Temp']) for row in calibration_data],
+        [float(row['Freq_T']) for row in calibration_data],
+        deg = 3
+    )
         
-        ax1.set_title("Mass mode")
-        ax1.set_xlabel("Temperature [C]")
-        ax1.set_ylabel("Delta Frequency [Hz]")
-        ax1.scatter(
-            [float(row['Temp']) for row in calibration_data],
-            [float(row['Freq_M']) for row in calibration_data]
-        )
+    
+    fig, (ax1, ax2) = plt.subplots(2,1, sharex=True)
+    
+    ### MASS MODE
+    ax1.set_title("Mass mode")
+    ax1.set_xlabel("Temperature [C]")
+    ax1.set_ylabel("Delta Frequency [Hz]")
+    
+    x = np.linspace(20,120,100)
+    y = mass_coef[0]*x**3 + mass_coef[1]*x**2 +mass_coef[2]*x + mass_coef[3]
+    ax1.plot(x,y, 'b--')  ### plot polynomial
+    
+    ax1.scatter(
+        [float(row['Temp']) for row in calibration_data],
+        [float(row['Freq_M']) for row in calibration_data],
+        c='r'
+    )
+    
+                                                    
+    
+    
+    ### TEMP MODE
+    ax2.set_title("Temp mode")
+    ax2.set_xlabel("Temperature [C]")
+    ax2.set_ylabel("Delta Frequency [Hz]")
+    
+    x = np.linspace(20,120,100)
+    y = temp_coef[0]*x**3 + temp_coef[1]*x**2 + temp_coef[2]*x + temp_coef[3]
+    ax2.plot(x,y, 'b--')  ### plot polynomial
+    
+    ax2.scatter(
+        [float(row['Temp']) for row in calibration_data],
+        [float(row['Freq_T']) for row in calibration_data],
+        c='r'
+    )
+           
+    fig.tight_layout() # adjust graph spacing
+    plt.show()
+    
+    print("\n")
+    print(f"fM_0: {mass_coef[3]}")
+    print(f"fM_1: {mass_coef[2]}")
+    print(f"fM_2: {mass_coef[1]}")
+    print(f"fM_3: {mass_coef[0]}")
+    print(f"fT_0: {temp_coef[3]}")
+    print(f"fT_1: {temp_coef[2]}")
+    print(f"fT_2: {temp_coef[1]}")
+    print(f"fT_3: {temp_coef[0]}")
+    
+    # confirm overwrite
+    if(input("Do you want to overwrite 'coeffecients.csv' (y/n): ") != 'y'):
+        print("aborted")
+        return
+    
+    with open(coeffecient_file, mode='w') as file:
+        file.write("Name,value\n")
+        file.write(f"fM_0,{mass_coef[3]}\n")
+        file.write(f"fM_1,{mass_coef[2]}\n")
+        file.write(f"fM_2,{mass_coef[1]}\n")
+        file.write(f"fM_3,{mass_coef[0]}\n")
+        file.write(f"fT_0,{temp_coef[3]}\n")
+        file.write(f"fT_1,{temp_coef[2]}\n")
+        file.write(f"fT_2,{temp_coef[1]}\n")
+        file.write(f"fT_3,{temp_coef[0]}\n")
+
+    
         
-        ax2.set_title("Temp mode")
-        ax2.set_xlabel("Temperature [C]")
-        ax2.set_ylabel("Delta Frequency [Hz]")
-        ax2.scatter(
-            [float(row['Temp']) for row in calibration_data],
-            [float(row['Freq_T']) for row in calibration_data]
-        )
         
-        plt.show()
+        
+        
+        
+        

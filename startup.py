@@ -49,8 +49,8 @@ def setInv(osc_index, inv):
     fpga.write('inv_fb_'+str(osc_index),(inv).to_bytes(4,'big'))
     
 def standby(osc_index):
-    setFreq(osc_index)
-    setInt(osc_index)
+    setFreq(osc_index,0)
+    setInt(osc_index,0)
     reset()
 
 def reset():
@@ -74,7 +74,6 @@ def getLock(osc_index):
 
 def sweep(osc_index, start, stop, step):
     standby(2)
-    setInt(osc_index, 0.01)
     for f in range(start, stop, step):
         reset()
         setFreq(osc_index, f)
@@ -84,18 +83,37 @@ def startup():
     #STARTUP AUTOMATON (TEMP)
     reset()
     
-
-    ## 6MHz crystal
-    setFreq(1,5975000)                                                                                                                                                   
+    """
+    ## 10MHz crystal
+    setInv(1,1)
+    setFreq(1,3380000)                                                                                                                                                   
     setInt(1,0.001)
     setLDGain(1,0.01)
     time.sleep(1)
     setInt(1,0.000001)
-    setFreq(2,6562000)
+    
+    setInv(2,1)
+    setFreq(2,3720000)
     setInt(2,0.001)
     setLDGain(2,0.01)
     time.sleep(1)
     setInt(2,0.0001)
+    
+    """
+    ## 6MHz crystal
+    setInv(1,1)
+    setFreq(1,5975000)                                                                                                                                                   
+    setInt(1,0.001)
+    setLDGain(1,0.01)
+    time.sleep(1.5)
+    setInt(1,0.000001)
+    
+    setInv(2,1)
+    setFreq(2,6555000)
+    setInt(2,0.001)
+    setLDGain(2,0.01)
+    time.sleep(1.5)
+    setInt(2,0.00001)
     
 
 def startMeasurement(T = 23,debug=False):
@@ -104,9 +122,9 @@ def startMeasurement(T = 23,debug=False):
     # Initialize the temperature compensation algorithm with calibration and starting values
     temp_comp = tca.TempCompAlgorithm(
         coefficient_file = "coeffecients.csv",
-        T_start=T, # would be nice to measure this with a thermocouple
-        fT_start= getFreq(2),
-        fM_start= getFreq(1)
+        T_start=T, # would be nice to measure this with a thermometer
+        fT_start= getFreq(2), # Hz
+        fM_start= getFreq(1)  # Hz
     )
 
     # Initialize measurement loop
@@ -127,9 +145,11 @@ def startMeasurement(T = 23,debug=False):
         # ---- Live plot setup ----
         plt.ion()
 
-        fig, (ax1,ax2) = plt.subplots(2,1,sharex=True)
-        plt.subplots_adjust(bottom=0.30) 
+        fig, (ax1,ax2,ax3,ax4) = plt.subplots(4,1,sharex=True)
+        #plt.subplots_adjust(bottom=0.30) 
+        fig.set_size_inches(10,14)
         
+        """
         ax_slider1 = plt.axes([0.15, 0.18, 0.7, 0.03])
         ax_slider2 = plt.axes([0.15, 0.10, 0.7, 0.03])
         
@@ -148,24 +168,37 @@ def startMeasurement(T = 23,debug=False):
             valmax=0,
             valinit=2
         )
+        """
+            
                 
         ax1.set_title("Mass mode measurement")
         ax1.set_xlabel("Time [s]")
-        ax1.set_ylabel("Delta Frequency [Hz]")
+        ax1.set_ylabel("Frequency [Hz]")
         ax2.set_title("Temp mode measurement")
         ax2.set_xlabel("Time [s]")
-        ax2.set_ylabel("Delta Frequency [Hz]")
+        ax2.set_ylabel("Frequency [Hz]")
+        ax3.set_title("Calculated temperature")
+        ax3.set_xlabel("Time [s]")
+        ax3.set_ylabel("Temperature [C]")
+        ax4.set_title("Compensated thickmness")
+        ax4.set_xlabel("Time [s]")
+        ax4.set_ylabel("Delta thickness [nm]")
         
 
         # Keep a rolling window of points
-        max_points = 1000
+        max_points = 300
         time_data = deque(maxlen=max_points)
         temp_freq_data = deque(maxlen=max_points)
         mass_freq_data = deque(maxlen=max_points)
+        temp_data = deque(maxlen=max_points)
         thickness_data = deque(maxlen=max_points)
+        uncomp_thick_data = deque(maxlen=max_points)
 
-        lineM, = ax1.plot([], [], lw=2)
-        lineT, = ax2.plot([], [], lw=2)
+        lineFM, = ax1.plot([], [], lw=2)
+        lineFT, = ax2.plot([], [], lw=2)
+        lineTemp, = ax3.plot([], [], lw=2)
+        lineThick, = ax4.plot([], [], lw=2, )
+        lineUnThick, = ax4.plot([], [], lw=2, color='red', linestyle='dashed' )
         start_time = time.time()
 
         fig.tight_layout() # adjust graph spacing
@@ -179,7 +212,8 @@ def startMeasurement(T = 23,debug=False):
             fM = getFreq(1)
             
             
-            T, uncompensated_thickness_nm, compensated_thickness_nm = temp_comp.FreqToTemp(fT, fM)
+            T_dif, uncompensated_thickness_nm, compensated_thickness_nm, compensated_m_freq = temp_comp.FreqToTemp(fT, fM)
+            T_calc = T + T_dif
             if(debug==True):
                 print(f"{calendar.timegm(time.gmtime())} \t {fT:.8f} \t {fM:.8f} \t {T:.2f} \t {uncompensated_thickness_nm:.4f} \t {compensated_thickness_nm:.4f}")
                 with open('output.csv', mode='a') as log_file:
@@ -196,15 +230,26 @@ def startMeasurement(T = 23,debug=False):
             time_data.append(t_now)
             temp_freq_data.append(fT)
             mass_freq_data.append(fM)
+            temp_data.append(T_calc)
             thickness_data.append(compensated_thickness_nm)
+            uncomp_thick_data.append(uncompensated_thickness_nm)
 
-            lineM.set_data(time_data, mass_freq_data)
+            lineFM.set_data(time_data, mass_freq_data)
             ax1.relim()
             ax1.autoscale_view()
             
-            lineT.set_data(time_data, temp_freq_data)
+            lineFT.set_data(time_data, temp_freq_data)
             ax2.relim()
             ax2.autoscale_view()
+            
+            lineTemp.set_data(time_data, temp_data)
+            ax3.relim()
+            ax3.autoscale_view()
+            
+            lineThick.set_data(time_data, thickness_data)
+            lineUnThick.set_data(time_data, uncomp_thick_data)
+            ax4.relim()
+            ax4.autoscale_view()
 
             fig.canvas.draw()
             fig.canvas.flush_events()
@@ -229,7 +274,7 @@ def startCalibration(cal_file_name):
     startup()
     while(True):
         temp = input("Current Temperature (C): ")
-        if temp == 0:
+        if temp == '0':
             break
         freqM = getFreq(1)
         freqT = getFreq(2)

@@ -60,15 +60,22 @@ class TempCompAlgorithm:
         uncompensated_thickness_nm = (fM_dif / self.fM_0)*1000/(self.mat_dens * self.sens_area)
         compensated_thickness_nm = (M_dif*1000)/(self.mat_dens * self.sens_area)
 
-        return T_dif[0], uncompensated_thickness_nm, compensated_thickness_nm
+        compensated_m_freq = 0
+
+        return T_dif[0], uncompensated_thickness_nm, compensated_thickness_nm, compensated_m_freq
         
         
     
-def calculateCoefficients(calibration_file, coeffecient_file):
+def calculateCoeffecients(calibration_file, coeffecient_file):
     
     with open(calibration_file, mode='r') as file:
         reader = csv.DictReader(file)
         calibration_data = [row for row in reader]
+        
+    with open(coeffecient_file, mode='r') as file:
+        reader = csv.DictReader(file)
+        old_coeffecients = {row['Name']: float(row['value']) for row in reader}
+        
         
     mass_coef = np.polyfit(
         [float(row['Temp']) for row in calibration_data],
@@ -84,20 +91,24 @@ def calculateCoefficients(calibration_file, coeffecient_file):
         
     
     fig, (ax1, ax2) = plt.subplots(2,1, sharex=True)
+    x = np.linspace(20,100,100)
     
     ### MASS MODE
     ax1.set_title("Mass mode")
     ax1.set_xlabel("Temperature [C]")
     ax1.set_ylabel("Delta Frequency [Hz]")
     
-    x = np.linspace(20,120,100)
     y = mass_coef[0]*x**3 + mass_coef[1]*x**2 +mass_coef[2]*x + mass_coef[3]
-    ax1.plot(x,y, 'b--')  ### plot polynomial
+    ax1.plot(x,y, color='black', linestyle='solid')  ### plot polynomial
+    
+    y = old_coeffecients['fM_3']*x**3 + old_coeffecients['fM_2']*x**2 + old_coeffecients['fM_1']*x + old_coeffecients['fM_0']
+    ax1.plot(x,y, color='grey', linestyle='dashdot')   ### plot old polynomial
     
     ax1.scatter(
         [float(row['Temp']) for row in calibration_data],
         [float(row['Freq_M']) for row in calibration_data],
-        c='r'
+        color = 'r',
+        marker = 'x'
     )
     
                                                     
@@ -108,14 +119,17 @@ def calculateCoefficients(calibration_file, coeffecient_file):
     ax2.set_xlabel("Temperature [C]")
     ax2.set_ylabel("Delta Frequency [Hz]")
     
-    x = np.linspace(20,120,100)
     y = temp_coef[0]*x**3 + temp_coef[1]*x**2 + temp_coef[2]*x + temp_coef[3]
-    ax2.plot(x,y, 'b--')  ### plot polynomial
+    ax2.plot(x,y, color='black', linestyle='solid')   ### plot polynomial
+    
+    y = old_coeffecients['fT_3']*x**3 + old_coeffecients['fT_2']*x**2 + old_coeffecients['fT_1']*x + old_coeffecients['fT_0']
+    ax2.plot(x,y, color='grey', linestyle='dashdot')   ### plot old polynomial
     
     ax2.scatter(
         [float(row['Temp']) for row in calibration_data],
         [float(row['Freq_T']) for row in calibration_data],
-        c='r'
+        color = 'r',
+        marker = 'x'
     )
            
     fig.tight_layout() # adjust graph spacing

@@ -1,7 +1,8 @@
 import TempCompAlgorithm as tca
 import csv
+import matplotlib.pyplot as plt
 
-test_value_index = 5  # Change this index to test different entries
+
 
 with open('calibration_data.csv', mode='r') as file:
     reader = csv.DictReader(file)
@@ -18,15 +19,36 @@ temp_comp = tca.TempCompAlgorithm(
     fM_start= float(start_values['Freq_M'])
 )
 
-temp, uncomp_th, comp_th, comp_Fm = temp_comp.FreqToTemp(
-    fT = float(calibration_data[test_value_index]['Freq_T']),
-    fM = float(calibration_data[test_value_index]['Freq_M'])
-)
+# Lists to store data for plotting
+temperatures = []
+compensated_thicknesses = []
 
-print(f"Test index: {test_value_index}")
-print(f"Input Temp: {calibration_data[test_value_index]['Temp']} C")
-print(f"Input Freq_T: {calibration_data[test_value_index]['Freq_T']} Hz")
-print(f"Input Freq_M: {calibration_data[test_value_index]['Freq_M']} Hz\n")
-print(f"Calculated Temp : {temp} C")
-print(f"Uncompensated Thickness Change: {uncomp_th} nm")
-print(f"Compensated Thickness Change: {comp_th} nm")
+for i in range(len(calibration_data)):
+    temp, uncomp_th, comp_th, comp_Fm = temp_comp.FreqToTemp(
+            fT = float(calibration_data[i]['Freq_T']),
+            fM = float(calibration_data[i]['Freq_M'])
+        )
+
+    # Store data for plotting
+    temperatures.append(temp)
+    compensated_thicknesses.append(comp_th)
+
+    print(f"Test index: {i}")
+    print(f"Input Temp: {calibration_data[i]['Temp']} C")
+    print(f"Input Freq_T: {calibration_data[i]['Freq_T']} Hz")
+    print(f"Input Freq_M: {calibration_data[i]['Freq_M']} Hz\n")
+    print(f"Calculated Temp : {temp} C")
+    print(f"Uncompensated Thickness Change: {uncomp_th} nm")
+    print(f"Compensated Thickness Change: {comp_th} nm")
+
+# Plot compensated thickness vs temperature
+plt.figure(figsize=(10, 6))
+plt.plot(temperatures, compensated_thicknesses, 'b-o', linewidth=2, markersize=6)
+plt.xlabel('Temperature (°C)', fontsize=12)
+plt.ylabel('Compensated Thickness Change (nm)', fontsize=12)
+plt.title('Compensated Thickness vs Temperature', fontsize=14)
+plt.grid(True, alpha=0.3)
+plt.tight_layout()
+plt.show()
+    
+    

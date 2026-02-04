@@ -1,0 +1,24 @@
+--------------------------------- Version Log ----------------------------------
+Version                                 Path
+System Generator 2021.1                 /tools/Xilinx/Vivado/2021.1
+Matlab 9.10.0.2015706 (R2021a) Update 7 /usr/local/MATLAB/R2021a
+Vivado 2021.1                           /tools/Xilinx/Vivado/2021.1
+--------------------------------------------------------------------------------
+Summary of Errors:
+Error 0001: Sysgen license checkout failed.
+ XILINXD_LICENSE_FILE = /...
+     Block: Unspecified
+--------------------------------------------------------------------------------
+
+Error 0001:
+
+Reported by:
+  Unspecified
+
+Details:
+Sysgen license checkout failed.
+ XILINXD_LICENSE_FILE = /tools/Xilinx/Vivado/2021.1/data/sysgen/hwcosim_compiler/pp_ethernet
+ Environment variable LM_LICENSE_FILE is not set.
+ License search path: /home/casper/.Xilinx:/tools/Xilinx/Vivado/2021.1/data/sysgen/hwcosim_compiler/pp_ethernet:/tools/Xilinx/Vivado/2021.1/data/ip/core_licenses
+
+--------------------------------------------------------------------------------

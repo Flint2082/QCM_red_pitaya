@@ -212,12 +212,12 @@ def startMeasurement(T = 23,debug=False):
             fM = getFreq(1)
             
             
-            T_dif, uncompensated_thickness_nm, compensated_thickness_nm, compensated_m_freq = temp_comp.FreqToTemp(fT, fM)
-            T_calc = T + T_dif
+            T_calc, uncompensated_thickness_nm, compensated_thickness_nm, compensated_m_freq = temp_comp.FreqToTemp(fT, fM)
+
             if(debug==True):
-                print(f"{calendar.timegm(time.gmtime())} \t {fT:.8f} \t {fM:.8f} \t {T:.2f} \t {uncompensated_thickness_nm:.4f} \t {compensated_thickness_nm:.4f}")
+                print(f"{calendar.timegm(time.gmtime())} \t {fT:.8f} \t {fM:.8f} \t {T_calc:.2f} \t {uncompensated_thickness_nm:.4f} \t {compensated_thickness_nm:.4f}")
                 with open('data/output.csv', mode='a') as log_file:
-                    log_file.write(f"{calendar.timegm(time.gmtime())},{fT},{fM},{T},{uncompensated_thickness_nm},{compensated_thickness_nm}\n")
+                    log_file.write(f"{calendar.timegm(time.gmtime())},{fT},{fM},{T_calc},{uncompensated_thickness_nm},{compensated_thickness_nm}\n")
             else:
                 print(f"{fT:.3f} \t {fM:.3f}")
                 

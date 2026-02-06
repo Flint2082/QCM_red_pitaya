@@ -9,8 +9,8 @@ class TempCompAlgorithm:
             reader = csv.DictReader(file)
             params = {row['Name']: float(row['value']) for row in reader}
         
-        self.fT_0 = (fT_start * 2)/28.5 
-        self.fM_0 = (fM_start * 2)/28.5
+        self.fT_0 = 121000 * (fT_start/fM_start)        # (fT_start * 2)/28.5 
+        self.fM_0 = 121000                              # (fM_start * 2)/28.5
         self.fT_1 = params['fT_1']
         self.fT_2 = params['fT_2']
         self.fT_3 = params['fT_3']

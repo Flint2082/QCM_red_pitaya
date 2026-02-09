@@ -1,9 +1,8 @@
 # List of untracked files to ignore
 
-.venv-rp/
-.venv-server/
-src_server/__pycache__/
-src_server/py/
-src_client/__pycache__/
-src_client/py/
+.venv*/
+__pycache__/
+*.pyc
+*/__pycache__/
+*/py
 

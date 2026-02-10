@@ -1,35 +1,34 @@
-from opcua import Client, ua
-from opcua.ua import ua_binary as uabin
-from opcua.common.methods import call_method
 
 
-class HelloClient:
-    def __init__(self, endpoint):
-        self.client = Client(endpoint)
+from opcua import Client
+import time
 
-    def __enter__(self):
-        self.client.connect()
-        return self.client
+# Server endpoint (must match server)
+url = "opc.tcp://132.229.46.113:4840"
 
-    def __exit__(self, exc_type, exc_val, exc_tb):
-        self.client.disconnect()
+# Connect to server
+client = Client(url)
+client.connect()
+print("Connected to OPC UA server")
+
+try:
+    # Resolve namespace index dynamically
+    uri = "urn:qcm:redpitaya"
+    idx = client.get_namespace_index(uri)
+
+    # Get the Frequency node
+    freq_node = client.get_node(f"ns={idx};s=QCM.Frequency")
+
+    # Read values in a loop
+    while True:
+        freq = freq_node.get_value()
+        print(f"Frequency: {freq}")
+        time.sleep(1)
+
+finally:
+    client.disconnect()
+    print("Disconnected")
 
 
-if __name__ == '__main__':
-    with HelloClient("opc.tcp://localhost:40840/freeopcua/server/") as client:
-        root = client.get_root_node()
-        print("Root node is: ", root)
-        objects = client.get_objects_node()
-        print("Objects node is: ", objects)
 
-        hellower = objects.get_child("0:Hellower")
-        print("Hellower is: ", hellower)
 
-        resulting_text = hellower.call_method("0:SayHello", False)
-        print(resulting_text)
-
-        resulting_text = hellower.call_method("1:SayHello2", True)
-        print(resulting_text)
-
-        resulting_array = hellower.call_method("1:SayHelloArray", False)
-        print(resulting_array)

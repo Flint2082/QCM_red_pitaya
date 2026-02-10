@@ -1,85 +1,36 @@
-import os.path
+from opcua import ua, Server
+import time
+
+server = Server()
+server.set_endpoint("opc.tcp://0.0.0.0:4840")
+
+server.set_server_name("QCM OPCUA Server")
+
+uri = "urn:qcm:redpitaya"
+idx = server.register_namespace(uri)
+
+objects = server.get_objects_node()
+qcm = objects.add_object(
+    ua.NodeId("QCM", idx),
+    "QCM"
+)
+
+freq = qcm.add_variable(
+    ua.NodeId("QCM.Frequency", idx),
+    "Frequency", 
+    0.0
+)
+freq.set_writable()
+
+server.start()
+print("OPC UA server started")
+
 try:
-    from IPython import embed
-except ImportError:
-    import code
+    while True:
+        curval = freq.get_value()
+        freq.set_value(curval + 1.0)
+        print(curval)
+        time.sleep(1)
 
-    def embed():
-        vars = globals()
-        vars.update(locals())
-        shell = code.InteractiveConsole(vars)
-        shell.interact()
-
-from opcua import ua, uamethod, Server
-
-
-@uamethod
-def say_hello_xml(parent, happy):
-    print("Calling say_hello_xml")
-    if happy:
-        result = "I'm happy"
-    else:
-        result = "I'm not happy"
-    print(result)
-    return result
-
-
-@uamethod
-def say_hello(parent, happy):
-    if happy:
-        result = "I'm happy"
-    else:
-        result = "I'm not happy"
-    print(result)
-    return result
-
-
-@uamethod
-def say_hello_array(parent, happy):
-    if happy:
-        result = "I'm happy"
-    else:
-        result = "I'm not happy"
-    print(result)
-    return [result, "Actually I am"]
-
-
-class HelloServer:
-    def __init__(self, endpoint, name, model_filepath):
-        self.server = Server()
-
-        #  This need to be imported at the start or else it will overwrite the data
-        self.server.import_xml(model_filepath)
-
-        self.server.set_endpoint(endpoint)
-        self.server.set_server_name(name)
-
-        objects = self.server.get_objects_node()
-
-        freeopcua_namespace = self.server.get_namespace_index("urn:freeopcua:python:server")
-        hellower = objects.get_child("0:Hellower")
-        hellower_say_hello = hellower.get_child("0:SayHello")
-
-        self.server.link_method(hellower_say_hello, say_hello_xml)
-
-        hellower.add_method(
-            freeopcua_namespace, "SayHello2", say_hello, [ua.VariantType.Boolean], [ua.VariantType.String])
-
-        hellower.add_method(
-            freeopcua_namespace, "SayHelloArray", say_hello_array, [ua.VariantType.Boolean], [ua.VariantType.String])
-
-    def __enter__(self):
-        self.server.start()
-        return self.server
-
-    def __exit__(self, exc_type, exc_val, exc_tb):
-        self.server.stop()
-
-
-if __name__ == '__main__':
-    script_dir = os.path.dirname(__file__)
-    with HelloServer(
-            "opc.tcp://0.0.0.0:40840/freeopcua/server/",
-            "FreeOpcUa Example Server",
-            os.path.join(script_dir, "test_saying.xml")) as server:
-        embed()
+finally:
+    server.stop()

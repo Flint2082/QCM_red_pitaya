@@ -1,8 +1,7 @@
 # List of untracked files to ignore
 
 .venv*/
-__pycache__/
-*.pyc
+.pyc
 */__pycache__/
 
 

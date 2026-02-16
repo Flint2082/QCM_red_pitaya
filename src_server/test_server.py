@@ -27,9 +27,8 @@ print("OPC UA server started")
 
 try:
     while True:
-        curval = freq.get_value()
-        freq.set_value(curval + 1.0)
-        print(curval)
+        freq = freq.get_value()
+        print(f"Frequency: {freq}")
         time.sleep(1)
 
 finally:

@@ -10,7 +10,6 @@ from collections import deque
 import matplotlib.pyplot as plt
 from matplotlib.widgets import Slider
 
-from src_server.startup import setFreq, setInv
 
 
 class QCMInterface:

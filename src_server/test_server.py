@@ -15,19 +15,19 @@ qcm = objects.add_object(
     "QCM"
 )
 
-freq = qcm.add_variable(
+freq_node = qcm.add_variable(
     ua.NodeId("QCM.Frequency", idx),
     "Frequency", 
     0.0
 )
-freq.set_writable()
+freq_node.set_writable()
 
 server.start()
 print("OPC UA server started")
 
 try:
     while True:
-        freq = freq.get_value()
+        freq = freq_node.get_value()
         print(f"Frequency: {freq}")
         time.sleep(1)
 

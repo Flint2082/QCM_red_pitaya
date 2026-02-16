@@ -31,3 +31,7 @@ python3 -m venv --system-site-packages .venv-rp
 ```
 
 ---
+
+Install casperfpga using the folling guidelines from the [CASPER documentation](https://casper-toolflow.readthedocs.io/en/latest/src/How-to-install-casperfpga.html). Making sure not to istall using pip.
+
+---

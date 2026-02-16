@@ -17,13 +17,14 @@ qcm.startup()
 
 wago = wago_client.WagoClient(url = url)
 
-node_id = "ns=4;s=|var|750-8000 Basic Controller 100 2ETH ECO.Application.GVL_OPCUA.in."
+# node_id = "ns=4;s=|var|750-8000 Basic Controller 100 2ETH ECO.Application.GVL_OPCUA.in."
 
 
 try:
     # Resolve namespace index dynamically
-    uri = "urn:wago-server"
-    idx = client.get_namespace_index(uri)
+    # idx = client.get_namespace_index(client.application_uri)
+    idx = 4    
+    
 
     # Get the Frequency node
     freq_M_node = wago.get_node(f"ns={idx};s=QCM.Frequency.M")
@@ -36,8 +37,8 @@ try:
         freq_T = qcm.getFreq(2)
         
         
-        wago.set_value(freq_M_node, freq_M)
-        wago.set_value(freq_T_node, freq_T)
+        wago.write_node(freq_M_node, freq_M)
+        wago.write_node(freq_T_node, freq_T)
         
         
         print(f"Frequency M: {freq_M}, Frequency T: {freq_T}")

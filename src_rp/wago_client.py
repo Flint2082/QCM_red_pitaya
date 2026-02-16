@@ -1,5 +1,4 @@
 from opcua import Client, ua
-from utils.log_manager import logger
 import enum
 
 class WagoClient:

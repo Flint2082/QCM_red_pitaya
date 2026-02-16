@@ -12,6 +12,7 @@ client.connect()
 print("Connected to OPC UA server")
 
 qcm = QCM_interface.QCMInterface()
+qcm.startup()
 
 try:
     # Resolve namespace index dynamically

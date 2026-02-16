@@ -15,7 +15,7 @@ from matplotlib.widgets import Slider
 class QCMInterface:
     def __init__(self):
         directory = os.path.expanduser(
-            "/QCM_red_pitaya/model_composer/qcm_rp/outputs/"
+            "/model_composer/qcm_rp/outputs/"
         )
 
         newest_file = max(

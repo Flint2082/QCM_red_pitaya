@@ -18,7 +18,7 @@ newest_file = max(
 	key=os.path.getmtime
 )
 
-fpga = casperfpga.CasperFpga('rp-f0ea58.local')
+fpga = casperfpga.CasperFpga('132.229.46.164')
 
 print("Newest file", newest_file)
 

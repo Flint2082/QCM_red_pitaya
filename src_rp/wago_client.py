@@ -80,7 +80,7 @@ class WagoClient:
             elif hasattr(value, "value"):  # for enum.IntEnum
                 variant = ua.Variant(value.value, ua.VariantType.Int32)
             else:
-                logger.warning(f"Unsupported type for value {value}, using default Variant")
+                print(f"[WAGO] Warning: Unhandled type {type(value)}, using default Variant")
                 variant = ua.Variant(value)
 
             data_value = ua.DataValue(variant)
@@ -90,7 +90,7 @@ class WagoClient:
         try:
             self.client.uaclient.write(write_values)
         except Exception as e:
-            logger.error(f"Batch write failed: {e}")
+            print(f"Batch write failed: {e}")
 
 
 

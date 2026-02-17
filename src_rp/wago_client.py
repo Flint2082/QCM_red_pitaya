@@ -16,7 +16,7 @@ class WagoClient:
             self.client = Client(self.url)
             self.client.set_user(self.user)
             self.client.set_password(self.password)
-            self.client.application_uri = "urn:wago-client"
+            self.client.application_uri = "urn:wago-server"
             #self.client.set_timeout(500)
             self.client.connect()
 

@@ -22,8 +22,9 @@ wago = wago_client.WagoClient(url = url)
 
 try:
     # Resolve namespace index dynamically
-    # idx = client.get_namespace_index(client.application_uri)
-    idx = 4    
+    uri = "urn:wago-server"
+    idx = client.get_namespace_index(uri)
+    
     
 
     # Get the Frequency node

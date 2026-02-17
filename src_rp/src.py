@@ -19,6 +19,8 @@ print("Connected to OPC UA server")
 qcm = QCM_interface.QCMInterface()
 qcm.startup()
 
+qcm.setReference()
+
 wago = wago_client.WagoClient(url = url)
 
 # node_id = "ns=4;s=|var|750-8000 Basic Controller 100 2ETH ECO.Application.GVL_OPCUA.in."
@@ -62,7 +64,7 @@ try:
         wago.write_node(thickness_node, thickness)
         
         
-        print(f"Frequency M: {freq_M}, Frequency T: {freq_T}, Thickness: {thickness} nm")
+        print(f"Frequency M: {freq_M},\t Frequency T: {freq_T},\t Thickness: {thickness} nm")
                 
         
         

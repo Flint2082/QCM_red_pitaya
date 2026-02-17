@@ -57,18 +57,28 @@ thickness_node = qcm.add_variable(
 )
 thickness_node.set_writable()
 
+setRef = qcm.add_variable(
+    ua.NodeId("QCM.SetRef", idx),
+    "Set Reference", 
+    False
+)
+
     
 server.start()
 print("OPC UA server started")
 
 window_M_node.set_value(5975000)
-window_T_node.set_value(6765000)
+window_T_node.set_value(6565000)
+
+setRef.set_value(True)  # Trigger reference setting in client
 
 try:
     while True:
         freq_M = freq_M_node.get_value()
         freq_T = freq_T_node.get_value()
-        print(f"Frequency M: {freq_M}, Frequency T: {freq_T}")
+        temp = temp_node.get_value()
+        thickness = thickness_node.get_value()
+        print(f"Frequency M: {freq_M}, Frequency T: {freq_T}, Temperature: {temp}, Thickness: {thickness}")
         time.sleep(1)
 
 finally:

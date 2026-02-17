@@ -29,6 +29,8 @@ try:
     uri = "urn:wago-server"
     idx = client.get_namespace_index(uri)
     
+    setRef = wago.get_node(f"ns={idx};s=QCM.SetRef")
+    
     # get frequency window nodes
     window_M_node = wago.get_node(f"ns={idx};s=QCM.Window.M")
     window_T_node = wago.get_node(f"ns={idx};s=QCM.Window.T")
@@ -37,20 +39,30 @@ try:
     freq_M_node = wago.get_node(f"ns={idx};s=QCM.Frequency.M")
     freq_T_node = wago.get_node(f"ns={idx};s=QCM.Frequency.T")
     
+    temp_node = wago.get_node(f"ns={idx};s=QCM.Temperature")
+    thickness_node = wago.get_node(f"ns={idx};s=QCM.Thickness")
+    
 
     # Read values in a loop
     while True: 
+        if setRef.get_value():
+            qcm.setReference()
+            setRef.set_value(False)  # Reset trigger
+        
         window_M = qcm.setFreq(1, wago.read_node(window_M_node))
         window_T = qcm.setFreq(2, wago.read_node(window_T_node))
         freq_M = qcm.getFreq(1)
         freq_T = qcm.getFreq(2)
         
+        thickness = qcm.getThicknessUncomp()
+        
         
         wago.write_node(freq_M_node, freq_M)
         wago.write_node(freq_T_node, freq_T)
+        wago.write_node(thickness_node, thickness)
         
         
-        print(f"Frequency M: {freq_M}, Frequency T: {freq_T}")
+        print(f"Frequency M: {freq_M}, Frequency T: {freq_T}, Thickness: {thickness} nm")
                 
         
         

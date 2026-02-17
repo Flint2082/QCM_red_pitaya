@@ -28,6 +28,7 @@ class QCMInterface:
         print("Newest file", newest_file)
 
         self.fpga.upload_to_ram_and_program(newest_file)
+        
 
 
 
@@ -123,6 +124,28 @@ class QCMInterface:
         time.sleep(1.5)
         self.setInt(2,0.00001)
         
+        
+    def setReference(self):
+        self.fM_start = self.getFreq(1)
+        self.fT_start = self.getFreq(2)
+        self.T_start = 23 # would be nice to measure this with a thermometer
+        print(f"Reference set: fM={self.fM_start}, fT={self.fT_start}, T={self.T_start}")
+        
+    def getThicknessUncomp(self, material_density=2.7):
+        # Calculate uncompensated thickness in nm using Sauerbrey equation
+        f0 = self.fM_start  # Resonant frequency in Hz (for 6MHz crystal)
+        rhoQ = 2.648     # Density of the quartz in g/cm^3
+        mu = 2.95e11  # Shear modulus of quartz in g/(cm*s^2)
+        rhoM = material_density  # Density of the deposited material in g/cm^3
+        
+        
+        fM = self.getFreq(1)
+        delta_f = fM - f0
+        
+        thickness_nm = (-2*f0**2 * delta_f**-1 * rhoM)/(rhoQ * mu)**0.5 * 1e7  # Convert to nm
+        
+
+        return thickness_nm
 
     def startMeasurement(self, T = 23,debug=False):
         # Measurement routine

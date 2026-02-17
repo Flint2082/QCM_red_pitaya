@@ -142,8 +142,8 @@ class QCMInterface:
         fM = self.getFreq(1)
         delta_f = fM - f0
         
+        #thickness_nm = (-2*f0**2 * delta_f**-1 * rhoM)/(rhoQ * mu)**0.5 * 1e7  # Convert to nm
         thickness_nm = (-2*f0**2 * delta_f**-1 * rhoM)/(rhoQ * mu)**0.5 * 1e7  # Convert to nm
-        
 
         return thickness_nm
 

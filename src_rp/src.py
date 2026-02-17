@@ -64,7 +64,7 @@ try:
         wago.write_node(thickness_node, thickness)
         
         
-        print(f"Frequency M: {freq_M},\t Frequency T: {freq_T},\t Thickness: {thickness} nm")
+        print(f"Frequency M: {freq_M:.4f},\t Frequency T: {freq_T:.4f},\t Thickness: {thickness:.4f} nm")
                 
         
         

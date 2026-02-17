@@ -29,6 +29,20 @@ freq_T_node = qcm.add_variable(
 )
 freq_T_node.set_writable()
 
+window_M_node = qcm.add_variable(
+    ua.NodeId("QCM.Window.M", idx),
+    "Window M", 
+    0.0
+)
+window_M_node.set_writable()
+
+window_T_node = qcm.add_variable(
+    ua.NodeId("QCM.Window.T", idx),
+    "Window T", 
+    0.0
+)
+window_T_node.set_writable()
+
 temp_node = qcm.add_variable(
     ua.NodeId("QCM.Temperature", idx),
     "Temperature", 
@@ -46,6 +60,9 @@ thickness_node.set_writable()
     
 server.start()
 print("OPC UA server started")
+
+window_M_node.set_value(5975000)
+window_T_node.set_value(6765000)
 
 try:
     while True:

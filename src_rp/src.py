@@ -4,6 +4,10 @@ import time
 import wago_client
 import QCM_interface 
 
+mat_density = 2.7  # g/cm^3 
+
+
+
 # Server endpoint (must match server)
 url = "opc.tcp://132.229.46.113:4840"
 
@@ -25,7 +29,9 @@ try:
     uri = "urn:wago-server"
     idx = client.get_namespace_index(uri)
     
-    
+    # get frequency window nodes
+    window_M_node = wago.get_node(f"ns={idx};s=QCM.Window.M")
+    window_T_node = wago.get_node(f"ns={idx};s=QCM.Window.T")
 
     # Get the Frequency node
     freq_M_node = wago.get_node(f"ns={idx};s=QCM.Frequency.M")
@@ -34,6 +40,8 @@ try:
 
     # Read values in a loop
     while True: 
+        window_M = qcm.setFreq(1)
+        window_T = qcm.setFreq(2)
         freq_M = qcm.getFreq(1)
         freq_T = qcm.getFreq(2)
         

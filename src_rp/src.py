@@ -40,8 +40,8 @@ try:
 
     # Read values in a loop
     while True: 
-        window_M = qcm.setFreq(1)
-        window_T = qcm.setFreq(2)
+        window_M = qcm.setFreq(1, wago.read_node(window_M_node))
+        window_T = qcm.setFreq(2, wago.read_node(window_T_node))
         freq_M = qcm.getFreq(1)
         freq_T = qcm.getFreq(2)
         

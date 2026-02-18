@@ -23,12 +23,12 @@ class QCMInterface:
             key=os.path.getmtime
         )
 
-        self.fpga = casperfpga.CasperFpga('132.229.46.164')
+        # self.fpga = casperfpga.CasperFpga('132.229.46.164')
+        self.fpga = casperfpga.CasperFpga('192.168.1.55')
 
         print("Newest file", newest_file)
 
         self.fpga.upload_to_ram_and_program(newest_file)
-        
 
 
 

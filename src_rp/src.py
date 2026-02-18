@@ -1,6 +1,5 @@
 from opcua import Client
 import time
-
 import wago_client
 import QCM_interface 
 
@@ -10,7 +9,8 @@ mat_density = 2.7  # g/cm^3
 
 # Server endpoint (must match server)
 # url = "opc.tcp://132.229.46.113:4840"
-#url = "opc.tcp://192.168.1.50:4840" 
+# url = "opc.tcp://192.168.1.50:4840"
+url = "opc.tcp://localhost:4840" 
 
 
 # Connect to server
@@ -18,12 +18,14 @@ mat_density = 2.7  # g/cm^3
 #client.connect()
 #print("Connected to OPC UA server")
 
-qcm = QCM_interface.QCMInterface()
+rp_ip = QCM_interface.find_red_pitaya(subnet= "132.229.46.")
+
+qcm = QCM_interface.QCMInterface(rp_ip)
 qcm.startup()
 
 qcm.setReference()
 
-wago = wago_client.WagoClient()
+wago = wago_client.WagoClient(url)
 
 node_id = "ns=4;s=|var|750-8000 Basic Controller 100 2ETH ECO.Application.GVL_OPCUA.in.thickness"
 
@@ -72,6 +74,7 @@ try:
         
         
         time.sleep(1)
+
 
 finally:
     wago.disconnect()

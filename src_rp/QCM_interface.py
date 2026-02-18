@@ -9,11 +9,24 @@ import calendar
 from collections import deque
 import matplotlib.pyplot as plt
 from matplotlib.widgets import Slider
+import socket
 
-
+def find_red_pitaya(subnet="192.168.1.", start=1, end=254, timeout=0.2):
+    """Scan the subnet for a Red Pitaya by attempting to connect to the KATCP port (7147)."""
+    port = 7147  # Default KATCP port for Red Pitaya CASPER builds
+    for i in range(start, end + 1):
+        ip = f"{subnet}{i}"
+        print(f"Currencly trying {ip}")
+        try:
+            with socket.create_connection((ip, port), timeout=timeout):
+                print(f"Found Red Pitaya at {ip}")
+                return ip
+        except (ConnectionRefusedError, socket.timeout, OSError):
+            continue
+    raise RuntimeError("Red Pitaya not found on subnet")
 
 class QCMInterface:
-    def __init__(self):
+    def __init__(self, RP_IP):
         directory = os.path.expanduser(
             "./model_composer/qcm_rp/outputs/"
         )
@@ -24,12 +37,13 @@ class QCMInterface:
         )
 
         # self.fpga = casperfpga.CasperFpga('132.229.46.164')
-        self.fpga = casperfpga.CasperFpga('192.168.1.55')
+        # '192.168.1.55'
+        self.fpga = casperfpga.CasperFpga(RP_IP)
+        print("CasperFpga connected to red pitaya")
 
         print("Newest file", newest_file)
 
         self.fpga.upload_to_ram_and_program(newest_file)
-
 
 
     ### Function declarations

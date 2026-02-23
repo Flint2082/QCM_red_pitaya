@@ -20,11 +20,11 @@ fpgautil -b $HOME/top.bit.bin
 
 
 # Check if client exists
-if [ ! -f "src_rp/QCM_interface.py" ]; then
-    echo "Error: client file QCM_interface.py not found"
+if [ ! -f "src_rp/interactive.py" ]; then
+    echo "Error: client file interactive.py not found"
     exit 1
 fi
 
 # Start the client
 echo "Starting client side..."
-.venv-rp/bin/python3 src_rp/QCM_interface.py
+.venv-rp/bin/python3 src_rp/interactive.py

@@ -10,13 +10,13 @@ cd "$SCRIPT_DIR"
 
 
 # Check if the top.bit.bin exists
-if [ ! -f "~/top.bit.bin" ]; then
+if [ ! -f "$HOME/top.bit.bin" ]; then
     echo "Error: top.bit.bin not found"
     exit 1
 fi
 
 # Load FPGA bitstream 
-fpgautil -b /top.bit.bin
+fpgautil -b $HOME/top.bit.bin
 
 
 # Check if client exists

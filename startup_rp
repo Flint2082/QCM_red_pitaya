@@ -20,11 +20,11 @@ fpgautil -b $HOME/top.bit.bin
 
 
 # Check if client exists
-if [ ! -f "src_rp/src.py" ]; then
-    echo "Error: client file src.py not found"
+if [ ! -f "src_rp/main.py" ]; then
+    echo "Error: client file main.py not found"
     exit 1
 fi
 
 # Start the client
 echo "Starting client side..."
-.venv-rp/bin/python3 src_rp/src.py
+.venv-rp/bin/python3 src_rp/main.py

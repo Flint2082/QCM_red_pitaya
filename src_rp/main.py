@@ -5,10 +5,10 @@ from opcua import Client
 import time
 
 print("Loading WAGO client package")
-import wago_client
+import src_rp.packages.wago_client as wago_client
 
 print("Loading QCM interface")
-import QCM_interface 
+import src_rp.packages.QCM_interface as QCM_interface 
 
 
 

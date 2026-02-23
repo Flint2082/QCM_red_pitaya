@@ -28,13 +28,15 @@ def find_red_pitaya(subnet="192.168.1.", start=1, end=254, timeout=0.2):
 class QCMInterface:
     def __init__(self, RP_IP):
         directory = os.path.expanduser(
-            "../model_composer/qcm_rp/outputs/"
+            "~/QCM_red_pitaya/model_composer/qcm_rp/outputs/"
         )
+
 
         newest_file = max(
             (os.path.join(directory, f) for f in os.listdir(directory)),
             key=os.path.getmtime
         )
+        
 
         # self.fpga = casperfpga.CasperFpga('132.229.46.164')
         # '192.168.1.55'

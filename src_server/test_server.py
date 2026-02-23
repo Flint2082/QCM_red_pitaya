@@ -3,8 +3,8 @@ from opcua import ua, Server
 import time
 
 server = Server()
-# server.set_endpoint("opc.tcp://192.168.1.50:4840")
-server.set_endpoint("opc.tcp://localhost:4840")
+server.set_endpoint("opc.tcp://132.229.46.113:4840")
+# server.set_endpoint("opc.tcp://localhost:4840")
 
 server.set_server_name("QCM OPCUA Server")
 

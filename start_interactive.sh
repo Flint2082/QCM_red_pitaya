@@ -27,4 +27,4 @@ fi
 
 # Start the client
 echo "Starting client side..."
-ipython -i src_rp/interactive.py
+.venv-rp/bin/python3 src_rp/interactive.py

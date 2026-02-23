@@ -26,5 +26,6 @@ if [ ! -f "src_rp/interactive.py" ]; then
 fi
 
 # Start the client
-echo "Starting client side..."
+echo "Starting interactive environment ..."
+
 .venv-rp/bin/python3 src_rp/interactive.py

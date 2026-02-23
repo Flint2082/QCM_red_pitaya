@@ -167,7 +167,7 @@ class QCMInterface:
 
         return thickness_nm
 
-    def startMeasurement(self, T = 23,debug=False):
+    def startMeasurement(self, T = 23,debug=False, plot=True):
         # Measurement routine
 
         # Initialize the temperature compensation algorithm with calibration and starting values
@@ -191,70 +191,72 @@ class QCMInterface:
             print("Temp_freq \t Mass_freq")        
             #with open('output.csv', mode='w') as log_file:
             #    log_file.write("Temp_C,Comp_thick_nm\n")
-                
+         
+            
         try:
-            # ---- Live plot setup ----
-            plt.ion()
+            if plot:
+                # ---- Live plot setup ----
+                plt.ion()
 
-            fig, (ax1,ax2,ax3,ax4) = plt.subplots(4,1,sharex=True)
-            #plt.subplots_adjust(bottom=0.30) 
-            fig.set_size_inches(10,14)
-            
-            """
-            ax_slider1 = plt.axes([0.15, 0.18, 0.7, 0.03])
-            ax_slider2 = plt.axes([0.15, 0.10, 0.7, 0.03])
-            
-            slider1 = Slider(
-                ax=ax_slider1,
-                label="Integral control",
-                valmin=-10,
-                valmax=0,
-                valinit=1
-            )
-
-            slider2 = Slider(
-                ax=ax_slider2,
-                label="Proportional control",
-                valmin=-10,
-                valmax=0,
-                valinit=2
-            )
-            """
+                fig, (ax1,ax2,ax3,ax4) = plt.subplots(4,1,sharex=True)
+                #plt.subplots_adjust(bottom=0.30) 
+                fig.set_size_inches(10,14)
                 
+                """
+                ax_slider1 = plt.axes([0.15, 0.18, 0.7, 0.03])
+                ax_slider2 = plt.axes([0.15, 0.10, 0.7, 0.03])
+                
+                slider1 = Slider(
+                    ax=ax_slider1,
+                    label="Integral control",
+                    valmin=-10,
+                    valmax=0,
+                    valinit=1
+                )
+
+                slider2 = Slider(
+                    ax=ax_slider2,
+                    label="Proportional control",
+                    valmin=-10,
+                    valmax=0,
+                    valinit=2
+                )
+                """
                     
-            ax1.set_title("Mass mode measurement")
-            ax1.set_xlabel("Time [s]")
-            ax1.set_ylabel("Frequency [Hz]")
-            ax2.set_title("Temp mode measurement")
-            ax2.set_xlabel("Time [s]")
-            ax2.set_ylabel("Frequency [Hz]")
-            ax3.set_title("Calculated temperature")
-            ax3.set_xlabel("Time [s]")
-            ax3.set_ylabel("Temperature [C]")
-            ax4.set_title("Compensated thickmness")
-            ax4.set_xlabel("Time [s]")
-            ax4.set_ylabel("Delta thickness [nm]")
-            
+                        
+                ax1.set_title("Mass mode measurement")
+                ax1.set_xlabel("Time [s]")
+                ax1.set_ylabel("Frequency [Hz]")
+                ax2.set_title("Temp mode measurement")
+                ax2.set_xlabel("Time [s]")
+                ax2.set_ylabel("Frequency [Hz]")
+                ax3.set_title("Calculated temperature")
+                ax3.set_xlabel("Time [s]")
+                ax3.set_ylabel("Temperature [C]")
+                ax4.set_title("Compensated thickmness")
+                ax4.set_xlabel("Time [s]")
+                ax4.set_ylabel("Delta thickness [nm]")
+                
 
-            # Keep a rolling window of points
-            max_points = 300
-            time_data = deque(maxlen=max_points)
-            temp_freq_data = deque(maxlen=max_points)
-            mass_freq_data = deque(maxlen=max_points)
-            temp_data = deque(maxlen=max_points)
-            thickness_data = deque(maxlen=max_points)
-            uncomp_thick_data = deque(maxlen=max_points)
+                # Keep a rolling window of points
+                max_points = 300
+                time_data = deque(maxlen=max_points)
+                temp_freq_data = deque(maxlen=max_points)
+                mass_freq_data = deque(maxlen=max_points)
+                temp_data = deque(maxlen=max_points)
+                thickness_data = deque(maxlen=max_points)
+                uncomp_thick_data = deque(maxlen=max_points)
 
-            lineFM, = ax1.plot([], [], lw=2)
-            lineFT, = ax2.plot([], [], lw=2)
-            lineTemp, = ax3.plot([], [], lw=2)
-            lineThick, = ax4.plot([], [], lw=2, )
-            lineUnThick, = ax4.plot([], [], lw=2, color='red', linestyle='dashed' )
-            start_time = time.time()
+                lineFM, = ax1.plot([], [], lw=2)
+                lineFT, = ax2.plot([], [], lw=2)
+                lineTemp, = ax3.plot([], [], lw=2)
+                lineThick, = ax4.plot([], [], lw=2, )
+                lineUnThick, = ax4.plot([], [], lw=2, color='red', linestyle='dashed' )
+                start_time = time.time()
 
-            fig.tight_layout() # adjust graph spacing
-            fig.show()
-            fig.canvas.draw()
+                fig.tight_layout() # adjust graph spacing
+                fig.show()
+                fig.canvas.draw()
 
         
             # Measurement loop
@@ -275,35 +277,35 @@ class QCMInterface:
                     #with open('output.csv', mode='a') as log_file:
                     #    log_file.write(f"{T},{compensated_thickness_nm}\n")
                         
-                
-                # ---- Update live plot ----
-                t_now = time.time() - start_time
-                time_data.append(t_now)
-                temp_freq_data.append(fT)
-                mass_freq_data.append(fM)
-                temp_data.append(T_calc)
-                thickness_data.append(compensated_thickness_nm)
-                uncomp_thick_data.append(uncompensated_thickness_nm)
+                if plot:
+                    # ---- Update live plot ----
+                    t_now = time.time() - start_time
+                    time_data.append(t_now)
+                    temp_freq_data.append(fT)
+                    mass_freq_data.append(fM)
+                    temp_data.append(T_calc)
+                    thickness_data.append(compensated_thickness_nm)
+                    uncomp_thick_data.append(uncompensated_thickness_nm)
 
-                lineFM.set_data(time_data, mass_freq_data)
-                ax1.relim()
-                ax1.autoscale_view()
-                
-                lineFT.set_data(time_data, temp_freq_data)
-                ax2.relim()
-                ax2.autoscale_view()
-                
-                lineTemp.set_data(time_data, temp_data)
-                ax3.relim()
-                ax3.autoscale_view()
-                
-                lineThick.set_data(time_data, thickness_data)
-                lineUnThick.set_data(time_data, uncomp_thick_data)
-                ax4.relim()
-                ax4.autoscale_view()
+                    lineFM.set_data(time_data, mass_freq_data)
+                    ax1.relim()
+                    ax1.autoscale_view()
+                    
+                    lineFT.set_data(time_data, temp_freq_data)
+                    ax2.relim()
+                    ax2.autoscale_view()
+                    
+                    lineTemp.set_data(time_data, temp_data)
+                    ax3.relim()
+                    ax3.autoscale_view()
+                    
+                    lineThick.set_data(time_data, thickness_data)
+                    lineUnThick.set_data(time_data, uncomp_thick_data)
+                    ax4.relim()
+                    ax4.autoscale_view()
 
-                fig.canvas.draw()
-                fig.canvas.flush_events()
+                    fig.canvas.draw()
+                    fig.canvas.flush_events()
 
                         
                         

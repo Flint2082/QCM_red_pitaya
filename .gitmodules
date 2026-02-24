@@ -1,0 +1,3 @@
+[submodule "src/casperfpga"]
+	path = src/casperfpga
+	url = https://github.com/casper-astro/casperfpga.git

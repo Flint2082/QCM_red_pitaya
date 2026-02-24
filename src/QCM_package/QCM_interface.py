@@ -1,7 +1,7 @@
 ### Class to interface with the QCM Red Pitaya firmware, and to run measurements and calibrations.
 
 
-import casperfpga
+import casperfpga.casperfpga as casperfpga
 import os
 import time
 import QCM_package.TempCompAlgorithm as tca
@@ -28,7 +28,7 @@ def find_red_pitaya(subnet="192.168.1.", start=1, end=254, timeout=0.2):
 class QCMInterface:
     def __init__(self, RP_IP):
         directory = os.path.expanduser(
-            "~/QCM_red_pitaya/model_composer/qcm_rp/outputs/"
+            "./model_composer/qcm_rp/outputs/"
         )
         newest_file = max(
             (os.path.join(directory, f) for f in os.listdir(directory)),

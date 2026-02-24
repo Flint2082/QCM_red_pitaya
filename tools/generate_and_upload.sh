@@ -39,5 +39,6 @@ cd "$PROJECT_DIR" || { echo "Directory not found: $PROJECT_DIR"; exit 1; }
 echo "Activating CASPERFPGA venv"
 #source "$VENV_DIR/bin/activate" || { echo "Failed to activate virtual environment: $VENV_DIR"; exit 1; }
 
-echo "Starting IPython session"
-ipython -i "$PYTHON_SCRIPT" 
+echo "Starting interactive session"
+
+.venv-rp/bin/python3 "$PYTHON_SCRIPT" || { echo "Failed to start Python script: $PYTHON_SCRIPT"; exit 1; }

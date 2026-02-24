@@ -3,5 +3,11 @@
 .venv*/
 .pyc
 */__pycache__/
+<<<<<<< HEAD
 .Xil/*
+=======
+.eggs/
+casperfpga*
+
+>>>>>>> d30679679547b1561d19a1a8b534ab8336ff056d
 

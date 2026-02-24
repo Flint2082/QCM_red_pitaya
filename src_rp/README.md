@@ -31,3 +31,34 @@ python3 -m venv --system-site-packages .venv-rp
 ```
 
 ---
+
+Install casperfpga using the folling guidelines from the [CASPER documentation](https://casper-toolflow.readthedocs.io/en/latest/src/How-to-install-casperfpga.html). Making sure not to istall using pip.
+
+---
+
+Configure startup behavior by creating a systemd service file:
+
+```bash
+sudo nano /etc/systemd/system/qcm_client.service
+```
+
+Add the following content to the file:
+
+```ini
+[Unit]
+Description=QCM client
+After=network.target
+
+[Service]
+Type=simple
+User=root
+WorkingDirectory=/root/QCM_red_pitaya
+ExecStart=/root/QCM_red_pitaya/.venv-rp/bin/python src_rp/src.py
+Restart=always
+
+[Install]
+WantedBy=multi-user.target
+```
+
+---
+

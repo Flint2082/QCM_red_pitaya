@@ -4,7 +4,10 @@
 PROJECT_DIR="$HOME/work/CASPER_repos/qcm_red_pitaya"
 TARGET_DIR="$PROJECT_DIR/model_composer/qcm_rp/myproj/myproj.runs/impl_1"
 REMOTE_USER="root"
+<<<<<<< HEAD
 #REMOTE_HOST="rp-f0ea58.local"
+=======
+>>>>>>> d30679679547b1561d19a1a8b534ab8336ff056d
 REMOTE_HOST="132.229.46.164"
 REMOTE_PATH="/root"
 BITFILE="top.bit"

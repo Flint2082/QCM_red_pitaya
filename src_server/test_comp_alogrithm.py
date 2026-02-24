@@ -4,7 +4,7 @@ import matplotlib.pyplot as plt
 
 
 
-with open('calibration_data.csv', mode='r') as file:
+with open('data/calibration_data.csv', mode='r') as file:
     reader = csv.DictReader(file)
     calibration_data = [row for row in reader]
 
@@ -13,7 +13,7 @@ start_values = calibration_data[len(calibration_data)-1]
 print(f"There are {len(calibration_data)} entries in the calibration data.")
 
 temp_comp = tca.TempCompAlgorithm(
-    coefficient_file = "coeffecients.csv",
+    coefficient_file = "data/coeffecients.csv",
     T_start= float(start_values['Temp']), 
     fT_start= float(start_values['Freq_T']),
     fM_start= float(start_values['Freq_M'])

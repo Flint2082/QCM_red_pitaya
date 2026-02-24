@@ -30,13 +30,12 @@ class QCMInterface:
         directory = os.path.expanduser(
             "~/QCM_red_pitaya/model_composer/qcm_rp/outputs/"
         )
-
-
         newest_file = max(
             (os.path.join(directory, f) for f in os.listdir(directory)),
             key=os.path.getmtime
         )
         
+        self.window_size = 2**14
 
         # self.fpga = casperfpga.CasperFpga('132.229.46.164')
         # '192.168.1.55'
@@ -151,23 +150,8 @@ class QCMInterface:
         self.T_start = 23 # would be nice to measure this with a thermometer
         print(f"Reference set: fM={self.fM_start}, fT={self.fT_start}, T={self.T_start}")
         
-    def getThicknessUncomp(self, material_density=2.7):
-        # Calculate uncompensated thickness in nm using Sauerbrey equation
-        f0 = self.fM_start  # Resonant frequency in Hz (for 6MHz crystal)
-        rhoQ = 2.648     # Density of the quartz in g/cm^3
-        mu = 2.95e11  # Shear modulus of quartz in g/(cm*s^2)
-        rhoM = material_density  # Density of the deposited material in g/cm^3
-        
-        
-        fM = self.getFreq(1)
-        delta_f = fM - f0
-        
-        #thickness_nm = (-2*f0**2 * delta_f**-1 * rhoM)/(rhoQ * mu)**0.5 * 1e7  # Convert to nm
-        thickness_nm = (-2*f0**2 * delta_f**-1 * rhoM)/(rhoQ * mu)**0.5 * 1e7  # Convert to nm
 
-        return thickness_nm
-
-    def startMeasurement(self, T = 23,debug=False, plot=True):
+    def startMeasurement(self, T = 23, moving_window = True, plot=True, debug=False):
         # Measurement routine
 
         # Initialize the temperature compensation algorithm with calibration and starting values
@@ -259,7 +243,8 @@ class QCMInterface:
                 fig.canvas.draw()
 
         
-            # Measurement loop
+        
+            ### Measurement loop
             while True:
                 fT = self.getFreq(2)
                 fM = self.getFreq(1)
@@ -308,7 +293,11 @@ class QCMInterface:
                     fig.canvas.flush_events()
 
                         
-                        
+                if moving_window:
+                    self.setFreq(1, fT - (self.window_size/2))
+                    self.setFreq(2, fM - (self.window_size/2))
+                
+                       
                 time.sleep(0.1) # <-- set measurement interval here
         except KeyboardInterrupt:
             print("\nMeasurement stopped by user")

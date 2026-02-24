@@ -1,4 +1,4 @@
-import QCM_package.QCM_interface as QCM_interface 
+import QCM_package.QCM_interface as QCM_interface
 from IPython import start_ipython
 
 rp_ip = "132.229.46.164"

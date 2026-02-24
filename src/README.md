@@ -34,6 +34,8 @@ python3 -m venv --system-site-packages .venv-rp
 
 Install casperfpga using the folling guidelines from the [CASPER documentation](https://casper-toolflow.readthedocs.io/en/latest/src/How-to-install-casperfpga.html). Making sure not to istall using pip.
 
+The "tornado" and "circus" packages may create conflicts. If so, use 4.5.3 for tornado and 0.16.0 for circus.
+
 ---
 
 Configure startup behavior by creating a systemd service file:
@@ -61,4 +63,3 @@ WantedBy=multi-user.target
 ```
 
 ---
-

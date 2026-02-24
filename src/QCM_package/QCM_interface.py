@@ -4,7 +4,7 @@
 import casperfpga
 import os
 import time
-import src_rp.packages.TempCompAlgorithm as tca
+import src.QCM_package.TempCompAlgorithm as tca
 import calendar
 from collections import deque
 import matplotlib.pyplot as plt

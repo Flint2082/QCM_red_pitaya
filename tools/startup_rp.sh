@@ -20,12 +20,11 @@ fpgautil -b $HOME/top.bit.bin
 
 
 # Check if client exists
-if [ ! -f "src_rp/interactive.py" ]; then
-    echo "Error: client file interactive.py not found"
+if [ ! -f "src/main.py" ]; then
+    echo "Error: client file main.py not found"
     exit 1
 fi
 
 # Start the client
-echo "Starting interactive environment ..."
-
-.venv-rp/bin/python3 src_rp/interactive.py
+echo "Starting client side..."
+.venv-rp/bin/python3 src/main.py

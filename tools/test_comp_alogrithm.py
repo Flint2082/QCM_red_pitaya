@@ -1,6 +1,13 @@
-import TempCompAlgorithm as tca
+from pathlib import Path
 import csv
 import matplotlib.pyplot as plt
+import sys
+
+path_root = Path(__file__).parent.parent
+sys.path.append(str(path_root))
+
+import src.QCM_package.TempCompAlgorithm as tca
+
 
 
 

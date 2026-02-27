@@ -209,8 +209,8 @@ class QCMInterface:
                 
                 ### Moving window logic: if enabled, makes the window "follow" the measurement     
                 if moving_window:
-                    self.setFreq(1, fT - (self.window_size/2))
-                    self.setFreq(2, fM - (self.window_size/2))
+                    self.setFreq(1, fM - (self.window_size/2))
+                    self.setFreq(2, fT - (self.window_size/2))
                 
                 # Calculate temperature and compensated thickness using the temp compensation algorithm
                 T_calc, uncompensated_thickness_nm, compensated_thickness_nm, compensated_m_freq = temp_comp.FreqToTemp(fT, fM)

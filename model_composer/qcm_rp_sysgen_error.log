@@ -5,20 +5,15 @@ Matlab 9.10.0.2015706 (R2021a) Update 7 /usr/local/MATLAB/R2021a
 Vivado 2021.1                           /tools/Xilinx/Vivado/2021.1
 --------------------------------------------------------------------------------
 Summary of Errors:
-Error 0001: Sysgen license checkout failed.
- XILINXD_LICENSE_FILE = /...
-     Block: Unspecified
+Error 0001: Undriven input port
+     Block: 'qcm_rp/loop_filter1/AddSub1'
 --------------------------------------------------------------------------------
 
 Error 0001:
 
 Reported by:
-  Unspecified
+  'qcm_rp/loop_filter1/AddSub1'
 
 Details:
-Sysgen license checkout failed.
- XILINXD_LICENSE_FILE = /tools/Xilinx/Vivado/2021.1/data/sysgen/hwcosim_compiler/pp_ethernet
- Environment variable LM_LICENSE_FILE is not set.
- License search path: /home/casper/.Xilinx:/tools/Xilinx/Vivado/2021.1/data/sysgen/hwcosim_compiler/pp_ethernet:/tools/Xilinx/Vivado/2021.1/data/ip/core_licenses
-
+The input ports on this block must be driven by other Xilinx blocks
 --------------------------------------------------------------------------------

@@ -60,6 +60,7 @@ class QCMInterface:
         sign_bit = 1 << (bits - 1)
         return (value ^ sign_bit) - sign_bit
 
+
     def setFreq(self, osc_index, freq):
         self.fpga.write_int(device_name='freq_'+str(osc_index),integer=int(freq*64))
 
@@ -74,6 +75,20 @@ class QCMInterface:
 
     def setInv(self, osc_index, inv):
         self.fpga.write('inv_fb_'+str(osc_index),(inv).to_bytes(4,'big'))
+        
+    def setOutputMode(self, mode = -1):
+        if mode == -1:
+            print("Output mode not set. These are the available modes:")
+            print("0: The delta of the two inputs")
+            print("1: The mass mode frequency")
+            print("2: The mass mode lock detector")
+            print("3: The mass mode power detector")
+            print("4: The temp mode frequency")
+            print("5: The temp mode lock detector")
+            print("6: The temp mode power detector")
+        else:
+            self.fpga.write('output_select',(mode).to_bytes(4,'big'))
+        
         
     def standby(self, osc_index):
         self.setFreq(osc_index,0)
@@ -98,6 +113,8 @@ class QCMInterface:
         lock_val = self.to_signed(self.fpga.read_int(f'lock_detect_{osc_index}'),32)
         return lock_val/2**31
         
+
+
 
     def sweep(self, osc_index, start, stop, step):
         self.standby(osc_index)

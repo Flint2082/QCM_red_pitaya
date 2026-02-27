@@ -1,0 +1,27 @@
+Base:
+ns=4;s=|var|750-8000 Basic Controller 100 2ETH ECO.Application.GVL_OPCUA.
+
+
+Node keys:
+QCM.SET.Density                         Float
+QCM.SET.Z-ratio                         Float       
+QCM.SET.StartFreq                       Float
+QCM.SET.AmbientTemp                     Float
+QCM.SET.Coeffecients                    List of 8 Floats
+
+
+QCM.CTRL.StartMeasurement               Bool
+QCM.CTRL.StopMeasurement                Bool
+QCM.CTRL.SetZero                        Bool
+QCM.CTRL.Sweep                          Bool
+
+
+QCM.READ.MassFrequency					Float
+QCM.READ.TempFrequency					Float
+QCM.READ.Temperature					Float
+QCM.READ.CompensatedThickness			Float
+QCM.READ.UncompensatedThickness			Float
+QCM.READ.CompensatedRate				Float
+QCM.READ.UncompensatedRate				Float
+QCM.READ.CompensatedMassFrequency		Float
+QCM.READ.Timestamp						Integer ?

@@ -72,6 +72,9 @@ class QCMInterface:
         
     def setLDGain(self, osc_index, gain):
         self.fpga.write_int(device_name='ld_gain_'+str(osc_index),integer=int(gain*4294967296))
+        
+    def setPDGain(self, osc_index, gain):
+        self.fpga.write_int(device_name='pd_gain_'+str(osc_index),integer=int(gain*4294967296))
 
     def setInv(self, osc_index, inv):
         self.fpga.write('inv_fb_'+str(osc_index),(inv).to_bytes(4,'big'))
@@ -113,16 +116,20 @@ class QCMInterface:
         lock_val = self.to_signed(self.fpga.read_int(f'lock_detect_{osc_index}'),32)
         return lock_val/2**31
         
-
+    def getPhase(self, osc_index):
+        lock_val = self.to_signed(self.fpga.read_int(f'phase_out_{osc_index}'),32)
+        return lock_val/2**31
 
 
     def sweep(self, osc_index, start, stop, step):
-        self.standby(osc_index)
+        self.standby(1)
+        self.standby(2)
         for f in range(start, stop, step):
             self.reset()
             self.setFreq(osc_index, f)
-            time.sleep(1)
-        
+            self.setInt(osc_index, 0.000001)
+            time.sleep(0.1)
+            print(f"Freq: {self.getFreq(osc_index)}\t Phase/power: {self.getPhase(osc_index)}")        
     def startup(self):
         self.reset()
         
@@ -130,14 +137,16 @@ class QCMInterface:
         self.setInv(1,1)
         self.setFreq(1,5975000)                                                                                                                                                   
         self.setInt(1,0.001)
-        self.setLDGain(1,0.01)
+        self.setLDGain(1,0.005)
+        self.setPDGain(1,0.005)
         time.sleep(1.5)
         self.setInt(1,0.000001)
         
         self.setInv(2,1)
         self.setFreq(2,6555000)
         self.setInt(2,0.001)
-        self.setLDGain(2,0.01)
+        self.setLDGain(2,0.005)
+        self.setPDGain(2,0.005)
         time.sleep(1.5)
         self.setInt(2,0.00001)
         

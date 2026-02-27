@@ -107,27 +107,8 @@ class QCMInterface:
             time.sleep(1)
         
     def startup(self):
-        #STARTUP AUTOMATON (TEMP)
         self.reset()
         
-        """
-        ## 10MHz crystal
-        self.setInv(1,1)
-        self.setFreq(1,3380000)                                                                                                                                                   
-    
-        setInt(1,0.001)
-        setLDGain(1,0.01)
-        time.sleep(1)
-        setInt(1,0.000001)
-        
-        setInv(2,1)
-        setFreq(2,3720000)
-        setInt(2,0.001)
-        setLDGain(2,0.01)
-        time.sleep(1)
-        setInt(2,0.0001)
-        
-        """
         ## 6MHz crystal
         self.setInv(1,1)
         self.setFreq(1,5975000)                                                                                                                                                   
@@ -151,6 +132,7 @@ class QCMInterface:
         print(f"Reference set: fM={self.fM_start}, fT={self.fT_start}, T={self.T_start}")
         
 
+
     def startMeasurement(self, T = 23, moving_window = True, plot=True, debug=False):
         # Measurement routine
 
@@ -173,8 +155,6 @@ class QCMInterface:
                 log_file.write("Time,Freq_T,Freq_M,Temp_C,Uncomp_thick_nm,Comp_thick_nm\n")
         else:
             print("Temp_freq \t Mass_freq")        
-            #with open('output.csv', mode='w') as log_file:
-            #    log_file.write("Temp_C,Comp_thick_nm\n")
          
             
         try:
@@ -185,29 +165,7 @@ class QCMInterface:
                 fig, (ax1,ax2,ax3,ax4) = plt.subplots(4,1,sharex=True)
                 #plt.subplots_adjust(bottom=0.30) 
                 fig.set_size_inches(10,14)
-                
-                """
-                ax_slider1 = plt.axes([0.15, 0.18, 0.7, 0.03])
-                ax_slider2 = plt.axes([0.15, 0.10, 0.7, 0.03])
-                
-                slider1 = Slider(
-                    ax=ax_slider1,
-                    label="Integral control",
-                    valmin=-10,
-                    valmax=0,
-                    valinit=1
-                )
-
-                slider2 = Slider(
-                    ax=ax_slider2,
-                    label="Proportional control",
-                    valmin=-10,
-                    valmax=0,
-                    valinit=2
-                )
-                """
-                    
-                        
+         
                 ax1.set_title("Mass mode measurement")
                 ax1.set_xlabel("Time [s]")
                 ax1.set_ylabel("Frequency [Hz]")
@@ -249,18 +207,16 @@ class QCMInterface:
                 fT = self.getFreq(2)
                 fM = self.getFreq(1)
                 
-                
+                # Calculate temperature and compensated thickness using the temp compensation algorithm
                 T_calc, uncompensated_thickness_nm, compensated_thickness_nm, compensated_m_freq = temp_comp.FreqToTemp(fT, fM)
 
+                # Print results to console and log to file if in debug mode, otherwise just print frequencies
                 if(debug==True):
                     print(f"{calendar.timegm(time.gmtime())} \t {fT:.8f} \t {fM:.8f} \t {T_calc:.2f} \t {uncompensated_thickness_nm:.4f} \t {compensated_thickness_nm:.4f}")
                     with open('data/output.csv', mode='a') as log_file:
                         log_file.write(f"{calendar.timegm(time.gmtime())},{fT},{fM},{T_calc},{uncompensated_thickness_nm},{compensated_thickness_nm}\n")
                 else:
                     print(f"{fT:.3f} \t {fM:.3f}")
-                    
-                    #with open('output.csv', mode='a') as log_file:
-                    #    log_file.write(f"{T},{compensated_thickness_nm}\n")
                         
                 if plot:
                     # ---- Update live plot ----
@@ -292,13 +248,14 @@ class QCMInterface:
                     fig.canvas.draw()
                     fig.canvas.flush_events()
 
-                        
+                
+                ### Moving window logic: if enabled, makes the window "follow" the measurement     
                 if moving_window:
                     self.setFreq(1, fT - (self.window_size/2))
                     self.setFreq(2, fM - (self.window_size/2))
                 
                        
-                time.sleep(0.1) # <-- set measurement interval here
+                time.sleep(0.1) # <-- set measurement interval here          #TODO: make this more robust
         except KeyboardInterrupt:
             print("\nMeasurement stopped by user")
             
@@ -321,7 +278,7 @@ class QCMInterface:
             freqM = self.getFreq(1)
             freqT = self.getFreq(2)
             print(f"Freq M: {freqM}, Freq T: {freqT} at Temp: {temp}")
-            with open('data/calibration_data.csv', mode='a') as cal_file:
+            with open(cal_file_name, mode='a') as cal_file:
                 cal_file.write(f"{temp},{freqT},{freqM}\n")
 
 

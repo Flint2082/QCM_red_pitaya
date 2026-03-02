@@ -96,6 +96,7 @@ class QCMInterface:
     def standby(self, osc_index):
         self.setFreq(osc_index,0)
         self.setInt(osc_index,0)
+        self.setProp(osc_index,0)
         self.reset()
 
     def reset(self):
@@ -125,28 +126,30 @@ class QCMInterface:
         self.standby(1)
         self.standby(2)
         for f in range(start, stop, step):
-            self.reset()
             self.setFreq(osc_index, f)
-            self.setInt(osc_index, 0.000001)
+            self.reset()
             time.sleep(0.1)
-            print(f"Freq: {self.getFreq(osc_index)}\t Phase/power: {self.getPhase(osc_index)}")        
+            print(f"Freq: {self.getFreq(osc_index)}\t Phase/power: {self.getPhase(osc_index)}")       
+             
     def startup(self):
         self.reset()
         
         ## 6MHz crystal
         self.setInv(1,1)
-        self.setFreq(1,5975000)                                                                                                                                                   
+        self.setProp(1,0)                               
+        self.setFreq(1,5975000)
         self.setInt(1,0.001)
         self.setLDGain(1,0.005)
-        self.setPDGain(1,0.005)
+        self.setPDGain(1,0.00005)
         time.sleep(1.5)
         self.setInt(1,0.000001)
         
         self.setInv(2,1)
+        self.setProp(2,0)
         self.setFreq(2,6555000)
         self.setInt(2,0.001)
         self.setLDGain(2,0.005)
-        self.setPDGain(2,0.005)
+        self.setPDGain(2,0.00005)
         time.sleep(1.5)
         self.setInt(2,0.00001)
         

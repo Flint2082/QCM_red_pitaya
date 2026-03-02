@@ -128,23 +128,36 @@ class QCMInterface:
         
         frequencies = []
         phases = []
+        amplitudes = []
         
         for f in range(start, stop, step):
             self.setFreq(osc_index, f)
             self.reset()
             time.sleep(0.1)
             freq = self.getFreq(osc_index)
-            phase = self.getPhase(osc_index)
+            I = self.getPhase(osc_index)
+            Q = self.getLock(osc_index)
+            phase = (I**2 + Q**2)**0.5
+            amplitude = (I**2 + Q**2)**0.5
             frequencies.append(freq)
             phases.append(phase)
-            print(f"Freq: {freq}\t Phase*power: {phase}")
+            amplitudes.append(amplitude)
+            print(f"Freq: {freq}\t Phase: {phase}\t Amplitude: {amplitude}")
         
         # Plot phase/power over frequency sweep
         plt.figure()
+        plt.subplot(2, 1, 1)
         plt.plot(frequencies, phases, 'b-o')
         plt.xlabel("Frequency [Hz]")
-        plt.ylabel("Phase/Power")
-        plt.title(f"Phase/Power vs Frequency (Oscillator {osc_index})")
+        plt.ylabel("Phase")
+        plt.title(f"Phase vs Frequency (Oscillator {osc_index})")
+        plt.grid(True)
+        
+        plt.subplot(2, 1, 2)
+        plt.plot(frequencies, amplitudes, 'r-o')
+        plt.xlabel("Frequency [Hz]")
+        plt.ylabel("Amplitude")
+        plt.title(f"Amplitude vs Frequency (Oscillator {osc_index})")
         plt.grid(True)
         plt.show()
              

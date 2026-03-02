@@ -9,6 +9,7 @@ import calendar
 from collections import deque
 import matplotlib.pyplot as plt
 from matplotlib.widgets import Slider
+import numpy as np
 import socket
 
 def find_red_pitaya(subnet="192.168.1.", start=1, end=254, timeout=0.2):
@@ -133,33 +134,34 @@ class QCMInterface:
         for f in range(start, stop, step):
             self.setFreq(osc_index, f)
             self.reset()
-            time.sleep(0.1)
-            freq = self.getFreq(osc_index)
+            time.sleep(0.01)
             I = self.getPhase(osc_index)
             Q = self.getLock(osc_index)
-            phase = (I**2 + Q**2)**0.5
+            phase = np.arctan2(Q, I)
             amplitude = (I**2 + Q**2)**0.5
-            frequencies.append(freq)
+            frequencies.append(f)
             phases.append(phase)
             amplitudes.append(amplitude)
-            print(f"Freq: {freq}\t Phase: {phase}\t Amplitude: {amplitude}")
+            print(f"Freq: {f}\t Phase: {phase}\t Amplitude: {amplitude}")
         
         # Plot phase/power over frequency sweep
         plt.figure()
         plt.subplot(2, 1, 1)
-        plt.plot(frequencies, phases, 'b-o')
-        plt.xlabel("Frequency [Hz]")
-        plt.ylabel("Phase")
-        plt.title(f"Phase vs Frequency (Oscillator {osc_index})")
-        plt.grid(True)
-        
-        plt.subplot(2, 1, 2)
-        plt.plot(frequencies, amplitudes, 'r-o')
+        plt.plot(frequencies, amplitudes, 'r')
         plt.xlabel("Frequency [Hz]")
         plt.ylabel("Amplitude")
         plt.title(f"Amplitude vs Frequency (Oscillator {osc_index})")
         plt.grid(True)
         plt.show()
+        
+        plt.subplot(2, 1, 2)
+        plt.plot(frequencies, phases, 'b')
+        plt.xlabel("Frequency [Hz]")
+        plt.ylabel("Phase")
+        plt.title(f"Phase vs Frequency (Oscillator {osc_index})")
+        plt.grid(True)
+        
+        
              
     def startup(self):
         self.reset()
@@ -169,8 +171,8 @@ class QCMInterface:
         self.setProp(1,0)                               
         self.setFreq(1,5975000)
         self.setInt(1,0.001)
-        self.setLDGain(1,0.005)
-        self.setPDGain(1,0.00005)
+        self.setLDGain(1,0.00001)
+        self.setPDGain(1,0.00001)
         time.sleep(1.5)
         self.setInt(1,0.000001)
         
@@ -178,8 +180,8 @@ class QCMInterface:
         self.setProp(2,0)
         self.setFreq(2,6555000)
         self.setInt(2,0.001)
-        self.setLDGain(2,0.005)
-        self.setPDGain(2,0.00005)
+        self.setLDGain(2,0.00001)
+        self.setPDGain(2,0.00001)
         time.sleep(1.5)
         self.setInt(2,0.00001)
         

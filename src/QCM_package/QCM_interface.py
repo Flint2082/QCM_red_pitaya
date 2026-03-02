@@ -125,11 +125,28 @@ class QCMInterface:
     def sweep(self, osc_index, start, stop, step):
         self.standby(1)
         self.standby(2)
+        
+        frequencies = []
+        phases = []
+        
         for f in range(start, stop, step):
             self.setFreq(osc_index, f)
             self.reset()
             time.sleep(0.1)
-            print(f"Freq: {self.getFreq(osc_index)}\t Phase/power: {self.getPhase(osc_index)}")       
+            freq = self.getFreq(osc_index)
+            phase = self.getPhase(osc_index)
+            frequencies.append(freq)
+            phases.append(phase)
+            print(f"Freq: {freq}\t Phase*power: {phase}")
+        
+        # Plot phase/power over frequency sweep
+        plt.figure()
+        plt.plot(frequencies, phases, 'b-o')
+        plt.xlabel("Frequency [Hz]")
+        plt.ylabel("Phase/Power")
+        plt.title(f"Phase/Power vs Frequency (Oscillator {osc_index})")
+        plt.grid(True)
+        plt.show()
              
     def startup(self):
         self.reset()

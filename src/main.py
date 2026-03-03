@@ -1,6 +1,7 @@
 print("Starting source code")
 print("Loading OPC-UA package")
 from opcua import Client
+from opcua import ua
 
 import time
 
@@ -18,11 +19,6 @@ url = "opc.tcp://132.229.46.113:4840"
 # url = "opc.tcp://localhost:4840" 
 
 
-# Connect to server
-#client = Client(url)
-#client.connect()
-#print("Connected to OPC UA server")
-
 #rp_ip = QCM_interface.find_red_pitaya(subnet= "132.229.46.")
 rp_ip = "132.229.46.164"
 
@@ -32,15 +28,14 @@ qcm.setReference()
 
 wago = wago_client.WagoClient(url)
 
-node_id = "ns=4;s=|var|750-8000 Basic Controller 100 2ETH ECO.Application.GVL_OPCUA."
-key = "QCM.thickness"
+node_id_base = "|var|750-8000 Basic Controller 100 2ETH ECO.Application.GVL_OPCUA."
 
 
 try:
     # Resolve namespace index dynamically
-    # uri = "urn:wago-client"
-    #idx = client.get_namespace_index(uri)
-    # idx = 2    
+    uri = "urn:wago-client"
+    idx = wago.client.get_namespace_index(uri)
+
 
     #setRef = wago.get_node(f"ns={idx};s=QCM.SetRef")
     
@@ -54,13 +49,15 @@ try:
     
     #temp_node = wago.get_node(f"ns={idx};s=QCM.Temperature")
     
-    if(wago.has_node(key)):
-        print("The wago has the thinkness node")
-    else:
-        print("ERROR: The wago does not have the thickness mode")
+    thickness_node_id = ua.NodeId(node_id_base + "QCM.Thickness", idx)
+    
+    # if(wago.has_node(uri, node_id_base, key)):
+    #     print("The wago has the thickness node")
+    # else:
+    #     print("ERROR: The wago does not have the thickness node")
     
     
-    thickness_node = wago.get_node(node_id + key)
+    thickness_node = wago.get_node(thickness_node_id)
     
     
 

@@ -27,4 +27,4 @@ fi
 
 # Start the client
 echo "Starting client side..."
-.venv-rp/bin/python3 $SCRIPT_DIR/../src/main.py
+$SCRIPT_DIR/../.venv-rp/bin/python3 $SCRIPT_DIR/../src/main.py

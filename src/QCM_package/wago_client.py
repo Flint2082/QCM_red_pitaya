@@ -109,9 +109,10 @@ class WagoClient:
             print(f"[WAGO] Get node failed: {e}")
             return None
 
-    def has_node(self, key):
+    def has_node(self, url, node_id_base, key):    
         try:
-            node_id = f"ns=4;s=|var|750-8000 Basic Controller 100 2ETH ECO.Application.GVL_OPCUA.{key}"
+            idx = self.client.get_namespace_index(url)
+            node_id = f"ns={idx};s={node_id_base}{key}"
             node = self.client.get_node(node_id)
             _ = node.get_value()  # try reading value to ensure existence
             return True

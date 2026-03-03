@@ -1,5 +1,5 @@
 Base:
-ns=4;s=|var|750-8000 Basic Controller 100 2ETH ECO.Application.GVL_OPCUA.
+|var|750-8000 Basic Controller 100 2ETH ECO.Application.GVL_OPCUA.
 
 
 Node keys:
@@ -24,4 +24,5 @@ QCM.READ.UncompensatedThickness			Float
 QCM.READ.CompensatedRate				Float
 QCM.READ.UncompensatedRate				Float
 QCM.READ.CompensatedMassFrequency		Float
-QCM.READ.Timestamp						Integer ?
+QCM.READ.Timestamp						Integer 
+QCM.READ.ErrorCode						Integer

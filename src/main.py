@@ -13,9 +13,9 @@ import QCM_package.QCM_interface as QCM_interface
 
 
 # Server endpoint (must match server)
-# url = "opc.tcp://132.229.46.113:4840"
+url = "opc.tcp://132.229.46.113:4840"
 # url = "opc.tcp://192.168.1.50:4840"
-url = "opc.tcp://localhost:4840" 
+# url = "opc.tcp://localhost:4840" 
 
 
 # Connect to server
@@ -32,8 +32,8 @@ qcm.setReference()
 
 wago = wago_client.WagoClient(url)
 
-node_id = "ns=4;s=|var|750-8000 Basic Controller 100 2ETH ECO.Application.GVL_OPCUA"
-key = ".in.thickness"
+node_id = "ns=4;s=|var|750-8000 Basic Controller 100 2ETH ECO.Application.GVL_OPCUA."
+key = "QCM.thickness"
 
 
 try:

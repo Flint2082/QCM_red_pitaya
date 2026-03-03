@@ -84,12 +84,14 @@ class QCMInterface:
         if mode == -1:
             print("Output mode not set. These are the available modes:")
             print("0: The delta of the two inputs")
-            print("1: The mass mode frequency")
-            print("2: The mass mode lock detector")
-            print("3: The mass mode power detector")
-            print("4: The temp mode frequency")
-            print("5: The temp mode lock detector")
-            print("6: The temp mode power detector")
+            print("1: The mass mode frequency (fine)")
+            print("2: The mass mode frequency (coarse)")
+            print("3: The mass mode lock detector")
+            print("4: The mass mode power detector")
+            print("5: The temp mode frequency (fine)")
+            print("6: The temp mode frequency (coarse)")
+            print("7: The temp mode lock detector")
+            print("8: The temp mode power detector")
         else:
             self.fpga.write('output_select',(mode).to_bytes(4,'big'))
         
@@ -102,7 +104,7 @@ class QCMInterface:
 
     def reset(self):
         self.fpga.write('reset',(1).to_bytes(4,'big'))
-        time.sleep(0.001)
+        # time.sleep(0.001)
         self.fpga.write('reset',(0).to_bytes(4,'big'))
         
     def getFreq(self, osc_index):
@@ -152,7 +154,6 @@ class QCMInterface:
         plt.ylabel("Amplitude")
         plt.title(f"Amplitude vs Frequency (Oscillator {osc_index})")
         plt.grid(True)
-        plt.show()
         
         plt.subplot(2, 1, 2)
         plt.plot(frequencies, phases, 'b')
@@ -160,7 +161,7 @@ class QCMInterface:
         plt.ylabel("Phase")
         plt.title(f"Phase vs Frequency (Oscillator {osc_index})")
         plt.grid(True)
-        
+        plt.show()
         
              
     def startup(self):

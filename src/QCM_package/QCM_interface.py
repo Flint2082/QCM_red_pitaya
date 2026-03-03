@@ -28,9 +28,8 @@ def find_red_pitaya(subnet="192.168.1.", start=1, end=254, timeout=0.2):
 
 class QCMInterface:
     def __init__(self, RP_IP):
-        directory = os.path.expanduser(
-            "./model_composer/qcm_rp/outputs/"
-        )
+        base_dir = os.path.dirname(os.path.abspath(__file__))
+        directory = os.path.join(base_dir, "..", "..", "model_composer", "qcm_rp", "outputs")
         newest_file = max(
             (os.path.join(directory, f) for f in os.listdir(directory)),
             key=os.path.getmtime

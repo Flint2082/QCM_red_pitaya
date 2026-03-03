@@ -6,4 +6,5 @@
 *.Xil*
 *.eggs*
 
+!*.fpg
 

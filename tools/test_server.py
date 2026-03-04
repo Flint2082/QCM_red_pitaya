@@ -14,77 +14,187 @@ uri = "urn:wago-client"
 idx = server.register_namespace(uri)
 
 objects = server.get_objects_node()
+
+# Create main QCM object
 qcm = objects.add_object(
     ua.NodeId(node_id_base + "QCM", idx),
     "QCM"
 )
 
-freq_M_node = qcm.add_variable(
-    ua.NodeId(node_id_base + "QCM.Frequency.M", idx),
-    "Frequency M", 
-    0.0
+# ===== QCM.SET - Settings folder =====
+qcm_set = qcm.add_object(
+    ua.NodeId(node_id_base + "QCM.SET", idx),
+    "SET"
 )
-freq_M_node.set_writable()
 
-freq_T_node = qcm.add_variable(
-    ua.NodeId(node_id_base + "QCM.Frequency.T", idx),
-    "Frequency T", 
-    0.0
+density_node = qcm_set.add_variable(
+    ua.NodeId(node_id_base + "QCM.SET.Density", idx),
+    "Density",
+    0.0,
+    varianttype=ua.VariantType.Float
 )
-freq_T_node.set_writable()
+density_node.set_writable()
 
-window_M_node = qcm.add_variable(
-    ua.NodeId(node_id_base + "QCM.Window.M", idx),
-    "Window M", 
-    0.0
+z_ratio_node = qcm_set.add_variable(
+    ua.NodeId(node_id_base + "QCM.SET.Z-ratio", idx),
+    "Z-ratio",
+    0.0,
+    varianttype=ua.VariantType.Float
 )
-window_M_node.set_writable()
+z_ratio_node.set_writable()
 
-window_T_node = qcm.add_variable(
-    ua.NodeId(node_id_base + "QCM.Window.T", idx),
-    "Window T", 
-    0.0
+start_freq_node = qcm_set.add_variable(
+    ua.NodeId(node_id_base + "QCM.SET.StartFreq", idx),
+    "StartFreq",
+    0.0,
+    varianttype=ua.VariantType.Float
 )
-window_T_node.set_writable()
+start_freq_node.set_writable()
 
-temp_node = qcm.add_variable(
-    ua.NodeId(node_id_base + "QCM.Temperature", idx),
-    "Temperature", 
-    0.0
+ambient_temp_node = qcm_set.add_variable(
+    ua.NodeId(node_id_base + "QCM.SET.AmbientTemp", idx),
+    "AmbientTemp",
+    0.0,
+    varianttype=ua.VariantType.Float
 )
-temp_node.set_writable()
+ambient_temp_node.set_writable()
 
-thickness_node = qcm.add_variable(
-    ua.NodeId(node_id_base + "QCM.Thickness", idx),
-    "Thickness", 
-    0.0
+coeff_node = qcm_set.add_variable(
+    ua.NodeId(node_id_base + "QCM.SET.Coeffecients", idx),
+    "Coeffecients",
+    [0.0] * 8,
+    varianttype=ua.VariantType.Float
 )
-thickness_node.set_writable()
+coeff_node.set_writable()
 
-setRef = qcm.add_variable(
-    ua.NodeId(node_id_base + "QCM.SetRef", idx),
-    "Set Reference", 
-    False
+# ===== QCM.CTRL - Control folder =====
+qcm_ctrl = qcm.add_object(
+    ua.NodeId(node_id_base + "QCM.CTRL", idx),
+    "CTRL"
 )
-setRef.set_writable()
 
-    
+start_meas_node = qcm_ctrl.add_variable(
+    ua.NodeId(node_id_base + "QCM.CTRL.StartMeasurement", idx),
+    "StartMeasurement",
+    False,
+    varianttype=ua.VariantType.Boolean
+)
+start_meas_node.set_writable()
+
+stop_meas_node = qcm_ctrl.add_variable(
+    ua.NodeId(node_id_base + "QCM.CTRL.StopMeasurement", idx),
+    "StopMeasurement",
+    False,
+    varianttype=ua.VariantType.Boolean
+)
+stop_meas_node.set_writable()
+
+set_zero_node = qcm_ctrl.add_variable(
+    ua.NodeId(node_id_base + "QCM.CTRL.SetZero", idx),
+    "SetZero",
+    False,
+    varianttype=ua.VariantType.Boolean
+)
+set_zero_node.set_writable()
+
+sweep_node = qcm_ctrl.add_variable(
+    ua.NodeId(node_id_base + "QCM.CTRL.Sweep", idx),
+    "Sweep",
+    False,
+    varianttype=ua.VariantType.Boolean
+)
+sweep_node.set_writable()
+
+# ===== QCM.READ - Reading folder =====
+qcm_read = qcm.add_object(
+    ua.NodeId(node_id_base + "QCM.READ", idx),
+    "READ"
+)
+
+mass_freq_node = qcm_read.add_variable(
+    ua.NodeId(node_id_base + "QCM.READ.MassFrequency", idx),
+    "MassFrequency",
+    0.0,
+    varianttype=ua.VariantType.Float
+)
+
+temp_freq_node = qcm_read.add_variable(
+    ua.NodeId(node_id_base + "QCM.READ.TempFrequency", idx),
+    "TempFrequency",
+    0.0,
+    varianttype=ua.VariantType.Float
+)
+
+temperature_node = qcm_read.add_variable(
+    ua.NodeId(node_id_base + "QCM.READ.Temperature", idx),
+    "Temperature",
+    0.0,
+    varianttype=ua.VariantType.Float
+)
+
+comp_thickness_node = qcm_read.add_variable(
+    ua.NodeId(node_id_base + "QCM.READ.CompensatedThickness", idx),
+    "CompensatedThickness",
+    0.0,
+    varianttype=ua.VariantType.Float
+)
+
+uncomp_thickness_node = qcm_read.add_variable(
+    ua.NodeId(node_id_base + "QCM.READ.UncompensatedThickness", idx),
+    "UncompensatedThickness",
+    0.0,
+    varianttype=ua.VariantType.Float
+)
+
+comp_rate_node = qcm_read.add_variable(
+    ua.NodeId(node_id_base + "QCM.READ.CompensatedRate", idx),
+    "CompensatedRate",
+    0.0,
+    varianttype=ua.VariantType.Float
+)
+
+uncomp_rate_node = qcm_read.add_variable(
+    ua.NodeId(node_id_base + "QCM.READ.UncompensatedRate", idx),
+    "UncompensatedRate",
+    0.0,
+    varianttype=ua.VariantType.Float
+)
+
+comp_mass_freq_node = qcm_read.add_variable(
+    ua.NodeId(node_id_base + "QCM.READ.CompensatedMassFrequency", idx),
+    "CompensatedMassFrequency",
+    0.0,
+    varianttype=ua.VariantType.Float
+)
+
+timestamp_node = qcm_read.add_variable(
+    ua.NodeId(node_id_base + "QCM.READ.Timestamp", idx),
+    "Timestamp",
+    0,
+    varianttype=ua.VariantType.Int64
+)
+
+error_code_node = qcm_read.add_variable(
+    ua.NodeId(node_id_base + "QCM.READ.ErrorCode", idx),
+    "ErrorCode",
+    0,
+    varianttype=ua.VariantType.Int64
+)
+
 server.start()
-print("OPC UA server started")
-
-window_M_node.set_value(5975000)
-window_T_node.set_value(6565000)
-
-setRef.set_value(True)  # Trigger reference setting in client
+print("OPC UA server started on opc.tcp://132.229.46.113:4840")
 
 try:
     while True:
-        freq_M = freq_M_node.get_value()
-        freq_T = freq_T_node.get_value()
-        temp = temp_node.get_value()
-        thickness = thickness_node.get_value()
-        print(f"Frequency M: {freq_M}, Frequency T: {freq_T}, Temperature: {temp}, Thickness: {thickness}")
-        time.sleep(1)
+        try:
+            print(f"Time: {timestamp_node.get_value()}, MassFreq: {mass_freq_node.get_value()}, TempFreq: {temp_freq_node.get_value()}, Temperature: {temperature_node.get_value()}, CompThickness: {comp_thickness_node.get_value()}, UncompThickness: {uncomp_thickness_node.get_value()}, CompRate: {comp_rate_node.get_value()}, UncompRate: {uncomp_rate_node.get_value()}, CompMassFreq: {comp_mass_freq_node.get_value()}, ErrorCode: {error_code_node.get_value()}")
+            
+            time.sleep(1)
+        except:
+            print("\nServer shutting down...")
+            break
+        
+        
 
 finally:
     server.stop()

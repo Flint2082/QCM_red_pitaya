@@ -84,7 +84,7 @@ try:
         # wait for start measurement trigger
         if(start_meas_node.get_value()):
             print("Measurement started")
-            qcm.setReference()
+            qcm.setMeasurementReference()
             start_meas_node.set_value(False)  # Reset trigger
             
             # start measurement loop

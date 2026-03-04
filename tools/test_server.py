@@ -187,8 +187,18 @@ print("OPC UA server started on opc.tcp://132.229.46.113:4840")
 try:
     while True:
         try:
-            print(f"Time: {timestamp_node.get_value()}, MassFreq: {mass_freq_node.get_value()}, TempFreq: {temp_freq_node.get_value()}, Temperature: {temperature_node.get_value()}, CompThickness: {comp_thickness_node.get_value()}, UncompThickness: {uncomp_thickness_node.get_value()}, CompRate: {comp_rate_node.get_value()}, UncompRate: {uncomp_rate_node.get_value()}, CompMassFreq: {comp_mass_freq_node.get_value()}, ErrorCode: {error_code_node.get_value()}")
-            
+            print(
+                f"Time: {timestamp_node.get_value()}\n"
+                f"  Freq_M: {mass_freq_node.get_value()}\n"
+                f"  Freq_T: {temp_freq_node.get_value()}\n"
+                f"  Temp: {temperature_node.get_value()}\n"
+                f"  CompThick: {comp_thickness_node.get_value()}\n"
+                f"  UncompThick: {uncomp_thickness_node.get_value()}\n"
+                f"  CompRate: {comp_rate_node.get_value()}\n"
+                f"  UncompRate: {uncomp_rate_node.get_value()}\n"
+                f"  CompMassFreq: {comp_mass_freq_node.get_value()}\n"
+                f"  ErrorCode: {error_code_node.get_value()}"
+            )  
             time.sleep(1)
         except:
             print("\nServer shutting down...")

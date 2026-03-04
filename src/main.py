@@ -69,6 +69,8 @@ try:
         timestamp_node = wago.get_node(ua.NodeId(node_id_base +         "QCM.READ.Timestamp", idx))
         error_node = wago.get_node(ua.NodeId(node_id_base +             "QCM.READ.ErrorCode", idx))
         
+        error_node.set_value("No error")
+        
         print("All nodes resolved successfully")
     except Exception as e:
         print(f"Node resolution failed: {e}")

@@ -36,6 +36,8 @@ class QCMInterface:
         )
         
         self.window_size = 2**14
+        self.massMode = 1
+        self.tempMode = 2
 
         # self.fpga = casperfpga.CasperFpga('132.229.46.164')
         # '192.168.1.55'

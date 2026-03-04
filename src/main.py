@@ -11,6 +11,8 @@ import QCM_package.wago_client as wago_client
 print("Loading QCM interface")
 import QCM_package.QCM_interface as QCM_interface 
 
+import QCM_package.TempCompAlgorithm as tca
+
 
 
 # Server endpoint (must match server)
@@ -33,73 +35,79 @@ node_id_base = "|var|750-8000 Basic Controller 100 2ETH ECO.Application.GVL_OPCU
 
 
 try:
-    # Resolve namespace index dynamically
-    uri = wago.client.application_uri
-    idx = wago.client.get_namespace_index(uri)
-
-
-    #setRef = wago.get_node(f"ns={idx};s=QCM.SetRef")
-    
-    # get object nodes
-    qcm_node = wago.get_node(ua.NodeId(node_id_base +               "QCM", idx))
-    
-    # All the CTRL nodes
-    ctrl_node = wago.get_node(ua.NodeId(node_id_base +              "QCM.CTRL", idx))
-    start_meas_node = wago.get_node(ua.NodeId(node_id_base +        "QCM.CTRL.StartMeasurement", idx))
-    stop_meas_node = wago.get_node(ua.NodeId(node_id_base +         "QCM.CTRL.StopMeasurement", idx))
-    set_zero_node = wago.get_node(ua.NodeId(node_id_base +          "QCM.CTRL.SetZero", idx))
-    sweep_node = wago.get_node(ua.NodeId(node_id_base +             "QCM.CTRL.Sweep", idx))
-    
-    # All the SET nodes
-    set_node = wago.get_node(ua.NodeId(node_id_base +               "QCM.SET", idx))
-    density_node = wago.get_node(ua.NodeId(node_id_base +           "QCM.SET.Density", idx))
-    z_ratio_node = wago.get_node(ua.NodeId(node_id_base +           "QCM.SET.Z-ratio", idx))
-    start_freq_node = wago.get_node(ua.NodeId(node_id_base +        "QCM.SET.StartFreq", idx))
-    ambient_temp_node = wago.get_node(ua.NodeId(node_id_base +      "QCM.SET.AmbientTemp", idx))
-    coeff_node = wago.get_node(ua.NodeId(node_id_base +             "QCM.SET.Coeff", idx))
-    
-    # All the READ nodes
-    get_node = wago.get_node(ua.NodeId(node_id_base +               "QCM.READ", idx))
-    freq_M_node = wago.get_node(ua.NodeId(node_id_base +            "QCM.READ.MassFrequency", idx))
-    freq_T_node = wago.get_node(ua.NodeId(node_id_base +            "QCM.READ.TempFrequency", idx))
-    temp_node = wago.get_node(ua.NodeId(node_id_base +              "QCM.READ.Temperature", idx))
-    comp_thickness_node = wago.get_node(ua.NodeId(node_id_base +    "QCM.READ.CompensatedThickness", idx))
-    uncomp_thickness_node = wago.get_node(ua.NodeId(node_id_base +  "QCM.READ.UncompensatedThickness", idx))
-    comp_rate_node = wago.get_node(ua.NodeId(node_id_base +         "QCM.READ.CompensatedRate", idx))
-    uncomp_rate_node = wago.get_node(ua.NodeId(node_id_base +       "QCM.READ.UncompensatedRate", idx))
-    Comp_M_freq_node = wago.get_node(ua.NodeId(node_id_base +       "QCM.READ.CompensatedMassFrequency", idx))
-    timestamp_node = wago.get_node(ua.NodeId(node_id_base +         "QCM.READ.Timestamp", idx))
-    error_node = wago.get_node(ua.NodeId(node_id_base +             "QCM.READ.Error", idx))
-
+    try:
+        # Resolve namespace index dynamically
+        uri = wago.client.application_uri
+        idx = wago.client.get_namespace_index(uri)
+        
+        # get object nodes
+        qcm_node = wago.get_node(ua.NodeId(node_id_base +               "QCM", idx))
+        
+        # All the CTRL nodes
+        ctrl_node = wago.get_node(ua.NodeId(node_id_base +              "QCM.CTRL", idx))
+        start_meas_node = wago.get_node(ua.NodeId(node_id_base +        "QCM.CTRL.StartMeasurement", idx))
+        stop_meas_node = wago.get_node(ua.NodeId(node_id_base +         "QCM.CTRL.StopMeasurement", idx))
+        set_zero_node = wago.get_node(ua.NodeId(node_id_base +          "QCM.CTRL.SetZero", idx))
+        sweep_node = wago.get_node(ua.NodeId(node_id_base +             "QCM.CTRL.Sweep", idx))
+        
+        # All the SET nodes
+        set_node = wago.get_node(ua.NodeId(node_id_base +               "QCM.SET", idx))
+        density_node = wago.get_node(ua.NodeId(node_id_base +           "QCM.SET.Density", idx))
+        z_ratio_node = wago.get_node(ua.NodeId(node_id_base +           "QCM.SET.Z-ratio", idx))
+        start_freq_node = wago.get_node(ua.NodeId(node_id_base +        "QCM.SET.StartFreq", idx))
+        ambient_temp_node = wago.get_node(ua.NodeId(node_id_base +      "QCM.SET.AmbientTemp", idx))
+        coeff_node = wago.get_node(ua.NodeId(node_id_base +             "QCM.SET.Coeff", idx))
+        
+        # All the READ nodes
+        get_node = wago.get_node(ua.NodeId(node_id_base +               "QCM.READ", idx))
+        freq_M_node = wago.get_node(ua.NodeId(node_id_base +            "QCM.READ.MassFrequency", idx))
+        freq_T_node = wago.get_node(ua.NodeId(node_id_base +            "QCM.READ.TempFrequency", idx))
+        temp_node = wago.get_node(ua.NodeId(node_id_base +              "QCM.READ.Temperature", idx))
+        comp_thickness_node = wago.get_node(ua.NodeId(node_id_base +    "QCM.READ.CompensatedThickness", idx))
+        uncomp_thickness_node = wago.get_node(ua.NodeId(node_id_base +  "QCM.READ.UncompensatedThickness", idx))
+        comp_rate_node = wago.get_node(ua.NodeId(node_id_base +         "QCM.READ.CompensatedRate", idx))
+        uncomp_rate_node = wago.get_node(ua.NodeId(node_id_base +       "QCM.READ.UncompensatedRate", idx))
+        Comp_M_freq_node = wago.get_node(ua.NodeId(node_id_base +       "QCM.READ.CompensatedMassFrequency", idx))
+        timestamp_node = wago.get_node(ua.NodeId(node_id_base +         "QCM.READ.Timestamp", idx))
+        error_node = wago.get_node(ua.NodeId(node_id_base +             "QCM.READ.Error", idx))
+    except Exception as e:
+        print(f"Node resolution failed: {e}")
+        raise e  # Re-raise to be caught by outer block
     
     
 
     # Read values in a loop
     while True: 
-        #if setRef.get_value():
-        #    qcm.setReference()
-        #    setRef.set_value(False)  # Reset trigger
-        
-        #window_M = qcm.setFreq(1, wago.read_node(window_M_node))
-        #window_T = qcm.setFreq(2, wago.read_node(window_T_node))
-        #freq_M = qcm.getFreq(1)
-        #freq_T = qcm.getFreq(2)
-        
-        thickness = 6
-        
-        
-        #wago.write_node(freq_M_node, freq_M)
-        #wago.write_node(freq_T_node, freq_T)
-        wago.write_node(uncomp_thickness_node, thickness)
-        
-        
-        print(f"Thickness measurement: {thickness} nm")
-        #print(f"Frequency M: {freq_M:.4f},\t Frequency T: {freq_T:.4f},\t Thickness: {thickness:.4f} nm")
-                
-        
-        
-        time.sleep(1)
+        if(start_meas_node.get_value()):
+            qcm.setReference()
+            start_meas_node.set_value(False)  # Reset trigger
+            while not stop_meas_node.get_value():
+                try:
+                    # Read sensor data
+                    freq_M = qcm.getFreq(qcm.massMode)
+                    freq_T = qcm.getFreq(qcm.tempMode)
+                    timestamp = time.time()
+                    T_calc, uncomp_thickness, comp_thickness, comp_freq_M = tca.FreqToTemp(freq_T, freq_M)
+                    
+                    # Write values back to server
+                    freq_M_node.set_value(freq_M)
+                    freq_T_node.set_value(freq_T)
+                    temp_node.set_value(T_calc)
+                    uncomp_thickness_node.set_value(uncomp_thickness)
+                    comp_thickness_node.set_value(comp_thickness)
+                    Comp_M_freq_node.set_value(comp_freq_M)
+                    timestamp_node.set_value(timestamp)
+                except Exception as e:
+                    print(f"Measurement loop error: {e}")
+                    try:
+                        error_node.set_value(str(e))
+                    except Exception as inner_e:
+                        print(f"Error setting error node: {inner_e}")
+                    break  # Exit inner loop on error
+            time.sleep(0.01)  # Small delay to prevent busy loop when waiting for stop signal
+        time.sleep(1)        # Avoid busy loop
 
+ 
 finally:
     wago.disconnect()
     print("Disconnected")

@@ -69,7 +69,7 @@ try:
         uncomp_rate_node = wago.get_node(ua.NodeId(node_id_base +       "QCM.READ.UncompensatedRate", idx))
         Comp_M_freq_node = wago.get_node(ua.NodeId(node_id_base +       "QCM.READ.CompensatedMassFrequency", idx))
         timestamp_node = wago.get_node(ua.NodeId(node_id_base +         "QCM.READ.Timestamp", idx))
-        error_node = wago.get_node(ua.NodeId(node_id_base +             "QCM.READ.Error", idx))
+        error_node = wago.get_node(ua.NodeId(node_id_base +             "QCM.READ.ErrorCode", idx))
         
         print("All nodes resolved successfully")
     except Exception as e:
@@ -100,14 +100,12 @@ try:
                     
                     try:
                         # Read sensor data
-                        freq_M = qcm.getFreq(qcm.massMode)
-                        freq_T = qcm.getFreq(qcm.tempMode)
                         timestamp = time.time()
-                        T_calc, uncomp_thickness, comp_thickness, comp_freq_M = tca.FreqToTemp(freq_T, freq_M)
+                        T_calc, uncomp_thickness, comp_thickness, comp_freq_M = qcm.getMeasurement()
                         
                         # Write values back to server
-                        freq_M_node.set_value(freq_M)
-                        freq_T_node.set_value(freq_T)
+                        freq_M_node.set_value(qcm.getFreq(qcm.massMode))
+                        freq_T_node.set_value(qcm.getFreq(qcm.tempMode))
                         temp_node.set_value(T_calc)
                         uncomp_thickness_node.set_value(uncomp_thickness)
                         comp_thickness_node.set_value(comp_thickness)

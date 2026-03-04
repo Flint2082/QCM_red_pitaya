@@ -35,9 +35,14 @@ class QCMInterface:
             key=os.path.getmtime
         )
         
+        # constants
         self.window_size = 2**14
         self.massMode = 1
         self.tempMode = 2
+        
+        self.T_start = 0
+        self.fT_start = 0
+        self.fM_start = 0
 
         # self.fpga = casperfpga.CasperFpga('132.229.46.164')
         # '192.168.1.55'
@@ -188,12 +193,24 @@ class QCMInterface:
         self.setInt(2,0.00001)
         
         
-    def setReference(self):
+    def setMeasurementReference(self, T = 23):
         self.fM_start = self.getFreq(1)
         self.fT_start = self.getFreq(2)
-        self.T_start = 23 # would be nice to measure this with a thermometer
+        self.T_start = T # would be nice to measure this with a thermometer
+        self.temp_comp = tca.TempCompAlgorithm(
+            coefficient_file = "data/coeffecients.csv",
+            T_start=T, # would be nice to measure this with a thermometer
+            fT_start= self.getFreq(2), # Hz
+            fM_start= self.getFreq(1)  # Hz
+        )
+
         print(f"Reference set: fM={self.fM_start}, fT={self.fT_start}, T={self.T_start}")
         
+    def getMeasurement(self):
+        fM = self.getFreq(1)
+        fT = self.getFreq(2)
+        T_calc, uncompensated_thickness_nm, compensated_thickness_nm, compensated_m_freq = self.temp_comp.FreqToTemp(fT, fM)
+        return fM, fT, T_calc, uncompensated_thickness_nm, compensated_thickness_nm, compensated_m_freq
 
 
     def startMeasurement(self, T = 23, moving_window = True, plot=True, debug=False):

@@ -99,11 +99,11 @@ try:
                     try:
                         # Read sensor data
                         timestamp = time.time()
-                        T_calc, uncomp_thickness, comp_thickness, comp_freq_M = qcm.getMeasurement()
+                        freq_M, freq_T, T_calc, uncomp_thickness, comp_thickness, comp_freq_M = qcm.getMeasurement()
                         
                         # Write values back to server
-                        freq_M_node.set_value(qcm.getFreq(qcm.massMode))
-                        freq_T_node.set_value(qcm.getFreq(qcm.tempMode))
+                        freq_M_node.set_value(freq_M)
+                        freq_T_node.set_value(freq_T)
                         temp_node.set_value(T_calc)
                         uncomp_thickness_node.set_value(uncomp_thickness)
                         comp_thickness_node.set_value(comp_thickness)

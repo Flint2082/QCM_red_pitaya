@@ -40,6 +40,8 @@ class QCMInterface:
         self.massMode = 1
         self.tempMode = 2
         
+        self.coeff_file = os.path.join(base_dir, "..", "..", "data", "coeffecients.csv")
+        
         self.T_start = 0
         self.fT_start = 0
         self.fM_start = 0
@@ -198,7 +200,7 @@ class QCMInterface:
         self.fT_start = self.getFreq(2)
         self.T_start = T # would be nice to measure this with a thermometer
         self.temp_comp = tca.TempCompAlgorithm(
-            coefficient_file = "data/coeffecients.csv",
+            coefficient_file = self.coeff_file,
             T_start=T, # would be nice to measure this with a thermometer
             fT_start= self.getFreq(2), # Hz
             fM_start= self.getFreq(1)  # Hz
@@ -218,7 +220,7 @@ class QCMInterface:
 
         # Initialize the temperature compensation algorithm with calibration and starting values
         temp_comp = tca.TempCompAlgorithm(
-            coefficient_file = "data/coeffecients.csv",
+            coefficient_file = self.coeff_file,
             T_start=T, # would be nice to measure this with a thermometer
             fT_start= self.getFreq(2), # Hz
             fM_start= self.getFreq(1)  # Hz

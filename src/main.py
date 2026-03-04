@@ -70,42 +70,61 @@ try:
         Comp_M_freq_node = wago.get_node(ua.NodeId(node_id_base +       "QCM.READ.CompensatedMassFrequency", idx))
         timestamp_node = wago.get_node(ua.NodeId(node_id_base +         "QCM.READ.Timestamp", idx))
         error_node = wago.get_node(ua.NodeId(node_id_base +             "QCM.READ.Error", idx))
+        
+        print("All nodes resolved successfully")
     except Exception as e:
         print(f"Node resolution failed: {e}")
         raise e  # Re-raise to be caught by outer block
     
     
 
-    # Read values in a loop
+    # SUPERLOOP
     while True: 
+        
+        # wait for start measurement trigger
         if(start_meas_node.get_value()):
+            print("Measurement started")
             qcm.setReference()
             start_meas_node.set_value(False)  # Reset trigger
-            while not stop_meas_node.get_value():
-                try:
-                    # Read sensor data
-                    freq_M = qcm.getFreq(qcm.massMode)
-                    freq_T = qcm.getFreq(qcm.tempMode)
-                    timestamp = time.time()
-                    T_calc, uncomp_thickness, comp_thickness, comp_freq_M = tca.FreqToTemp(freq_T, freq_M)
-                    
-                    # Write values back to server
-                    freq_M_node.set_value(freq_M)
-                    freq_T_node.set_value(freq_T)
-                    temp_node.set_value(T_calc)
-                    uncomp_thickness_node.set_value(uncomp_thickness)
-                    comp_thickness_node.set_value(comp_thickness)
-                    Comp_M_freq_node.set_value(comp_freq_M)
-                    timestamp_node.set_value(timestamp)
-                except Exception as e:
-                    print(f"Measurement loop error: {e}")
+            
+            # start measurement loop
+            while(True):
+                if(stop_meas_node.get_value()):
+                    print("Measurement stopped")
                     try:
-                        error_node.set_value(str(e))
-                    except Exception as inner_e:
-                        print(f"Error setting error node: {inner_e}")
-                    break  # Exit inner loop on error
-            time.sleep(0.01)  # Small delay to prevent busy loop when waiting for stop signal
-        time.sleep(1)        # Avoid busy loop
+                        stop_meas_node.set_value(False)  # Reset trigger
+                    except Exception as e:
+                        print(f"Error resetting stop trigger: {e}")
+                    break
+                else: 
+                    
+                    try:
+                        # Read sensor data
+                        freq_M = qcm.getFreq(qcm.massMode)
+                        freq_T = qcm.getFreq(qcm.tempMode)
+                        timestamp = time.time()
+                        T_calc, uncomp_thickness, comp_thickness, comp_freq_M = tca.FreqToTemp(freq_T, freq_M)
+                        
+                        # Write values back to server
+                        freq_M_node.set_value(freq_M)
+                        freq_T_node.set_value(freq_T)
+                        temp_node.set_value(T_calc)
+                        uncomp_thickness_node.set_value(uncomp_thickness)
+                        comp_thickness_node.set_value(comp_thickness)
+                        Comp_M_freq_node.set_value(comp_freq_M)
+                        timestamp_node.set_value(timestamp)
+                        
+                    except Exception as e:
+                        print(f"Measurement loop error: {e}")
+                        try:
+                            error_node.set_value(str(e))
+                        except Exception as inner_e:
+                            print(f"Error setting error node: {inner_e}")
+                        break  # Exit inner loop on error
+                    
+                    time.sleep(0.01)  # Small delay to prevent busy loop when waiting for stop signal              
+                
+        time.sleep(1)  # Avoid busy loop
 
  
 finally:

@@ -13,8 +13,6 @@ import QCM_package.QCM_interface as QCM_interface
 
 import QCM_package.TempCompAlgorithm as tca
 
-
-
 # Server endpoint (must match server)
 url = "opc.tcp://132.229.46.113:4840"
 # url = "opc.tcp://192.168.1.50:4840"
@@ -27,7 +25,7 @@ rp_ip = "132.229.46.164"
 
 qcm = QCM_interface.QCMInterface(rp_ip)
 qcm.startup()
-qcm.setReference()
+qcm.setMeasurementReference()
 
 wago = wago_client.WagoClient(url)
 

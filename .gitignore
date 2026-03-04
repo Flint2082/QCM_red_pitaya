@@ -4,7 +4,7 @@
 *.pyc
 *__pycache__*
 *.Xil*
-*.eggs*
+*.egg*
 
 !*.fpg
 

@@ -18,6 +18,8 @@ QCM.CTRL.Sweep                          Bool
 
 QCM.READ.MassFrequency					Float
 QCM.READ.TempFrequency					Float
+QCM.READ.HasLockMassFrequency			Bool
+QCM.READ.HasLockTempFrequency			Bool
 QCM.READ.Temperature					Float
 QCM.READ.CompensatedThickness			Float
 QCM.READ.UncompensatedThickness			Float

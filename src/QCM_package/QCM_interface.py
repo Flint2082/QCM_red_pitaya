@@ -73,9 +73,6 @@ class QCMInterface:
     def setFreq(self, osc_index, freq):
         self.fpga.write_int(device_name='freq_'+str(osc_index),integer=int(freq*64))
 
-    def setProp(self, osc_index, gain):
-        self.fpga.write_int(device_name='proportional_'+str(osc_index),integer=int(gain*4294967296))
-
     def setInt(self, osc_index, gain):
         self.fpga.write_int(device_name='integral_'+str(osc_index),integer=int(gain*4294967296))
         
@@ -107,7 +104,6 @@ class QCMInterface:
     def standby(self, osc_index):
         self.setFreq(osc_index,0)
         self.setInt(osc_index,0)
-        self.setProp(osc_index,0)
         self.reset()
 
     def reset(self):
@@ -176,8 +172,7 @@ class QCMInterface:
         self.reset()
         
         ## 6MHz crystal
-        self.setInv(1,1)
-        self.setProp(1,0)                               
+        self.setInv(1,1)                          
         self.setFreq(1,5975000)
         self.setInt(1,0.001)
         self.setLDGain(1,0.00001)
@@ -186,8 +181,7 @@ class QCMInterface:
         self.setInt(1,0.000001)
         
         self.setInv(2,1)
-        self.setProp(2,0)
-        self.setFreq(2,6555000)
+        self.setFreq(2,6571000)
         self.setInt(2,0.001)
         self.setLDGain(2,0.00001)
         self.setPDGain(2,0.00001)
@@ -213,6 +207,10 @@ class QCMInterface:
         fT = self.getFreq(2)
         T_calc, uncompensated_thickness_nm, compensated_thickness_nm, compensated_m_freq = self.temp_comp.FreqToTemp(fT, fM)
         return fM, fT, T_calc, uncompensated_thickness_nm, compensated_thickness_nm, compensated_m_freq
+    
+    def moveWindow(self, fM, fT):
+        self.setFreq(1, fM - (self.window_size/2))
+        self.setFreq(2, fT - (self.window_size/2))
 
 
     def startMeasurement(self, T = 23, moving_window = True, plot=True, debug=False):

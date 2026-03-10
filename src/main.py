@@ -86,15 +86,40 @@ if __name__ == "__main__":
 
         # SUPERLOOP
         while True: 
-            
+            lock_flag = False
             # wait for start measurement trigger
             if(start_meas_node.get_value()):
                 start_freq_mass = start_freq_mass_node.get_value()
                 start_freq_temp = start_freq_temp_node.get_value()
                 qcm.startup(start_freq_mass, start_freq_temp)
                 
+                # wait until there is a lock
+                for i in range(100): 
+                    M_amp = qcm.getAmpAndPhase(1)[0]
+                    T_amp = qcm.getAmpAndPhase(2)[0]
+                    if M_amp > 0.01 and T_amp > 0.01:
+                        print(f"Lock detected (Mass: {M_amp:.4f}, Temp: {T_amp:.4f}). Starting measurement.")
+                        error_node.set_value("Lock detected, measurement started")
+                        lock_flag = True
+                        break
+                    else:
+                        print(f"Waiting for lock... (Mass: {M_amp:.4f}, Temp: {T_amp:.4f})")
+                        error_node.set_value("Waiting for lock...")
+                        time.sleep(0.1)
+                    if i == 99:
+                        print("Lock not detected after 10 seconds. Please check the system.")
+                        error_node.set_value("Error: Lock not detected, check system")
+                        lock_flag = False
+                        break  # Exit loop if lock not detected after 10 seconds
+                
+                if not lock_flag:
+                    start_meas_node.set_value(False)  # Reset trigger
+                    continue  # Skip to next iteration of superloop to wait for next start trigger
+                
                 print("Measurement started")
                 ambient_temp = ambient_temp_node.get_value()
+                density = density_node.get_value()
+                # z_ratio = z_ratio_node.get_value() # currently unused            
                 qcm.setMeasurementReference(T=ambient_temp)
                 start_meas_node.set_value(False)  # Reset trigger
                 error_node.set_value("Started measurement")  # Reset error state

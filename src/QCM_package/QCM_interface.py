@@ -129,7 +129,25 @@ class QCMInterface:
         I = self.getI(osc_index)
         Q = self.getQ(osc_index)
         return (I**2 + Q**2)**0.5, np.arctan2(Q, I)
+    
+    def capacitorAdjustment(self):
+        self.standby(2)
+        self.setFreq(1, 6000000)
+        self.setInt(1, 0.00)
+        self.setIQGain(1, 0.00001)
 
+        while True:
+            try:
+                amplitude = self.getAmpAndPhase(1)[0]
+                print(f"Amplitude: {amplitude}")
+                time.sleep(0.1)
+            except KeyboardInterrupt:
+                print("\nMeasurement stopped by user")
+                self.startup()
+                break
+            
+            
+    
     def sweep(self, osc_index, start, stop, step):
         self.standby(1)
         self.standby(2)

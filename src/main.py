@@ -4,6 +4,7 @@ from opcua import Client
 from opcua import ua
 
 import time
+import socket
 
 print("Loading WAGO client package")
 import QCM_package.wago_client as wago_client
@@ -20,7 +21,7 @@ url = "opc.tcp://132.229.46.113:4840"
 
 
 #rp_ip = QCM_interface.find_red_pitaya(subnet= "132.229.46.")
-rp_ip = "132.229.46.164"
+rp_ip = socket.gethostbyname(socket.gethostname())
 #rp_ip = "192.168.1.55"
 
 

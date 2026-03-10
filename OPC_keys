@@ -5,7 +5,8 @@ Base:
 Node keys:
 QCM.SET.Density                         Float
 QCM.SET.Z-ratio                         Float       
-QCM.SET.StartFreq                       Float
+QCM.SET.StartFreqMass                   Float
+QCM.SET.StartFreqTemp                   Float
 QCM.SET.AmbientTemp                     Float
 QCM.SET.Coeffecients                    List of 8 Floats
 
@@ -18,8 +19,8 @@ QCM.CTRL.Sweep                          Bool
 
 QCM.READ.MassFrequency					Float
 QCM.READ.TempFrequency					Float
-QCM.READ.HasLockMassFrequency			Bool
-QCM.READ.HasLockTempFrequency			Bool
+QCM.READ.MassModeAmplitude			    Float
+QCM.READ.TempModeAmplitude			    Float
 QCM.READ.Temperature					Float
 QCM.READ.CompensatedThickness			Float
 QCM.READ.UncompensatedThickness			Float
@@ -27,4 +28,4 @@ QCM.READ.CompensatedRate				Float
 QCM.READ.UncompensatedRate				Float
 QCM.READ.CompensatedMassFrequency		Float
 QCM.READ.Timestamp						Integer 
-QCM.READ.ErrorCode						Integer
+QCM.READ.ErrorCode						String

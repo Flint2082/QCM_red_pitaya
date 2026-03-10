@@ -76,11 +76,8 @@ class QCMInterface:
     def setInt(self, osc_index, gain):
         self.fpga.write_int(device_name='integral_'+str(osc_index),integer=int(gain*4294967296))
         
-    def setLDGain(self, osc_index, gain):
-        self.fpga.write_int(device_name='ld_gain_'+str(osc_index),integer=int(gain*4294967296))
-        
-    def setPDGain(self, osc_index, gain):
-        self.fpga.write_int(device_name='pd_gain_'+str(osc_index),integer=int(gain*4294967296))
+    def setIQGain(self, osc_index, gain):
+        self.fpga.write_int(device_name='IQ_gain_'+str(osc_index),integer=int(gain*4294967296))
 
     def setInv(self, osc_index, inv):
         self.fpga.write('inv_fb_'+str(osc_index),(inv).to_bytes(4,'big'))
@@ -120,14 +117,18 @@ class QCMInterface:
 
         return freq
 
-    def getLock(self, osc_index):
-        lock_val = self.to_signed(self.fpga.read_int(f'lock_detect_{osc_index}'),32)
-        return lock_val/2**31
+    def getI(self, osc_index):
+        inPhase = self.to_signed(self.fpga.read_int(f'I_out_{osc_index}'),32)
+        return inPhase/2**31
         
-    def getPhase(self, osc_index):
-        lock_val = self.to_signed(self.fpga.read_int(f'phase_out_{osc_index}'),32)
-        return lock_val/2**31
+    def getQ(self, osc_index):
+        quadrature = self.to_signed(self.fpga.read_int(f'Q_out_{osc_index}'),32)
+        return quadrature/2**31
 
+    def getAmpAndPhase(self, osc_index):
+        I = self.getI(osc_index)
+        Q = self.getQ(osc_index)
+        return (I**2 + Q**2)**0.5, np.arctan2(Q, I)
 
     def sweep(self, osc_index, start, stop, step):
         self.standby(1)
@@ -141,10 +142,7 @@ class QCMInterface:
             self.setFreq(osc_index, f)
             self.reset()
             time.sleep(0.01)
-            I = self.getPhase(osc_index)
-            Q = self.getLock(osc_index)
-            phase = np.arctan2(Q, I)
-            amplitude = (I**2 + Q**2)**0.5
+            amplitude, phase = self.getAmpAndPhase(osc_index)
             frequencies.append(f)
             phases.append(phase)
             amplitudes.append(amplitude)
@@ -168,23 +166,22 @@ class QCMInterface:
         plt.show()
         
              
-    def startup(self):
+    def startup(self, start_freq_mass = 5975000, start_freq_temp = 6571000):
         self.reset()
         
         ## 6MHz crystal
         self.setInv(1,1)                          
-        self.setFreq(1,5975000)
+        self.setFreq(1,start_freq_mass)
         self.setInt(1,0.001)
-        self.setLDGain(1,0.00001)
-        self.setPDGain(1,0.00001)
+        self.setIQGain(1,0.00001)
+
         time.sleep(1.5)
         self.setInt(1,0.000001)
         
         self.setInv(2,1)
-        self.setFreq(2,6571000)
+        self.setFreq(2,start_freq_temp)
         self.setInt(2,0.001)
-        self.setLDGain(2,0.00001)
-        self.setPDGain(2,0.00001)
+        self.setIQGain(2,0.00001)
         time.sleep(1.5)
         self.setInt(2,0.00001)
         

@@ -24,8 +24,6 @@ rp_ip = "132.229.46.164"
 #rp_ip = "192.168.1.55"
 
 qcm = QCM_interface.QCMInterface(rp_ip)
-qcm.startup()
-qcm.setMeasurementReference()
 
 wago = wago_client.WagoClient(url)
 
@@ -52,7 +50,8 @@ if __name__ == "__main__":
             set_node = wago.get_node(ua.NodeId(node_id_base +               "QCM.SET", idx))
             density_node = wago.get_node(ua.NodeId(node_id_base +           "QCM.SET.Density", idx))
             z_ratio_node = wago.get_node(ua.NodeId(node_id_base +           "QCM.SET.Z-ratio", idx))
-            start_freq_node = wago.get_node(ua.NodeId(node_id_base +        "QCM.SET.StartFreq", idx))
+            start_freq_mass_node = wago.get_node(ua.NodeId(node_id_base +   "QCM.SET.StartFreqMass", idx))
+            start_freq_temp_node = wago.get_node(ua.NodeId(node_id_base +   "QCM.SET.StartFreqTemp", idx))
             ambient_temp_node = wago.get_node(ua.NodeId(node_id_base +      "QCM.SET.AmbientTemp", idx))
             coeff_node = wago.get_node(ua.NodeId(node_id_base +             "QCM.SET.Coeff", idx))
             
@@ -60,6 +59,8 @@ if __name__ == "__main__":
             get_node = wago.get_node(ua.NodeId(node_id_base +               "QCM.READ", idx))
             freq_M_node = wago.get_node(ua.NodeId(node_id_base +            "QCM.READ.MassFrequency", idx))
             freq_T_node = wago.get_node(ua.NodeId(node_id_base +            "QCM.READ.TempFrequency", idx))
+            amp_M_node = wago.get_node(ua.NodeId(node_id_base +             "QCM.READ.MassAmplitude", idx))
+            amp_T_node = wago.get_node(ua.NodeId(node_id_base +             "QCM.READ.TempAmplitude", idx))
             temp_node = wago.get_node(ua.NodeId(node_id_base +              "QCM.READ.Temperature", idx))
             comp_thickness_node = wago.get_node(ua.NodeId(node_id_base +    "QCM.READ.CompensatedThickness", idx))
             uncomp_thickness_node = wago.get_node(ua.NodeId(node_id_base +  "QCM.READ.UncompensatedThickness", idx))
@@ -76,15 +77,31 @@ if __name__ == "__main__":
             print(f"Node resolution failed: {e}")
             raise e  # Re-raise to be caught by outer block
         
-        
 
         # SUPERLOOP
         while True: 
             
             # wait for start measurement trigger
             if(start_meas_node.get_value()):
+                start_freq_mass = start_freq_mass_node.get_value()
+                start_freq_temp = start_freq_temp_node.get_value()
+                qcm.startup(start_freq_mass, start_freq_temp)
+                
+                amp_M = qcm.getAmpAndPhase(1)[0]
+                amp_T = qcm.getAmpAndPhase(2)[0]
+                
+                if amp_M < 0.01 or amp_T < 0.01:
+                    print(f"Warning: No lock detected (Mass: {amp_M:.4f}, Temp: {amp_T:.4f}).")
+                    error_node.set_value("Lock failure")
+                    start_meas_node.set_value(False)  # Reset trigger
+                    continue  # Skip measurement loop
+                
+                
+                
+                
                 print("Measurement started")
-                qcm.setMeasurementReference()
+                ambient_temp = ambient_temp_node.get_value()
+                qcm.setMeasurementReference(T=ambient_temp)
                 start_meas_node.set_value(False)  # Reset trigger
                 
                 # start measurement loop
@@ -102,11 +119,15 @@ if __name__ == "__main__":
                             # Read sensor data
                             timestamp = time.time()
                             freq_M, freq_T, T_calc, uncomp_thickness, comp_thickness, comp_freq_M = qcm.getMeasurement()
+                            amp_M, amp_T = qcm.getAmpAndPhase(1)[0], qcm.getAmpAndPhase(2)[0]
                             qcm.moveWindow(freq_M, freq_T)  # Move window to current frequencies
+                            
                             
                             # Write values back to server
                             freq_M_node.set_value(freq_M)
                             freq_T_node.set_value(freq_T)
+                            amp_M_node.set_value(amp_M)
+                            amp_T_node.set_value(amp_T)
                             temp_node.set_value(T_calc)
                             uncomp_thickness_node.set_value(uncomp_thickness)
                             comp_thickness_node.set_value(comp_thickness)

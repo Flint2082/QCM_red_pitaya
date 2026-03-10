@@ -43,13 +43,21 @@ z_ratio_node = qcm_set.add_variable(
 )
 z_ratio_node.set_writable()
 
-start_freq_node = qcm_set.add_variable(
-    ua.NodeId(node_id_base + "QCM.SET.StartFreq", idx),
-    "StartFreq",
+start_freq_mass_node = qcm_set.add_variable(
+    ua.NodeId(node_id_base + "QCM.SET.StartFreqMass", idx),
+    "StartFreqMass",
     0.0,
     varianttype=ua.VariantType.Float
 )
-start_freq_node.set_writable()
+start_freq_mass_node.set_writable()
+
+start_freq_temp_node = qcm_set.add_variable(
+    ua.NodeId(node_id_base + "QCM.SET.StartFreqTemp", idx),
+    "StartFreqTemp",
+    0.0,
+    varianttype=ua.VariantType.Float
+)
+start_freq_temp_node.set_writable()
 
 ambient_temp_node = qcm_set.add_variable(
     ua.NodeId(node_id_base + "QCM.SET.AmbientTemp", idx),
@@ -121,6 +129,20 @@ mass_freq_node = qcm_read.add_variable(
 temp_freq_node = qcm_read.add_variable(
     ua.NodeId(node_id_base + "QCM.READ.TempFrequency", idx),
     "TempFrequency",
+    0.0,
+    varianttype=ua.VariantType.Float
+)
+
+mass_amplitude_node = qcm_read.add_variable(
+    ua.NodeId(node_id_base + "QCM.READ.MassAmplitude", idx),
+    "MassAmplitude",
+    0.0,
+    varianttype=ua.VariantType.Float
+)
+
+temp_amplitude_node = qcm_read.add_variable(
+    ua.NodeId(node_id_base + "QCM.READ.TempAmplitude", idx),
+    "TempAmplitude",
     0.0,
     varianttype=ua.VariantType.Float
 )

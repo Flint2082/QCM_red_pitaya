@@ -203,17 +203,18 @@ class QCMInterface:
         self.setInt(2,0.00001)
         
         
-    def setMeasurementReference(self, T = 23):
+    def setMeasurementReference(self, T = 23, mat_dens=19320):
         self.fM_start = self.getFreq(1)
         self.fT_start = self.getFreq(2)
         self.T_start = T # would be nice to measure this with a thermometer
         self.temp_comp = tca.TempCompAlgorithm(
             coefficient_file = self.coeff_file,
             T_start=T, # would be nice to measure this with a thermometer
+            mat_dens=mat_dens,
             fM_start= self.fM_start,  # Hz
             fT_start= self.fT_start # Hz
         )
-    
+
         print(f"Reference set: fM={self.fM_start}, fT={self.fT_start}, T={self.T_start}")
         
     def getMeasurement(self):

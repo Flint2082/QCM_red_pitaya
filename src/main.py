@@ -120,7 +120,7 @@ if __name__ == "__main__":
                 ambient_temp = ambient_temp_node.get_value()
                 density = density_node.get_value()
                 # z_ratio = z_ratio_node.get_value() # currently unused            
-                qcm.setMeasurementReference(T=ambient_temp)
+                qcm.setMeasurementReference(T=ambient_temp, mat_dens = density)
                 start_meas_node.set_value(False)  # Reset trigger
                 error_node.set_value("Started measurement")  # Reset error state
                 

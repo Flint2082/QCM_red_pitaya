@@ -2,6 +2,7 @@ import QCM_package.QCM_interface as QCM_interface
 from IPython import start_ipython
 
 rp_ip = "132.229.46.164"
+#rp_ip = "192.168.1.55"
 
 qcm = QCM_interface.QCMInterface(rp_ip)
 

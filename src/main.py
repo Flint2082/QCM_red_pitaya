@@ -23,15 +23,19 @@ url = "opc.tcp://132.229.46.113:4840"
 rp_ip = "132.229.46.164"
 #rp_ip = "192.168.1.55"
 
-qcm = QCM_interface.QCMInterface(rp_ip)
 
-wago = wago_client.WagoClient(url)
 
 node_id_base = "|var|750-8000 Basic Controller 100 2ETH ECO.Application.GVL_OPCUA."
 
 if __name__ == "__main__":
     try:
         try:
+            qcm = QCM_interface.QCMInterface(rp_ip)
+
+            wago = wago_client.WagoClient(url)
+            
+            wago.connect()
+            
             # Resolve namespace index dynamically
             uri = wago.client.application_uri
             idx = wago.client.get_namespace_index(uri)

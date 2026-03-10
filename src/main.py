@@ -91,28 +91,18 @@ if __name__ == "__main__":
                 start_freq_temp = start_freq_temp_node.get_value()
                 qcm.startup(start_freq_mass, start_freq_temp)
                 
-                amp_M = qcm.getAmpAndPhase(1)[0]
-                amp_T = qcm.getAmpAndPhase(2)[0]
-                
-                if amp_M < 0.01 or amp_T < 0.01:
-                    print(f"Warning: No lock detected (Mass: {amp_M:.4f}, Temp: {amp_T:.4f}).")
-                    error_node.set_value("Lock failure")
-                    start_meas_node.set_value(False)  # Reset trigger
-                    continue  # Skip measurement loop
-                
-                
-                
-                
                 print("Measurement started")
                 ambient_temp = ambient_temp_node.get_value()
                 qcm.setMeasurementReference(T=ambient_temp)
                 start_meas_node.set_value(False)  # Reset trigger
+                error_node.set_value("Started measurement")  # Reset error state
                 
                 # start measurement loop
                 while(True):
                     if(stop_meas_node.get_value()):
                         print("Measurement stopped")
                         try:
+                            error_node.set_value("Measurement stopped")
                             stop_meas_node.set_value(False)  # Reset trigger
                         except Exception as e:
                             print(f"Error resetting stop trigger: {e}")
@@ -126,7 +116,10 @@ if __name__ == "__main__":
                             amp_M, amp_T = qcm.getAmpAndPhase(1)[0], qcm.getAmpAndPhase(2)[0]
                             qcm.moveWindow(freq_M, freq_T)  # Move window to current frequencies
                             
-                            
+                            if amp_M < 0.01 or amp_T < 0.01:
+                                print(f"Warning: No lock detected (Mass: {amp_M:.4f}, Temp: {amp_T:.4f}).")
+                                error_node.set_value("Warning: Lock failure")
+                                
                             # Write values back to server
                             freq_M_node.set_value(freq_M)
                             freq_T_node.set_value(freq_T)

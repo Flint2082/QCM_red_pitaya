@@ -192,7 +192,6 @@ class QCMInterface:
         self.setFreq(1,start_freq_mass)
         self.setInt(1,0.001)
         self.setIQGain(1,0.00001)
-
         time.sleep(1.5)
         self.setInt(1,0.000001)
         
@@ -211,10 +210,10 @@ class QCMInterface:
         self.temp_comp = tca.TempCompAlgorithm(
             coefficient_file = self.coeff_file,
             T_start=T, # would be nice to measure this with a thermometer
-            fT_start= self.getFreq(2), # Hz
-            fM_start= self.getFreq(1)  # Hz
+            fM_start= self.fM_start,  # Hz
+            fT_start= self.fT_start # Hz
         )
-
+    
         print(f"Reference set: fM={self.fM_start}, fT={self.fT_start}, T={self.T_start}")
         
     def getMeasurement(self):

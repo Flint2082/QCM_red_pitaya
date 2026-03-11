@@ -172,18 +172,17 @@ class QCMInterface:
         ## 6MHz crystal
         self.setInv(1,1)                          
         self.setFreq(1,start_freq_mass)
-        self.setInt(1,0.001)
+        #self.setInt(1,0.001)
         self.setIQGain(1,0.00001)
-
-        time.sleep(1.5)
-        self.setInt(1,0.000001)
+        #time.sleep(1.5)
+        self.setInt(1,0.0001)
         
         self.setInv(2,1)
         self.setFreq(2,start_freq_temp)
-        self.setInt(2,0.001)
+        #self.setInt(2,0.001)
         self.setIQGain(2,0.00001)
-        time.sleep(1.5)
-        self.setInt(2,0.00001)
+        #time.sleep(1.5)
+        self.setInt(2,0.0001)
         
         
     def setMeasurementReference(self, T = 23):

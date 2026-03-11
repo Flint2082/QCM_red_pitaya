@@ -6,5 +6,7 @@
 *.Xil*
 *.egg*
 
-!*.fpg
+!model_composer/qcm_rp
+!model_composer/qcm_rp/outputs
+!model_composer/qcm_rp/outputs/*.fpg
 

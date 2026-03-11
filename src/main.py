@@ -78,7 +78,9 @@ if __name__ == "__main__":
             timestamp_node = wago.get_node(ua.NodeId(node_id_base +         "GVL_QCM.READ.Timestamp", idx))
             error_node = wago.get_node(ua.NodeId(node_id_base +             "GVL_QCM.READ.ErrorCode", idx))
             
-            wago.write_node(error_node, "No error")  # Initialize error node
+            #wago.write_node(error_node, "No error")  # Initialize error node
+            error_node.set_value("No error")
+            
             
             print("All nodes resolved successfully")
         except Exception as e:
@@ -90,9 +92,9 @@ if __name__ == "__main__":
         while True: 
             lock_flag = False
             # wait for start measurement trigger
-            if(wago.read_node(start_meas_node)):
+            if(wago.read_node(start_meas_node) == True):
                 start_freq_mass = wago.read_node(start_freq_mass_node)
-                start_freq_temp = wago.read_node(start_freq_temp_node)
+                start_freq_temp = wago.read_node(start_freq_temp_node) 
                 qcm.startup(start_freq_mass, start_freq_temp)
                 
                 # wait until there is a lock
@@ -119,8 +121,8 @@ if __name__ == "__main__":
                     continue  # Skip to next iteration of superloop to wait for next start trigger
                 
                 print("Measurement started")
-                ambient_temp = ambient_temp_node.get_value()
-                density = density_node.get_value()
+                ambient_temp = wago.read_node(ambient_temp_node)
+                density = wago.read_node(density_node)
                 # z_ratio = z_ratio_node.get_value() # currently unused            
                 qcm.setMeasurementReference(T=ambient_temp, mat_dens = density)
                 print("setting start measurement node value to False")
@@ -129,7 +131,7 @@ if __name__ == "__main__":
                 
                 # start measurement loop
                 while(True):
-                    if(stop_meas_node.get_value()):
+                    if(wago.read_node(stop_meas_node) == True):
                         print("Measurement stopped")
                         try:
                             wago.write_node(error_node, "Measurement stopped")

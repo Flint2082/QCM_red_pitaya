@@ -90,9 +90,9 @@ if __name__ == "__main__":
         while True: 
             lock_flag = False
             # wait for start measurement trigger
-            if(start_meas_node.get_value()):
-                start_freq_mass = start_freq_mass_node.get_value()
-                start_freq_temp = start_freq_temp_node.get_value()
+            if(wago.read_node(start_meas_node)):
+                start_freq_mass = wago.read_node(start_freq_mass_node)
+                start_freq_temp = wago.read_node(start_freq_temp_node)
                 qcm.startup(start_freq_mass, start_freq_temp)
                 
                 # wait until there is a lock

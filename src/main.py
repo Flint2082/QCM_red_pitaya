@@ -38,8 +38,6 @@ if __name__ == "__main__":
 
             wago = wago_client.WagoClient(url)
             
-            wago.connect()
-            
             # Resolve namespace index dynamically
             uri = wago.client.application_uri
             print(uri)
@@ -47,7 +45,7 @@ if __name__ == "__main__":
             idx = 4
             print(idx)
             # get object nodes
-            qcm_node = wago.get_node(ua.NodeId(node_id_base +               "GVL_QCM", idx))
+            # qcm_node = wago.get_node(ua.NodeId(node_id_base +               "GVL_QCM", idx))
             
             # All the CTRL nodes
             ctrl_node = wago.get_node(ua.NodeId(node_id_base +              "GVL_QCM.CTRL", idx))
@@ -57,7 +55,7 @@ if __name__ == "__main__":
             sweep_node = wago.get_node(ua.NodeId(node_id_base +             "GVL_QCM.CTRL.Sweep", idx))
             
             # All the SET nodes
-            set_node = wago.get_node(ua.NodeId(node_id_base +               "GVL_QCM.SET", idx))
+            # set_node = wago.get_node(ua.NodeId(node_id_base +               "GVL_QCM.SET", idx))
             density_node = wago.get_node(ua.NodeId(node_id_base +           "GVL_QCM.SET.Density", idx))
             #z_ratio_node = wago.get_node(ua.NodeId(node_id_base +           "GVL_QCM.SET.Z-ratio", idx))
             start_freq_mass_node = wago.get_node(ua.NodeId(node_id_base +   "GVL_QCM.SET.StartFreqMass", idx))
@@ -66,7 +64,7 @@ if __name__ == "__main__":
             coeff_node = wago.get_node(ua.NodeId(node_id_base +             "GVL_QCM.SET.Coeff", idx))
             
             # All the READ nodes
-            get_node = wago.get_node(ua.NodeId(node_id_base +               "GVL_QCM.READ", idx))
+            # get_node = wago.get_node(ua.NodeId(node_id_base +               "GVL_QCM.READ", idx))
             freq_M_node = wago.get_node(ua.NodeId(node_id_base +            "GVL_QCM.READ.MassFrequency", idx))
             freq_T_node = wago.get_node(ua.NodeId(node_id_base +            "GVL_QCM.READ.TempFrequency", idx))
             amp_M_node = wago.get_node(ua.NodeId(node_id_base +             "GVL_QCM.READ.MassAmplitude", idx))

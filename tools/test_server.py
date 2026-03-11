@@ -8,7 +8,7 @@ server.set_endpoint("opc.tcp://132.229.46.113:4840")
 
 server.set_server_name("QCM OPCUA Server")
 
-node_id_base = "|var|750-8000 Basic Controller 100 2ETH ECO.Application.GVL_OPCUA."
+node_id_base = "|var|750-8000 Basic Controller 100 2ETH ECO.Application."
 
 uri = "urn:wago-client"
 idx = server.register_namespace(uri)
@@ -35,13 +35,13 @@ density_node = qcm_set.add_variable(
 )
 density_node.set_writable()
 
-z_ratio_node = qcm_set.add_variable(
-    ua.NodeId(node_id_base + "GVL_QCM.SET.Z-ratio", idx),
-    "Z-ratio",
-    0.0,
-    varianttype=ua.VariantType.Float
-)
-z_ratio_node.set_writable()
+# z_ratio_node = qcm_set.add_variable(
+#     ua.NodeId(node_id_base + "GVL_QCM.SET.Z-ratio", idx),
+#     "Z-ratio",
+#     0.0,
+#     varianttype=ua.VariantType.Float
+# )
+# z_ratio_node.set_writable()
 
 start_freq_mass_node = qcm_set.add_variable(
     ua.NodeId(node_id_base + "GVL_QCM.SET.StartFreqMass", idx),

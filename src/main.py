@@ -23,9 +23,9 @@ url = "opc.tcp://132.229.46.113:4840"
 #rp_ip = QCM_interface.find_red_pitaya(subnet= "132.229.46.")
 # rp_ip = socket.gethostbyname(socket.gethostname())
 #rp_ip = "192.168.1.55"
-rp_ip = "132.229.46.164"
+#rp_ip = "132.229.46.164"
 #rp_ip = "192.168.1.55"
-
+rp_ip = "rp-f0ea58.local"
 
 
 node_id_base = "|var|750-8000 Basic Controller 100 2ETH ECO.Application."
@@ -78,8 +78,8 @@ if __name__ == "__main__":
             timestamp_node = wago.get_node(ua.NodeId(node_id_base +         "GVL_QCM.READ.Timestamp", idx))
             error_node = wago.get_node(ua.NodeId(node_id_base +             "GVL_QCM.READ.ErrorCode", idx))
             
-            #wago.write_node(error_node, "No error")  # Initialize error node
-            error_node.set_value(ua.Variant("No error", ua.VariantType.String))
+            wago.write_node(error_node, "No error")  # Initialize error node
+            
             
             
             print("All nodes resolved successfully")

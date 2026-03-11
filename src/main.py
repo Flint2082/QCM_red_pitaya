@@ -79,7 +79,7 @@ if __name__ == "__main__":
             error_node = wago.get_node(ua.NodeId(node_id_base +             "GVL_QCM.READ.ErrorCode", idx))
             
             #wago.write_node(error_node, "No error")  # Initialize error node
-            error_node.set_value("No error")
+            error_node.set_value(ua.Variant("No error", ua.VariantType.String))
             
             
             print("All nodes resolved successfully")

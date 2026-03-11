@@ -88,12 +88,14 @@ class QCMInterface:
             print("0: The delta of the two inputs")
             print("1: The mass mode frequency (fine)")
             print("2: The mass mode frequency (coarse)")
-            print("3: The mass mode lock detector")
-            print("4: The mass mode power detector")
-            print("5: The temp mode frequency (fine)")
-            print("6: The temp mode frequency (coarse)")
-            print("7: The temp mode lock detector")
-            print("8: The temp mode power detector")
+            print("3: The mass mode multiplier output")
+            print("4: The mass mode lock detector")
+            print("5: The mass mode power detector")
+            print("6: The temp mode frequency (fine)")
+            print("7: The temp mode frequency (coarse)")
+            print("8: The temp mode multiplier output")
+            print("9: The temp mode lock detector")
+            print("10: The temp mode power detector")
         else:
             self.fpga.write('output_select',(mode).to_bytes(4,'big'))
         
@@ -190,18 +192,16 @@ class QCMInterface:
         ## 6MHz crystal
         self.setInv(1,1)                          
         self.setFreq(1,start_freq_mass)
-        #self.setInt(1,0.001)
         self.setIQGain(1,0.00001)
-        #time.sleep(1.5)
-        self.setInt(1,0.0001)
-
+        self.setInt(1,0.00001)
+        
         self.setInv(2,1)
         self.setFreq(2,start_freq_temp)
-        #self.setInt(2,0.001)
         self.setIQGain(2,0.00001)
-        #time.sleep(1.5)
-        self.setInt(2,0.0001)
+        self.setInt(2,0.00001)
         
+        # wait for the loops to stabilize before starting measurement
+        time.sleep(3)
         
     def setMeasurementReference(self, T = 23, mat_dens=19320):
         self.fM_start = self.getFreq(1)

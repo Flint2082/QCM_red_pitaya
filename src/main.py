@@ -80,7 +80,7 @@ if __name__ == "__main__":
             timestamp_node = wago.get_node(ua.NodeId(node_id_base +         "GVL_QCM.READ.Timestamp", idx))
             error_node = wago.get_node(ua.NodeId(node_id_base +             "GVL_QCM.READ.ErrorCode", idx))
             
-            error_node.set_value("No error")
+            wago.write_node(error_node, "No error")  # Initialize error node
             
             print("All nodes resolved successfully")
         except Exception as e:
@@ -103,21 +103,21 @@ if __name__ == "__main__":
                     T_amp = qcm.getAmpAndPhase(2)[0]
                     if M_amp > 0.01 and T_amp > 0.01:
                         print(f"Lock detected (Mass: {M_amp:.4f}, Temp: {T_amp:.4f}). Starting measurement.")
-                        error_node.set_value("Lock detected, measurement started")
+                        wago.write_node(error_node, "Lock detected, measurement started")
                         lock_flag = True
                         break
                     else:
                         print(f"Waiting for lock... (Mass: {M_amp:.4f}, Temp: {T_amp:.4f})")
-                        error_node.set_value("Waiting for lock...")
+                        wago.write_node(error_node, "Waiting for lock...")
                         time.sleep(0.1)
                     if i == 99:
                         print("Lock not detected after 10 seconds. Please check the system.")
-                        error_node.set_value("Error: Lock not detected, check system")
+                        wago.write_node(error_node, "Error: Lock not detected, check system")
                         lock_flag = False
                         break  # Exit loop if lock not detected after 10 seconds
                 
                 if not lock_flag:
-                    start_meas_node.set_value(False)  # Reset trigger
+                    wago.write_node(start_meas_node, False)  # Reset trigger
                     continue  # Skip to next iteration of superloop to wait for next start trigger
                 
                 print("Measurement started")
@@ -126,16 +126,16 @@ if __name__ == "__main__":
                 # z_ratio = z_ratio_node.get_value() # currently unused            
                 qcm.setMeasurementReference(T=ambient_temp, mat_dens = density)
                 print("setting start measurement node value to False")
-                start_meas_node.set_value(wago._to_variant(False))  # Reset trigger
-                error_node.set_value("Started measurement")  # Reset error state
+                wago.write_node(start_meas_node, False)  # Reset trigger
+                wago.write_node(error_node, "Started measurement")  # Reset error state
                 
                 # start measurement loop
                 while(True):
                     if(stop_meas_node.get_value()):
                         print("Measurement stopped")
                         try:
-                            error_node.set_value("Measurement stopped")
-                            stop_meas_node.set_value(wago._to_variant(False))  # Reset trigger
+                            wago.write_node(error_node, "Measurement stopped")
+                            wago.write_node(stop_meas_node, False)  # Reset trigger
                         except Exception as e:
                             print(f"Error resetting stop trigger: {e}")
                         break
@@ -150,23 +150,23 @@ if __name__ == "__main__":
                             
                             if amp_M < 0.01 or amp_T < 0.01:
                                 print(f"Warning: No lock detected (Mass: {amp_M:.4f}, Temp: {amp_T:.4f}).")
-                                error_node.set_value("Warning: Lock failure")
+                                wago.write_node(error_node, "Warning: Lock failure")
                                 
                             # Write values back to server
-                            freq_M_node.set_value(wago._to_variant(freq_M))
-                            freq_T_node.set_value(wago._to_variant(freq_T))
-                            amp_M_node.set_value(wago._to_variant(amp_M))
-                            amp_T_node.set_value(wago._to_variant(amp_T))
-                            temp_node.set_value(wago._to_variant(T_calc))
-                            uncomp_thickness_node.set_value(wago._to_variant(uncomp_thickness))
-                            comp_thickness_node.set_value(wago._to_variant(comp_thickness))
-                            Comp_M_freq_node.set_value(wago._to_variant(comp_freq_M))
-                            # timestamp_node.set_value(timestamp)
+                            wago.write_node(freq_M_node, wago._to_variant(freq_M))
+                            wago.write_node(freq_T_node, wago._to_variant(freq_T))
+                            wago.write_node(amp_M_node, wago._to_variant(amp_M))
+                            wago.write_node(amp_T_node, wago._to_variant(amp_T))
+                            wago.write_node(temp_node, wago._to_variant(T_calc))
+                            wago.write_node(uncomp_thickness_node, wago._to_variant(uncomp_thickness))
+                            wago.write_node(comp_thickness_node, wago._to_variant(comp_thickness))
+                            wago.write_node(Comp_M_freq_node, wago._to_variant(comp_freq_M))
+                            # wago.write_node(timestamp_node, wago._to_variant(timestamp))
                             
                         except Exception as e:
                             print(f"Measurement loop error: {e}")
                             try:
-                                error_node.set_value(str(e))
+                                wago.write_node(error_node, str(e))
                             except Exception as inner_e:
                                 print(f"Error setting error node: {inner_e}")
                             break  # Exit inner loop on error

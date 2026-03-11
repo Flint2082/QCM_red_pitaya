@@ -193,15 +193,18 @@ class QCMInterface:
         self.setInv(1,1)                          
         self.setFreq(1,start_freq_mass)
         self.setIQGain(1,0.00001)
-        self.setInt(1,0.00001)
+        self.setInt(1,0.1)
         
         self.setInv(2,1)
         self.setFreq(2,start_freq_temp)
         self.setIQGain(2,0.00001)
-        self.setInt(2,0.00001)
+        self.setInt(2,0.1)
         
         # wait for the loops to stabilize before starting measurement
         time.sleep(3)
+        
+        self.setInt(1,0.00001)
+        self.setInt(2,0.00001)
         
     def setMeasurementReference(self, T = 23, mat_dens=19320):
         self.fM_start = self.getFreq(1)

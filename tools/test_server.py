@@ -11,7 +11,8 @@ server.set_server_name("QCM OPCUA Server")
 node_id_base = "|var|750-8000 Basic Controller 100 2ETH ECO.Application."
 
 uri = "urn:wago-client"
-idx = server.register_namespace(uri)
+# idx = server.register_namespace(uri)
+idx = 4
 
 objects = server.get_objects_node()
 
@@ -30,7 +31,7 @@ qcm_set = qcm.add_object(
 density_node = qcm_set.add_variable(
     ua.NodeId(node_id_base + "GVL_QCM.SET.Density", idx),
     "Density",
-    0.0,
+    19320.0,
     varianttype=ua.VariantType.Float
 )
 density_node.set_writable()
@@ -46,7 +47,7 @@ density_node.set_writable()
 start_freq_mass_node = qcm_set.add_variable(
     ua.NodeId(node_id_base + "GVL_QCM.SET.StartFreqMass", idx),
     "StartFreqMass",
-    0.0,
+    5975000.0,
     varianttype=ua.VariantType.Float
 )
 start_freq_mass_node.set_writable()
@@ -54,7 +55,7 @@ start_freq_mass_node.set_writable()
 start_freq_temp_node = qcm_set.add_variable(
     ua.NodeId(node_id_base + "GVL_QCM.SET.StartFreqTemp", idx),
     "StartFreqTemp",
-    0.0,
+    6571000.0,
     varianttype=ua.VariantType.Float
 )
 start_freq_temp_node.set_writable()
@@ -62,7 +63,7 @@ start_freq_temp_node.set_writable()
 ambient_temp_node = qcm_set.add_variable(
     ua.NodeId(node_id_base + "GVL_QCM.SET.AmbientTemp", idx),
     "AmbientTemp",
-    0.0,
+    22.0,
     varianttype=ua.VariantType.Float
 )
 ambient_temp_node.set_writable()

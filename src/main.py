@@ -126,7 +126,6 @@ if __name__ == "__main__":
                 # z_ratio = z_ratio_node.get_value() # currently unused            
                 qcm.setMeasurementReference(T=ambient_temp, mat_dens = density)
                 print("setting start measurement node value to False")
-                wago.write_node(start_meas_node, False)  # Reset trigger
                 wago.write_node(error_node, "Started measurement")  # Reset error state
                 
                 # start measurement loop

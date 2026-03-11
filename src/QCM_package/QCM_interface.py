@@ -129,7 +129,25 @@ class QCMInterface:
         I = self.getI(osc_index)
         Q = self.getQ(osc_index)
         return (I**2 + Q**2)**0.5, np.arctan2(Q, I)
+    
+    def capacitorAdjustment(self):
+        self.standby(2)
+        self.setFreq(1, 6000000)
+        self.setInt(1, 0.00)
+        self.setIQGain(1, 0.00001)
 
+        while True:
+            try:
+                amplitude = self.getAmpAndPhase(1)[0]
+                print(f"Amplitude: {amplitude}")
+                time.sleep(0.1)
+            except KeyboardInterrupt:
+                print("\nMeasurement stopped by user")
+                self.startup()
+                break
+            
+            
+    
     def sweep(self, osc_index, start, stop, step):
         self.standby(1)
         self.standby(2)
@@ -176,7 +194,7 @@ class QCMInterface:
         self.setIQGain(1,0.00001)
         #time.sleep(1.5)
         self.setInt(1,0.0001)
-        
+
         self.setInv(2,1)
         self.setFreq(2,start_freq_temp)
         #self.setInt(2,0.001)
@@ -185,15 +203,16 @@ class QCMInterface:
         self.setInt(2,0.0001)
         
         
-    def setMeasurementReference(self, T = 23):
+    def setMeasurementReference(self, T = 23, mat_dens=19320):
         self.fM_start = self.getFreq(1)
         self.fT_start = self.getFreq(2)
         self.T_start = T # would be nice to measure this with a thermometer
         self.temp_comp = tca.TempCompAlgorithm(
             coefficient_file = self.coeff_file,
             T_start=T, # would be nice to measure this with a thermometer
-            fT_start= self.getFreq(2), # Hz
-            fM_start= self.getFreq(1)  # Hz
+            mat_dens=mat_dens,
+            fM_start= self.fM_start,  # Hz
+            fT_start= self.fT_start # Hz
         )
 
         print(f"Reference set: fM={self.fM_start}, fT={self.fT_start}, T={self.T_start}")

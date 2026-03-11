@@ -3,7 +3,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 
 class TempCompAlgorithm:
-    def __init__(self, coefficient_file, T_start, fT_start, fM_start, mat_dens=2700, sens_area=32.0E-6):
+    def __init__(self, coefficient_file, T_start, fT_start, fM_start, mat_dens=19320, sens_area=32.0E-6):
         # Load calibration parameters from the provided file
         with open(coefficient_file, mode='r') as file:
             reader = csv.DictReader(file)

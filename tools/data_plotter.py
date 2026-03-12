@@ -28,7 +28,7 @@ error = uncompensated_thickness - compensated_thickness
 
 # Plot with separate y-axes for thickness and temperature
 fig, ax1 = plt.subplots()
-# ax1.plot(time_s, reference_sensor_thickness, label="Reference Sensor Thickness")
+line_ref, = ax1.plot(time_s, reference_sensor_thickness, label="Reference Sensor Thickness")
 line_uncomp, = ax1.plot(time_s, uncompensated_thickness, label="Uncompensated Thickness")
 line_comp, = ax1.plot(time_s, compensated_thickness, label="Compensated Thickness")
 # ax1.plot(time_s, error, label="Error")
@@ -39,12 +39,13 @@ line_temp, = ax2.plot(time_s, temperature, label="Temperature (°C)", linestyle=
 ax1.set_xlabel("Time (s)")
 ax1.set_ylabel("Thickness (nm)")
 ax2.set_ylabel("Temperature (°C)")
+
 ax1.set_title("Thickness vs Time")
 
 ax1.grid(True)
 
 # Combine legends from both axes
-lines = [line_uncomp, line_comp, line_temp]
+lines = [line_ref, line_uncomp, line_comp, line_temp]
 labels = [line.get_label() for line in lines]
 ax1.legend(lines, labels)
 

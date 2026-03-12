@@ -1,5 +1,3 @@
-CODESYS V3.5 SP19 Patch 2 Trace: Trace1
-C:\Users\lion\Desktop\ResistanceEvaporator\back_end\back_end.project
 Timestamp(ms) PLC_PRG.EvaporatorSystem.PowerSupply.current_reading_out PLC_PRG.EvaporatorSystem.PowerSupply.voltage_setpoint_out PLC_PRG.EvaporatorSystem.PowerSupply.voltage_reading_out GVL_OPCUA.out.deposited_thickness GVL_QCM.READ.CompensatedThickness GVL_QCM.READ.UncompensatedThickness GVL_QCM.READ.Temperature 
 991 0 0 0 0.095455296337604523 0.051766335964202881 0.07776409387588501 23.041305541992188
 1984 0 0 0 0.095455296337604523 0.051729436963796616 0.07789456844329834 23.041349411010742

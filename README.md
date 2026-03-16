@@ -5,7 +5,7 @@ Designed to run on the Red Pitaya FPGA.
 made using the CASPER toolflow.
 
 ## Setup
-Red Pitaya setup instructions are available in the [Red Pitaya documentation](src_rp/README.md).
+Red Pitaya setup instructions are available in the [Red Pitaya documentation](src/README.md).
 
 ## Block diagram
 

@@ -16,10 +16,12 @@ Make sure the Red Pitaya is connected to the internet. See [this][RP_internet] l
 
 ---
 
-Use git to clone this repository on the Red Pitaya.
+Use git to clone this repository and the submodule on the Red Pitaya.
 
 ```bash
 git clone https://github.com/Flint2082/QCM_red_pitaya.git
+cd QCM_red_pitaya
+git submodule update --init src/casperfpga
 ```
 
 ---
@@ -27,6 +29,7 @@ git clone https://github.com/Flint2082/QCM_red_pitaya.git
 numpy does not provide a wheel for this platform. To avoid building it from source, we use the version provided by the system package manager.
 
 ```bash
+cd QCM_red_pitaya
 python3 -m venv --system-site-packages .venv-rp 
 ```
 
@@ -35,6 +38,10 @@ python3 -m venv --system-site-packages .venv-rp
 Install casperfpga using the folling guidelines from the [CASPER documentation](https://casper-toolflow.readthedocs.io/en/latest/src/How-to-install-casperfpga.html). Making sure not to istall using pip.
 
 The "tornado" and "circus" packages may create conflicts. If so, use 4.5.3 for tornado and 0.16.0 for circus.
+
+```bash
+
+```
 
 ---
 

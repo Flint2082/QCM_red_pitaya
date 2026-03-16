@@ -40,7 +40,7 @@ Install casperfpga using the folling guidelines from the [CASPER documentation](
 The "tornado" and "circus" packages may create conflicts. If so, use 4.5.3 for tornado and 0.16.0 for circus.
 
 ```bash
-cd casperfpga
+cd src/casperfpga
 git checkout py38
 sudo pip install -r requirements.txt
 sudo python setup.py install

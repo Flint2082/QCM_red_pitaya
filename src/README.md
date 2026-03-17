@@ -35,7 +35,7 @@ python3 -m venv --system-site-packages .venv-rp
 
 ---
 
-Install casperfpga using the folling guidelines from the [CASPER documentation](https://casper-toolflow.readthedocs.io/en/latest/src/How-to-install-casperfpga.html).
+Install casperfpga on the red pitaya using the folling guidelines from the [CASPER documentation](https://casper-toolflow.readthedocs.io/en/latest/src/How-to-install-casperfpga.html). 
 
 The "tornado" and "circus" packages may create conflicts. It is recommended to use v4.5.3 for tornado and v0.16.0 for circus.
 
@@ -47,6 +47,7 @@ pip install 'tornado==4.5.3' --force-reinstall
 pip install 'circus==0.16.0' --force-reinstall
 sudo python setup.py install
 ```
+
 To check if casperfpga is correctly installed start a python environment and ask for the casperfpga version number:
 ```bash
 cd ..
@@ -57,6 +58,10 @@ ipython
 import casperfpga
 casperfpga.__version__
 ```
+
+---
+
+install katcp and set it to start the RCPBorphServer on startup using [this guide](https://casper-toolflow.readthedocs.io/projects/tutorials/en/latest/tutorials/redpitaya/red_pitaya_setup.html)
 
 ---
 

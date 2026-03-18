@@ -4,6 +4,7 @@ from opcua import Client
 from opcua import ua
 
 import time
+import sys
 import socket
 
 print("Loading WAGO client package")
@@ -25,7 +26,12 @@ url = "opc.tcp://132.229.46.113:4840"
 #rp_ip = "192.168.1.55"
 #rp_ip = "132.229.46.164"
 #rp_ip = "192.168.1.55"
-rp_ip = "rp-f0ea58.local"
+# rp_ip = "rp-f0ea58.local"
+
+if len(sys.argv) > 1:
+    rp_ip = sys.argv[1]
+else:
+    rp_ip = "rp-f0ea58.local"
 
 
 node_id_base = "|var|750-8000 Basic Controller 100 2ETH ECO.Application."

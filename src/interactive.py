@@ -1,9 +1,18 @@
 import QCM_package.QCM_interface as QCM_interface
 from IPython import start_ipython
+import sys
+
+
 
 # rp_ip = "132.229.46.164"
-rp_ip = "rp-f0ea58.local"
+# rp_ip = "rp-f0ea58.local"
 #rp_ip = "192.168.1.55"
+
+if len(sys.argv) > 1:
+    rp_ip = sys.argv[1]
+else:
+    rp_ip = "rp-f0ea58.local"
+
 
 qcm = QCM_interface.QCMInterface(rp_ip)
 

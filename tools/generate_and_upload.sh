@@ -16,6 +16,12 @@ PYTHON_SCRIPT="$PROJECT_DIR/src/interactive.py"
 
 # === SCRIPT START ===
 
+if [ -z "$1" ]; then
+    echo "Usage: $0 <Red Pitaya IP>"
+    exit 1
+fi
+echo " 🚀 provided Red Pitaya IP: $1"
+
 echo "📂 Navigating to implementation directory..."
 cd "$TARGET_DIR" || { echo "Directory not found: $TARGET_DIR"; exit 1; }
 
@@ -41,4 +47,4 @@ echo "Activating CASPERFPGA venv"
 
 echo "Starting interactive session"
 
-.venv-rp/bin/python3 "$PYTHON_SCRIPT" || { echo "Failed to start Python script: $PYTHON_SCRIPT"; exit 1; }
+.venv-rp/bin/python3 "$PYTHON_SCRIPT" $1 || { echo "Failed to start Python script: $PYTHON_SCRIPT"; exit 1; }

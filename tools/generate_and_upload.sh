@@ -5,7 +5,7 @@ PROJECT_DIR="$HOME/work/CASPER_repos/qcm_red_pitaya"
 TARGET_DIR="$PROJECT_DIR/model_composer/qcm_rp/myproj/myproj.runs/impl_1"
 REMOTE_USER="root"
 #REMOTE_HOST="rp-f0ea58.local"
-REMOTE_HOST="rp-f0f587.local"
+# REMOTE_HOST="rp-f0f587.local"
 #REMOTE_HOST="132.229.46.164"
 REMOTE_PATH="/root"
 BITFILE="top.bit"
@@ -20,7 +20,8 @@ if [ -z "$1" ]; then
     echo "Usage: $0 <Red Pitaya IP>"
     exit 1
 fi
-echo " 🚀 provided Red Pitaya IP: $1"
+REMOTE_HOST="$1"
+echo "🚀 provided Red Pitaya IP: $1"
 
 echo "📂 Navigating to implementation directory..."
 cd "$TARGET_DIR" || { echo "Directory not found: $TARGET_DIR"; exit 1; }

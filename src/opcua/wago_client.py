@@ -1,3 +1,13 @@
+# Responsible for:
+
+# OPC UA communication
+# converting OPC signals → commands
+
+# NOT measurement logic.
+
+
+
+
 from opcua import Client, ua
 import enum
 

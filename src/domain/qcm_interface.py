@@ -1,9 +1,8 @@
 ### Class to interface with the QCM Red Pitaya firmware, and to run measurements and calibrations.
 
-
-import casperfpga.casperfpga as casperfpga
 import os
 import time
+from domain.fpga_interface import FPGAInterface
 import processing.TempCompAlgorithm as tca
 import calendar
 from collections import deque
@@ -13,7 +12,7 @@ import numpy as np
 import socket
 
 class QCMInterface:
-    def __init__(self, RP_IP):
+    def __init__(self, fpga):
         base_dir = os.path.dirname(os.path.abspath(__file__))
         directory = os.path.join(base_dir, "..", "..", "model_composer", "qcm_rp", "outputs")
         newest_file = max(
@@ -22,9 +21,9 @@ class QCMInterface:
         )
         
         # constants
-        self.window_size = 2**14
-        self.massMode = 1
-        self.tempMode = 2
+        self.WINDOW_SIZE = 2**14
+        self.MASS_MODE = 1
+        self.TEMP_MODE = 2
         
         self.coeff_file = os.path.join(base_dir, "..", "..", "data", "coeffecients.csv")
         
@@ -33,7 +32,7 @@ class QCMInterface:
         self.fM_start = 0
 
 
-        self.fpga = casperfpga.CasperFpga(RP_IP)
+        self.fpga = fpga
         print("CasperFpga connected to red pitaya")
 
         print("Newest file", newest_file)

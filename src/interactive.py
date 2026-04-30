@@ -1,4 +1,4 @@
-import core.QCM_interface as QCM_interface
+import app.QCM_interface as QCM_interface
 from IPython import start_ipython
 import sys
 

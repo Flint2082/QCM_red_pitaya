@@ -6,7 +6,7 @@ from pathlib import Path
 path_root = Path(__file__).parent.parent
 sys.path.append(str(path_root))
 
-import src.QCM_package.TempCompAlgorithm as tca
+import processing.TempCompAlgorithm as tca
 
 # File containing the data
 file_path = "data\\QCM_opdamptest_12_3_2026.trace.txt"
@@ -39,7 +39,7 @@ error = uncompensated_thickness - compensated_thickness
 
 # Plot with separate y-axes for thickness and temperature
 fig, ax1 = plt.subplots()
-line_ref, = ax1.plot(time_s, reference_sensor_gaussian, label="Reference Sensor Thickness")
+line_ref, = ax1.plot(time_s, reference_sensor_thickness, label="Reference Sensor Thickness")
 line_uncomp, = ax1.plot(time_s, uncompensated_thickness, label="Uncompensated Thickness")
 line_comp, = ax1.plot(time_s, compensated_thickness, label="Compensated Thickness")
 # line_ref_rate, = ax1.plot(time_s, reference_rate, label="Reference Sensor Rate", linestyle='--')

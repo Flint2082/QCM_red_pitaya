@@ -6,7 +6,7 @@ import sys
 path_root = Path(__file__).parent.parent
 sys.path.append(str(path_root))
 
-import src.QCM_package.TempCompAlgorithm as tca
+import processing.TempCompAlgorithm as tca
 
 
 

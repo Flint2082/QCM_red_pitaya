@@ -1,4 +1,4 @@
-import QCM_package.QCM_interface as QCM_interface
+import core.QCM_interface as QCM_interface
 from IPython import start_ipython
 import sys
 
@@ -11,7 +11,7 @@ import sys
 if len(sys.argv) > 1:
     rp_ip = sys.argv[1]
 else:
-    rp_ip = "rp-f0ea58.local"
+    quit("Usage: python interactive.py <rp_ip_address>")
 
 
 qcm = QCM_interface.QCMInterface(rp_ip)

@@ -8,12 +8,12 @@ import sys
 import socket
 
 print("Loading WAGO client package")
-import QCM_package.wago_client as wago_client
+import opcua.wago_client as wago_client
 
 print("Loading QCM interface")
-import QCM_package.QCM_interface as QCM_interface 
+import core.QCM_interface as QCM_interface 
 
-import QCM_package.TempCompAlgorithm as tca
+import processing.TempCompAlgorithm as tca
 
 # Server endpoint (must match server)
 url = "opc.tcp://132.229.46.113:4840"

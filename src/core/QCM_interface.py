@@ -4,27 +4,13 @@
 import casperfpga.casperfpga as casperfpga
 import os
 import time
-import QCM_package.TempCompAlgorithm as tca
+import processing.TempCompAlgorithm as tca
 import calendar
 from collections import deque
 import matplotlib.pyplot as plt
 from matplotlib.widgets import Slider
 import numpy as np
 import socket
-
-def find_red_pitaya(subnet="192.168.1.", start=1, end=254, timeout=0.2):
-    """Scan the subnet for a Red Pitaya by attempting to connect to the KATCP port (7147)."""
-    port = 7147  # Default KATCP port for Red Pitaya CASPER builds
-    for i in range(start, end + 1):
-        ip = f"{subnet}{i}"
-        print(f"Currencly trying {ip}")
-        try:
-            with socket.create_connection((ip, port), timeout=timeout):
-                print(f"Found Red Pitaya at {ip}")
-                return ip
-        except (ConnectionRefusedError, socket.timeout, OSError):
-            continue
-    raise RuntimeError("Red Pitaya not found on subnet")
 
 class QCMInterface:
     def __init__(self, RP_IP):
@@ -46,8 +32,7 @@ class QCMInterface:
         self.fT_start = 0
         self.fM_start = 0
 
-        # self.fpga = casperfpga.CasperFpga('132.229.46.164')
-        # '192.168.1.55'
+
         self.fpga = casperfpga.CasperFpga(RP_IP)
         print("CasperFpga connected to red pitaya")
 
@@ -132,6 +117,15 @@ class QCMInterface:
         Q = self.getQ(osc_index)
         return (I**2 + Q**2)**0.5, np.arctan2(Q, I)
     
+    def getLockDetect(self, osc_index):
+        amp, phase = self.getAmpAndPhase(osc_index)
+        
+        # Checks if the amplitude is above a certain threshold and if the phase is about 1 PI (which is expected for a properly locked loop in this configuration)
+        if amp > 0.1 and round(phase) == 3:
+            return True
+        else:
+            return False
+
     def capacitorAdjustment(self):
         self.standby(2)
         self.setFreq(1, 6000000)
@@ -189,6 +183,8 @@ class QCMInterface:
     def startup(self, start_freq_mass = 5975000, start_freq_temp = 6571000):
         self.reset()
         
+        print(f"Starting up PLLs at frequencies {start_freq_mass} and {start_freq_temp}")
+        
         ## 6MHz crystal
         self.setInv(1,1)                          
         self.setFreq(1,start_freq_mass)
@@ -201,8 +197,20 @@ class QCMInterface:
         self.setInt(2,0.1)
         
         # wait for the loops to stabilize before starting measurement
-        time.sleep(3)
+        for _ in range(300):  # Wait for up to 30 seconds
+            if self.getLockDetect(1) and self.getLockDetect(2):
+                break
+            # self.moveWindow(start_freq_mass, start_freq_temp) 
+            print("Waiting for PLLs to lock...")
+            time.sleep(0.1)
         
+        if not self.getLockDetect(1) or not self.getLockDetect(2):
+            print("Warning: PLLs did not lock within expected time. Check starting frequencies.")
+        else:
+            print("PLLs locked successfully at frequencies:")
+            print(f"  Oscillator 1: {self.getFreq(1)} Hz")
+            print(f"  Oscillator 2: {self.getFreq(2)} Hz")
+
         self.setInt(1,0.00001)
         self.setInt(2,0.00001)
         

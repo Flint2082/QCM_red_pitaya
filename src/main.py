@@ -6,10 +6,10 @@ import time
 from domain.fpga_interface import FPGAInterface
 from domain.qcm_interface import QCMInterface
 from workers.qcm_worker import QCMWorker
-from app.application import Application
-from api.server import RestServer
-from opcua.client import OPCUAClient
-from app.state import SystemState
+# from app.application import Application
+# from api.server import RestServer
+# from opcua.client import OPCUAClient
+# from app.state import SystemState
 
 
 def main():
@@ -26,7 +26,7 @@ def main():
     app_command_queue = queue.Queue()
     app_event_queue = queue.Queue()
 
-    system_state = SystemState()
+    # system_state = SystemState()
 
     # ==================================================
     # Hardware layer
@@ -59,37 +59,37 @@ def main():
     # Application layer
     # ==================================================
 
-    application = Application(
-        command_queue=app_command_queue,
-        event_queue=app_event_queue,
-        system_state=system_state
-    )
+    # application = Application(
+    #     command_queue=app_command_queue,
+    #     event_queue=app_event_queue,
+    #     system_state=system_state
+    # )
 
-    application.start()
+    # application.start()
 
     # ==================================================
     # OPC UA
     # ==================================================
 
-    opcua_client = OPCUAClient(
-        command_queue=app_command_queue,
-        event_queue=app_event_queue,
-        system_state=system_state
-    )
+    # opcua_client = OPCUAClient(
+    #     command_queue=app_command_queue,
+    #     event_queue=app_event_queue,
+    #     system_state=system_state
+    # )
 
-    opcua_client.start()
+    # opcua_client.start()
 
     # ==================================================
     # REST API
     # ==================================================
 
-    rest_server = RestServer(
-        command_queue=app_command_queue,
-        event_queue=app_event_queue,
-        system_state=system_state
-    )
+    # rest_server = RestServer(
+    #     command_queue=app_command_queue,
+    #     event_queue=app_event_queue,
+    #     system_state=system_state
+    # )
 
-    rest_server.start()
+    # rest_server.start()
 
     # ==================================================
     # Shutdown handling
@@ -120,12 +120,11 @@ def main():
 
         print("Stopping system")
 
-        rest_server.stop()
-        opcua_client.stop()
-        application.stop()
+        # rest_server.stop()
+        # opcua_client.stop()
+        # application.stop()
         qcm_worker.stop()
         qcm_worker.join()
-        fpga.disconnect()
 
         print("Shutdown complete")
 

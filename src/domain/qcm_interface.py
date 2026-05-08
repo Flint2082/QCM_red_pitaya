@@ -5,7 +5,6 @@ import time
 import processing.TempCompAlgorithm as tca
 import calendar
 from collections import deque
-import matplotlib.pyplot as plt
 import numpy as np
 
 
@@ -61,8 +60,8 @@ class QCMInterface:
     def setIQGain(self, osc_index, gain):
         self.fpga.write_register(register_name='IQ_gain_'+str(osc_index),value=int(gain*2**32)) # multiplication to account for fixed-point (32F32) representation in FPGA
 
-    def setInv(self, osc_index, inv):
-        self.fpga.write_register(register_name='inv_fb_'+str(osc_index),value=(inv).to_bytes(4,'big'))
+    def setInv(self, osc_index, inv: bool):
+        self.fpga.write_register(register_name='inv_fb_'+str(osc_index),value=inv)
         
     def setOutputMode(self, mode = -1):
         if mode == -1:
@@ -79,20 +78,20 @@ class QCMInterface:
             print("9: The temp mode lock detector")
             print("10: The temp mode power detector")
         else:
-            self.fpga.write_register(register_name='output_select', value=(mode).to_bytes(4,'big'))
+            self.fpga.write_register(register_name='output_select', value=mode)
         
     # ===========================
     # getter methods
     # ===========================
 
     def reset(self):
-        self.fpga.write_register(register_name='reset', value=(1).to_bytes(4,'big'))
+        self.fpga.write_register(register_name='reset', value=1)
         # time.sleep(0.001)
-        self.fpga.write_register(register_name='reset', value=(0).to_bytes(4,'big'))
+        self.fpga.write_register(register_name='reset', value=0)
         
     def getFreq(self, osc_index):
-        lsb = self.fpga.read_int(f'frequency_out_lsb_{osc_index}') & 0xFFFFFFFF
-        msb = self.fpga.read_int(f'frequency_out_msb_{osc_index}') & 0xFFFFFFFF
+        lsb = self.fpga.read_register(f'frequency_out_lsb_{osc_index}') & 0xFFFFFFFF
+        msb = self.fpga.read_register(f'frequency_out_msb_{osc_index}') & 0xFFFFFFFF
 
         raw = (msb << 32) | lsb      # reconstruct full fixed-point integer
         freq = raw / (1 << 10)       # apply fixed-point scaling
@@ -100,11 +99,11 @@ class QCMInterface:
         return freq
 
     def getI(self, osc_index):
-        inPhase = self.to_signed(self.fpga.read_int(f'I_out_{osc_index}'),32)
+        inPhase = self.to_signed(self.fpga.read_register(f'I_out_{osc_index}'),32)
         return inPhase/2**31
         
     def getQ(self, osc_index):
-        quadrature = self.to_signed(self.fpga.read_int(f'Q_out_{osc_index}'),32)
+        quadrature = self.to_signed(self.fpga.read_register(f'Q_out_{osc_index}'),32)
         return quadrature/2**31
 
     def getAmpAndPhase(self, osc_index):
@@ -148,7 +147,7 @@ class QCMInterface:
             
             
     
-    def sweep(self, osc_index, start, stop, step):
+    def sweep(self, osc_index, start, stop, step, timestep):
         self.standby(1)
         self.standby(2)
         
@@ -159,30 +158,12 @@ class QCMInterface:
         for f in range(start, stop, step):
             self.setFreq(osc_index, f)
             self.reset()
-            time.sleep(0.01)
+            time.sleep(timestep)
             amplitude, phase = self.getAmpAndPhase(osc_index)
             frequencies.append(f)
             phases.append(phase)
             amplitudes.append(amplitude)
-            print(f"Freq: {f}\t Phase: {phase}\t Amplitude: {amplitude}")
-        
-        # Plot phase/power over frequency sweep
-        plt.figure()
-        plt.subplot(2, 1, 1)
-        plt.plot(frequencies, amplitudes, 'r')
-        plt.xlabel("Frequency [Hz]")
-        plt.ylabel("Amplitude")
-        plt.title(f"Amplitude vs Frequency (Oscillator {osc_index})")
-        plt.grid(True)
-        
-        plt.subplot(2, 1, 2)
-        plt.plot(frequencies, phases, 'b')
-        plt.xlabel("Frequency [Hz]")
-        plt.ylabel("Phase")
-        plt.title(f"Phase vs Frequency (Oscillator {osc_index})")
-        plt.grid(True)
-        plt.show()
-        
+            print(f"Freq: {f}\t Phase: {phase}\t Amplitude: {amplitude}")      
              
     def startup(self, start_freq_mass = 5975000, start_freq_temp = 6571000):
         self.reset()
@@ -243,7 +224,7 @@ class QCMInterface:
         self.setFreq(2, fT - (self.window_size/2))
 
 
-    def startMeasurement(self, T = 23, moving_window = True, plot=True, debug=False):
+    def startMeasurement(self, T = 23, moving_window = True, debug=False):
         # Measurement routine
 
         # Initialize the temperature compensation algorithm with calibration and starting values
@@ -268,49 +249,6 @@ class QCMInterface:
          
             
         try:
-            if plot:
-                # ---- Live plot setup ----
-                plt.ion()
-
-                fig, (ax1,ax2,ax3,ax4) = plt.subplots(4,1,sharex=True)
-                #plt.subplots_adjust(bottom=0.30) 
-                fig.set_size_inches(10,14)
-         
-                ax1.set_title("Mass mode measurement")
-                ax1.set_xlabel("Time [s]")
-                ax1.set_ylabel("Frequency [Hz]")
-                ax2.set_title("Temp mode measurement")
-                ax2.set_xlabel("Time [s]")
-                ax2.set_ylabel("Frequency [Hz]")
-                ax3.set_title("Calculated temperature")
-                ax3.set_xlabel("Time [s]")
-                ax3.set_ylabel("Temperature [C]")
-                ax4.set_title("Compensated thickmness")
-                ax4.set_xlabel("Time [s]")
-                ax4.set_ylabel("Delta thickness [nm]")
-                
-
-                # Keep a rolling window of points
-                max_points = 300
-                time_data = deque(maxlen=max_points)
-                temp_freq_data = deque(maxlen=max_points)
-                mass_freq_data = deque(maxlen=max_points)
-                temp_data = deque(maxlen=max_points)
-                thickness_data = deque(maxlen=max_points)
-                uncomp_thick_data = deque(maxlen=max_points)
-
-                lineFM, = ax1.plot([], [], lw=2)
-                lineFT, = ax2.plot([], [], lw=2)
-                lineTemp, = ax3.plot([], [], lw=2)
-                lineThick, = ax4.plot([], [], lw=2, )
-                lineUnThick, = ax4.plot([], [], lw=2, color='red', linestyle='dashed' )
-                start_time = time.time()
-
-                fig.tight_layout() # adjust graph spacing
-                fig.show()
-                fig.canvas.draw()
-
-        
         
             ### Measurement loop
             while True:
@@ -332,40 +270,7 @@ class QCMInterface:
                         log_file.write(f"{calendar.timegm(time.gmtime())},{fT},{fM},{T_calc},{uncompensated_thickness_nm},{compensated_thickness_nm}\n")
                 else:
                     print(f"{fT:.3f} \t {fM:.3f}")
-                        
-                if plot:
-                    # ---- Update live plot ----
-                    t_now = time.time() - start_time
-                    time_data.append(t_now)
-                    temp_freq_data.append(fT)
-                    mass_freq_data.append(fM)
-                    temp_data.append(T_calc)
-                    thickness_data.append(compensated_thickness_nm)
-                    uncomp_thick_data.append(uncompensated_thickness_nm)
 
-                    lineFM.set_data(time_data, mass_freq_data)
-                    ax1.relim()
-                    ax1.autoscale_view()
-                    
-                    lineFT.set_data(time_data, temp_freq_data)
-                    ax2.relim()
-                    ax2.autoscale_view()
-                    
-                    lineTemp.set_data(time_data, temp_data)
-                    ax3.relim()
-                    ax3.autoscale_view()
-                    
-                    lineThick.set_data(time_data, thickness_data)
-                    lineUnThick.set_data(time_data, uncomp_thick_data)
-                    ax4.relim()
-                    ax4.autoscale_view()
-
-                    fig.canvas.draw()
-                    fig.canvas.flush_events()
-
-                
-
-                
                        
                 time.sleep(0.1) # <-- set measurement interval here          #TODO: make this more robust
         except KeyboardInterrupt:

@@ -57,7 +57,7 @@ class QCMWorker(threading.Thread):
         elif isinstance(command, StopMeasurementCommand):
             self.qcm.stop_measurement()
         elif isinstance(command, StartSweepCommand):
-            self.qcm.start_sweep(command.start_freq, command.stop_freq, command.step_size, command.settle_time)
+            self.qcm.sweep(command.start_freq, command.stop_freq, command.step_size, command.settle_time)
 
         # ============================
         # Setting commands

@@ -4,17 +4,11 @@ import threading
 import time
 
 from domain.fpga_interface import FPGAInterface
-
 from domain.qcm_interface import QCMInterface
-
 from workers.qcm_worker import QCMWorker
-
 from app.application import Application
-
 from api.server import RestServer
-
 from opcua.client import OPCUAClient
-
 from app.state import SystemState
 
 
@@ -120,7 +114,6 @@ def main():
     try:
 
         while not shutdown:
-
             time.sleep(1)
 
     finally:
@@ -128,15 +121,10 @@ def main():
         print("Stopping system")
 
         rest_server.stop()
-
         opcua_client.stop()
-
         application.stop()
-
         qcm_worker.stop()
-
         qcm_worker.join()
-
         fpga.disconnect()
 
         print("Shutdown complete")

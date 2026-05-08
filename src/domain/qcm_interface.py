@@ -43,9 +43,6 @@ class QCMInterface:
             print(f"Failed to upload FPGA program: {e}")
             raise
 
-
-    ### Function declarations
-
     def to_signed(self, value, bits):
         """Interpret unsigned integer as signed."""
         mask = (1 << bits) - 1
@@ -53,15 +50,18 @@ class QCMInterface:
         sign_bit = 1 << (bits - 1)
         return (value ^ sign_bit) - sign_bit
 
+    # ===========================
+    # setter methods
+    # ===========================
 
     def setFreq(self, osc_index, freq):
-        self.fpga.write_int(device_name='freq_'+str(osc_index),integer=int(freq*64))
+        self.fpga.write_int(device_name='freq_'+str(osc_index),integer=int(freq*2**6)) # multiplication to account for fixed-point (32F6) representation in FPGA
 
     def setInt(self, osc_index, gain):
-        self.fpga.write_int(device_name='integral_'+str(osc_index),integer=int(gain*4294967296))
+        self.fpga.write_int(device_name='integral_'+str(osc_index),integer=int(gain*2**32)) # multiplication to account for fixed-point (32F32) representation in FPGA
         
     def setIQGain(self, osc_index, gain):
-        self.fpga.write_int(device_name='IQ_gain_'+str(osc_index),integer=int(gain*4294967296))
+        self.fpga.write_int(device_name='IQ_gain_'+str(osc_index),integer=int(gain*2**32)) # multiplication to account for fixed-point (32F32) representation in FPGA
 
     def setInv(self, osc_index, inv):
         self.fpga.write('inv_fb_'+str(osc_index),(inv).to_bytes(4,'big'))
@@ -83,11 +83,9 @@ class QCMInterface:
         else:
             self.fpga.write('output_select',(mode).to_bytes(4,'big'))
         
-        
-    def standby(self, osc_index):
-        self.setFreq(osc_index,0)
-        self.setInt(osc_index,0)
-        self.reset()
+    # ===========================
+    # getter methods
+    # ===========================
 
     def reset(self):
         self.fpga.write('reset',(1).to_bytes(4,'big'))
@@ -124,6 +122,15 @@ class QCMInterface:
             return True
         else:
             return False
+    
+    # ===========================
+    # Control methods
+    # ===========================
+    
+    def standby(self, osc_index):
+        self.setFreq(osc_index,0)
+        self.setInt(osc_index,0)
+        self.reset()
 
     def capacitorAdjustment(self):
         self.standby(2)

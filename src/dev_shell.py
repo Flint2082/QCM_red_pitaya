@@ -80,26 +80,26 @@ qcm_worker.start()
 # Convenience helper functions
 # =========================================================
 
-def sweep(
-    start_frequency=10e6,
-    stop_frequency=10.1e6,
-    step_size=1
-):
+# def sweep(
+#     start_frequency=10e6,
+#     stop_frequency=10.1e6,
+#     step_size=1
+# ):
 
-    worker_command_queue.put(
-        ExecuteSweepCommand(
-            start_frequency=start_frequency,
-            stop_frequency=stop_frequency,
-            step_size=step_size
-        )
-    )
+#     worker_command_queue.put(
+#         ExecuteSweepCommand(
+#             start_frequency=start_frequency,
+#             stop_frequency=stop_frequency,
+#             step_size=step_size
+#         )
+#     )
 
 
 def stop():
-
-    worker_command_queue.put(
-        StopCommand()
-    )
+    pass
+    # worker_command_queue.put(
+    #     StopCommand()
+    # )
 
 
 def events():
@@ -154,15 +154,15 @@ try:
             "app_command_queue": app_command_queue,
             "app_event_queue": app_event_queue,
 
-            "sweep": sweep,
+            # "sweep": sweep,
             "stop": stop,
             "events": events,
 
             # command types
-            "ExecuteSweepCommand": ExecuteSweepCommand,
-            "StopCommand": StopCommand,
+            # "ExecuteSweepCommand": ExecuteSweepCommand,
+            # "StopCommand": StopCommand,
         },
-        display_banner=False
+        display_banner=True
     )
 
 finally:

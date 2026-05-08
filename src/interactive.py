@@ -11,6 +11,8 @@ from workers.qcm_worker import QCMWorker
 # from api.server import RestServer
 # from opcua.client import OPCUAClient
 # from app.state import SystemState
+from messaging.worker_command import *
+from messaging.worker_event import *
 
 
 def main():

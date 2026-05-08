@@ -2,14 +2,12 @@
 
 import os
 import time
-from domain.fpga_interface import FPGAInterface
 import processing.TempCompAlgorithm as tca
 import calendar
 from collections import deque
 import matplotlib.pyplot as plt
-from matplotlib.widgets import Slider
 import numpy as np
-import socket
+
 
 class QCMInterface:
     def __init__(self, fpga):
@@ -55,16 +53,16 @@ class QCMInterface:
     # ===========================
 
     def setFreq(self, osc_index, freq):
-        self.fpga.write_int(device_name='freq_'+str(osc_index),integer=int(freq*2**6)) # multiplication to account for fixed-point (32F6) representation in FPGA
+        self.fpga.write_register(register_name='freq_'+str(osc_index),value=int(freq*2**6)) # multiplication to account for fixed-point (32F6) representation in FPGA
 
     def setInt(self, osc_index, gain):
-        self.fpga.write_int(device_name='integral_'+str(osc_index),integer=int(gain*2**32)) # multiplication to account for fixed-point (32F32) representation in FPGA
-        
+        self.fpga.write_register(register_name='integral_'+str(osc_index),value=int(gain*2**32)) # multiplication to account for fixed-point (32F32) representation in FPGA
+
     def setIQGain(self, osc_index, gain):
-        self.fpga.write_int(device_name='IQ_gain_'+str(osc_index),integer=int(gain*2**32)) # multiplication to account for fixed-point (32F32) representation in FPGA
+        self.fpga.write_register(register_name='IQ_gain_'+str(osc_index),value=int(gain*2**32)) # multiplication to account for fixed-point (32F32) representation in FPGA
 
     def setInv(self, osc_index, inv):
-        self.fpga.write('inv_fb_'+str(osc_index),(inv).to_bytes(4,'big'))
+        self.fpga.write_register(register_name='inv_fb_'+str(osc_index),value=(inv).to_bytes(4,'big'))
         
     def setOutputMode(self, mode = -1):
         if mode == -1:
@@ -81,16 +79,16 @@ class QCMInterface:
             print("9: The temp mode lock detector")
             print("10: The temp mode power detector")
         else:
-            self.fpga.write('output_select',(mode).to_bytes(4,'big'))
+            self.fpga.write_register(register_name='output_select', value=(mode).to_bytes(4,'big'))
         
     # ===========================
     # getter methods
     # ===========================
 
     def reset(self):
-        self.fpga.write('reset',(1).to_bytes(4,'big'))
+        self.fpga.write_register(register_name='reset', value=(1).to_bytes(4,'big'))
         # time.sleep(0.001)
-        self.fpga.write('reset',(0).to_bytes(4,'big'))
+        self.fpga.write_register(register_name='reset', value=(0).to_bytes(4,'big'))
         
     def getFreq(self, osc_index):
         lsb = self.fpga.read_int(f'frequency_out_lsb_{osc_index}') & 0xFFFFFFFF

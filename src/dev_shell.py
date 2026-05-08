@@ -6,8 +6,8 @@ from domain.qcm_interface import QCMInterface
 
 from workers.qcm_worker import QCMWorker
 
-from messaging.worker_command import *
-from messaging.worker_event import *
+import messaging.worker_command as worker_command
+import messaging.worker_event as worker_event
 
 
 # =========================================================
@@ -35,11 +35,8 @@ print("Starting QCM development shell")
 # =========================================================
 
 worker_command_queue = queue.Queue()
-
 worker_event_queue = queue.Queue()
-
 app_command_queue = queue.Queue()
-
 app_event_queue = queue.Queue()
 
 
@@ -147,6 +144,9 @@ try:
             "fpga": fpga,
             "qcm": qcm,
             "qcm_worker": qcm_worker,
+            
+            "worker_command": worker_command,
+            "worker_event": worker_event,
 
             "worker_command_queue": worker_command_queue,
             "worker_event_queue": worker_event_queue,

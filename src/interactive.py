@@ -36,9 +36,6 @@ def main():
     # ==================================================
 
     fpga = FPGAInterface()
-    if not fpga.load_bitstream(): # TODO: define bitstream path as a parameter or config
-        print("Failed to load bitstream")
-        exit(1)
 
     # ==================================================
     # QCM domain

@@ -116,16 +116,23 @@ def main():
 
     try:
 
-        while not shutdown:
-            start_ipython()
+        start_ipython(
+            argv=[],
+            user_ns={
+                "qcm": qcm,
+                "fpga": fpga,
+                "worker": qcm_worker,
+                "worker_command_queue": worker_command_queue,
+                "worker_event_queue": worker_event_queue,
+                "app_command_queue": app_command_queue,
+                "app_event_queue": app_event_queue,
+            }
+        )
 
     finally:
 
         print("Stopping system")
 
-        # rest_server.stop()
-        # opcua_client.stop()
-        # application.stop()
         qcm_worker.stop()
         qcm_worker.join()
 

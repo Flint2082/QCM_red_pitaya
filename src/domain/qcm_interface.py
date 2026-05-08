@@ -38,7 +38,7 @@ class QCMInterface:
         print("Newest file", newest_file)
 
         try:
-            self.fpga.upload_to_ram_and_program(newest_file)
+            self.fpga.load_register_map(newest_file)
         except Exception as e:
             print(f"Failed to upload FPGA program: {e}")
             raise

@@ -124,7 +124,7 @@ class QCMInterface:
     # Control methods
     # ===========================
     
-    def standby(self, osc_index):
+    def standby(self, osc_index: int):
         self.setFreq(osc_index,0)
         self.setInt(osc_index,0)
         self.reset()
@@ -147,7 +147,7 @@ class QCMInterface:
             
             
     
-    def sweep(self, osc_index, start, stop, step, timestep):
+    def sweep(self, osc_index: int, start: float, stop: float, step: float, timestep: float):
         self.standby(1)
         self.standby(2)
         
@@ -165,7 +165,7 @@ class QCMInterface:
             amplitudes.append(amplitude)
             print(f"Freq: {f}\t Phase: {phase}\t Amplitude: {amplitude}")      
              
-    def startup(self, start_freq_mass = 5975000, start_freq_temp = 6571000):
+    def startup(self, start_freq_mass: float, start_freq_temp: float):
         self.reset()
         
         print(f"Starting up PLLs at frequencies {start_freq_mass} and {start_freq_temp}")

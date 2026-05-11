@@ -12,6 +12,7 @@
 import threading
 import queue
 
+from messaging.worker_state import WorkerState 
 from messaging.worker_event import *
 from messaging.worker_command import *  
 
@@ -22,6 +23,7 @@ class QCMWorker(threading.Thread):
         self.command_queue = command_queue
         self.event_queue = event_queue
         self.running = True
+        self.state = WorkerState.IDLE
         
     def stop(self):
         self.running = False
@@ -32,12 +34,16 @@ class QCMWorker(threading.Thread):
 
         while self.running:
             try:
-                command = self.command_queue.get()
+                try:
+                    command = self.command_queue.get(timeout=0.01) # non-blocking with timeout
 
-                if command is None:
-                    continue
+                    if command is not None:
+                        self.handle_command(command)
 
-                self.handle_command(command)
+                except queue.Empty:
+                    pass
+
+                self.update()
 
             except Exception as e:
                 self.event_queue.put(
@@ -52,12 +58,21 @@ class QCMWorker(threading.Thread):
         # Control commands
         # ============================
         
-        if isinstance(command, StartMeasurementCommand):
+        # Start measurement
+        if isinstance(command, StartMeasurementCommand) and self.state == WorkerState.IDLE:
+            self.state = WorkerState.MEASURING
             self.qcm.start_measurement()
-        elif isinstance(command, StopMeasurementCommand):
+            
+        # Stop measurement
+        elif isinstance(command, StopMeasurementCommand) and self.state == WorkerState.MEASURING:
+            self.state = WorkerState.IDLE
             self.qcm.stop_measurement()
-        elif isinstance(command, StartSweepCommand):
+            
+        # Sweep
+        elif isinstance(command, StartSweepCommand) and self.state == WorkerState.IDLE:
+            self.state = WorkerState.SWEEPING
             self.qcm.sweep(command.start_freq, command.stop_freq, command.step_size, command.settle_time)
+            self.state = WorkerState.IDLE
 
         # ============================
         # Setting commands
@@ -69,3 +84,21 @@ class QCMWorker(threading.Thread):
             self.qcm.setInt(command.oscillator_idx, command.gain)
         else:
             raise ValueError(f"Unknown command type: {type(command)}")
+        
+        
+        
+    def update(self):
+        
+        # Perform measurement acquisition if in measuring state
+        if self.state == WorkerState.MEASURING:
+            fM, fT, T_calc, uncomp_thickness_nm, comp_thickness_nm, comp_m_freq = self.qcm.get_measurement() 
+            self.event_queue.put(
+                MeasurementEvent(
+                    freq_mass_mode=fM,
+                    freq_temp_mode=fT,
+                    uncompensated_mass=uncomp_thickness_nm,
+                    calculated_mass=comp_thickness_nm,
+                    calculated_temp=T_calc,
+                    compensated_freq=comp_m_freq
+                )
+            )

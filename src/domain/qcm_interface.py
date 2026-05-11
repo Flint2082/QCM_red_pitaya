@@ -86,7 +86,6 @@ class QCMInterface:
 
     def reset(self):
         self.fpga.write_register(register_name='reset', value=1)
-        # time.sleep(0.001)
         self.fpga.write_register(register_name='reset', value=0)
         
     def getFreq(self, osc_index):

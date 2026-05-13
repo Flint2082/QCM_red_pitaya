@@ -1,9 +1,11 @@
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from enum import Enum, auto
 from typing import Optional
-from datetime import datetime
+from datetime import datetime, time
 
-
+@dataclass(kw_only=True)
+class Event:
+    timestamp: float = field(default_factory=time.time)
 
 @dataclass
 class ErrorEvent(Event):
@@ -20,7 +22,3 @@ class MeasurementEvent(Event):
     compensated_freq: float
     
     
-
-@dataclass
-class Event:
-    timestamp: datetime = datetime.now()

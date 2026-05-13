@@ -5,7 +5,8 @@ from datetime import datetime, time
 
 @dataclass(kw_only=True)
 class Event:
-    timestamp: float = field(default_factory=time.time)
+    # timestamp: float = field(default_factory=time.time)
+    pass
 
 @dataclass
 class ErrorEvent(Event):

@@ -62,7 +62,7 @@ def main():
     application = Application(
         command_queue=app_command_queue,
         event_queue=app_event_queue,
-        system_state=system_state
+        system_state=None
     )
 
     application.run()

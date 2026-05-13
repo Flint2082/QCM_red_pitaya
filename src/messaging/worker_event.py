@@ -21,4 +21,5 @@ class MeasurementEvent(Event):
     calculated_temp: float
     compensated_freq: float
     
+    
 

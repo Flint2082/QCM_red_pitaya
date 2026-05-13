@@ -1,4 +1,5 @@
 from dataclasses import dataclass
+from messaging.defines import OutputMode
 
 @dataclass
 class WorkerCommand:
@@ -37,3 +38,17 @@ class SetIntegratorGainCommand(WorkerCommand):
     oscillator_idx: int
     gain: float
     
+@dataclass
+class SetInvertedCommand(WorkerCommand):
+    oscillator_idx: int
+    inverted: bool
+
+@dataclass
+class SetIQGainCommand(WorkerCommand):
+    oscillator_idx: int
+    gain: float
+    
+@dataclass
+class SetOutputModeCommand(WorkerCommand):
+    oscillator_idx: int
+    mode: OutputMode

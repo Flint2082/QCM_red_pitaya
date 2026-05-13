@@ -6,7 +6,7 @@ import time
 from domain.fpga_interface import FPGAInterface
 from domain.qcm_interface import QCMInterface
 from workers.qcm_worker import QCMWorker
-# from app.application import Application
+from app.application import Application
 # from api.server import RestServer
 # from opcua.client import OPCUAClient
 # from app.state import SystemState
@@ -57,15 +57,15 @@ def main():
 
     # ==================================================
     # Application layer
-    # ==================================================
+    # =================================================
 
-    # application = Application(
-    #     command_queue=app_command_queue,
-    #     event_queue=app_event_queue,
-    #     system_state=system_state
-    # )
+    application = Application(
+        worker_command_queue=worker_command_queue,
+        worker_event_queue=worker_event_queue,
+        system_state=None # placeholder - we can add a shared state object later if needed
+    )
 
-    # application.start()
+    application.run()
 
     # ==================================================
     # OPC UA

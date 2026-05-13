@@ -12,7 +12,7 @@
 import threading
 import queue
 
-from messaging.worker_state import WorkerState 
+from messaging.defines import WorkerState 
 from messaging.worker_event import *
 from messaging.worker_command import *  
 

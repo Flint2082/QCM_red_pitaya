@@ -1,0 +1,446 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>QCM Monitor</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@300;400;500&family=IBM+Plex+Sans:wght@300;400;500&display=swap');
+
+  :root {
+    --bg:         #0a0c0f;
+    --surface:    #111418;
+    --border:     #1e2530;
+    --muted:      #3a4455;
+    --text:       #c8d4e0;
+    --text-dim:   #5a6a7e;
+    --mass:       #00e5a0;
+    --temp:       #4db8ff;
+    --comp:       #ff9f43;
+    --alert:      #ff4d6a;
+    --grid:       rgba(255,255,255,0.03);
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: 'IBM Plex Sans', sans-serif;
+    font-size: 13px;
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+  }
+
+  /* ---- Header ---- */
+  header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 14px 24px;
+    border-bottom: 1px solid var(--border);
+    background: var(--surface);
+  }
+
+  .logo {
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 15px;
+    font-weight: 500;
+    letter-spacing: 0.12em;
+    color: var(--text);
+  }
+
+  .logo span { color: var(--mass); }
+
+  .header-right { display: flex; align-items: center; gap: 20px; }
+
+  #ws-status {
+    display: flex;
+    align-items: center;
+    gap: 7px;
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 11px;
+    color: var(--text-dim);
+    letter-spacing: 0.06em;
+  }
+
+  #ws-dot {
+    width: 7px; height: 7px;
+    border-radius: 50%;
+    background: var(--muted);
+    transition: background 0.4s;
+  }
+
+  #ws-dot.connected   { background: var(--mass); box-shadow: 0 0 6px var(--mass); }
+  #ws-dot.error       { background: var(--alert); box-shadow: 0 0 6px var(--alert); }
+
+  .ctrl-btn {
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 11px;
+    letter-spacing: 0.08em;
+    padding: 6px 16px;
+    border-radius: 3px;
+    border: 1px solid var(--border);
+    cursor: pointer;
+    transition: all 0.15s;
+    background: transparent;
+    color: var(--text-dim);
+  }
+
+  #btn-start { border-color: var(--mass); color: var(--mass); }
+  #btn-start:hover { background: var(--mass); color: var(--bg); }
+  #btn-stop  { border-color: var(--alert); color: var(--alert); }
+  #btn-stop:hover  { background: var(--alert); color: #fff; }
+
+  /* ---- Layout ---- */
+  main {
+    flex: 1;
+    display: grid;
+    grid-template-rows: auto 1fr auto;
+    grid-template-columns: 1fr;
+    gap: 0;
+    padding: 20px 24px;
+    gap: 16px;
+  }
+
+  /* ---- Stat bar ---- */
+  .stat-bar {
+    display: grid;
+    grid-template-columns: repeat(5, 1fr);
+    gap: 10px;
+  }
+
+  .stat {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    padding: 12px 16px;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+  }
+
+  .stat-label {
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 10px;
+    letter-spacing: 0.1em;
+    color: var(--text-dim);
+    text-transform: uppercase;
+  }
+
+  .stat-value {
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 20px;
+    font-weight: 500;
+    color: var(--text);
+    letter-spacing: -0.02em;
+    transition: color 0.2s;
+  }
+
+  .stat-unit {
+    font-size: 10px;
+    color: var(--text-dim);
+    font-weight: 300;
+  }
+
+  .stat.mass   .stat-value { color: var(--mass); }
+  .stat.temp   .stat-value { color: var(--temp); }
+  .stat.comp   .stat-value { color: var(--comp); }
+
+  /* ---- Charts ---- */
+  .charts {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    grid-template-rows: 1fr 1fr;
+    gap: 12px;
+  }
+
+  .chart-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    padding: 14px 16px 10px;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    min-height: 200px;
+  }
+
+  .chart-card.span2 { grid-column: span 2; }
+
+  .chart-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+  }
+
+  .chart-title {
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 10px;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--text-dim);
+  }
+
+  .chart-accent { width: 24px; height: 2px; border-radius: 1px; }
+  .acc-mass { background: var(--mass); }
+  .acc-temp { background: var(--temp); }
+  .acc-comp { background: var(--comp); }
+  .acc-both { background: linear-gradient(90deg, var(--mass), var(--temp)); }
+
+  .chart-wrap { flex: 1; position: relative; min-height: 0; }
+
+  /* ---- Footer ---- */
+  footer {
+    padding: 8px 24px;
+    border-top: 1px solid var(--border);
+    display: flex;
+    justify-content: space-between;
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 10px;
+    color: var(--text-dim);
+    letter-spacing: 0.06em;
+  }
+
+  #sample-count::before { content: 'n = '; }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="logo">QCM<span>//</span>MONITOR</div>
+  <div class="header-right">
+    <div id="ws-status"><div id="ws-dot"></div><span id="ws-label">DISCONNECTED</span></div>
+    <button class="ctrl-btn" id="btn-start" onclick="sendCommand('start')">START</button>
+    <button class="ctrl-btn" id="btn-stop"  onclick="sendCommand('stop')">STOP</button>
+  </div>
+</header>
+
+<main>
+
+  <!-- Stat bar -->
+  <div class="stat-bar">
+    <div class="stat mass">
+      <div class="stat-label">Mass Mode Freq</div>
+      <div class="stat-value" id="val-fM">—</div>
+      <div class="stat-unit">Hz</div>
+    </div>
+    <div class="stat temp">
+      <div class="stat-label">Temp Mode Freq</div>
+      <div class="stat-value" id="val-fT">—</div>
+      <div class="stat-unit">Hz</div>
+    </div>
+    <div class="stat">
+      <div class="stat-label">Temperature</div>
+      <div class="stat-value" id="val-T">—</div>
+      <div class="stat-unit">°C</div>
+    </div>
+    <div class="stat comp">
+      <div class="stat-label">Comp. Thickness</div>
+      <div class="stat-value" id="val-comp">—</div>
+      <div class="stat-unit">nm</div>
+    </div>
+    <div class="stat">
+      <div class="stat-label">Uncomp. Thickness</div>
+      <div class="stat-value" id="val-uncomp">—</div>
+      <div class="stat-unit">nm</div>
+    </div>
+  </div>
+
+  <!-- Charts -->
+  <div class="charts">
+
+    <div class="chart-card">
+      <div class="chart-header">
+        <div class="chart-title">Mass Mode Frequency</div>
+        <div class="chart-accent acc-mass"></div>
+      </div>
+      <div class="chart-wrap"><canvas id="chart-fM"></canvas></div>
+    </div>
+
+    <div class="chart-card">
+      <div class="chart-header">
+        <div class="chart-title">Temp Mode Frequency</div>
+        <div class="chart-accent acc-temp"></div>
+      </div>
+      <div class="chart-wrap"><canvas id="chart-fT"></canvas></div>
+    </div>
+
+    <div class="chart-card">
+      <div class="chart-header">
+        <div class="chart-title">Compensated Thickness</div>
+        <div class="chart-accent acc-comp"></div>
+      </div>
+      <div class="chart-wrap"><canvas id="chart-comp"></canvas></div>
+    </div>
+
+    <div class="chart-card">
+      <div class="chart-header">
+        <div class="chart-title">Temperature</div>
+        <div class="chart-accent acc-temp"></div>
+      </div>
+      <div class="chart-wrap"><canvas id="chart-temp"></canvas></div>
+    </div>
+
+  </div>
+
+</main>
+
+<footer>
+  <span id="sample-count">0</span>
+  <span id="last-update">—</span>
+</footer>
+
+<script>
+// ============================================================
+// Config
+// ============================================================
+const WS_URL      = `ws://${location.hostname}:8000/ws`;
+const API_URL     = `http://${location.hostname}:8000`;
+const MAX_POINTS  = 300;
+
+// ============================================================
+// Chart factory
+// ============================================================
+function makeChart(id, color, yLabel) {
+  const ctx = document.getElementById(id).getContext('2d');
+  return new Chart(ctx, {
+    type: 'line',
+    data: {
+      labels: [],
+      datasets: [{
+        data: [],
+        borderColor: color,
+        borderWidth: 1.5,
+        pointRadius: 0,
+        tension: 0.3,
+        fill: true,
+        backgroundColor: color + '12',
+      }]
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      animation: false,
+      plugins: { legend: { display: false }, tooltip: { enabled: false } },
+      scales: {
+        x: {
+          display: false,
+        },
+        y: {
+          display: true,
+          title: { display: false },
+          ticks: {
+            color: '#3a4455',
+            font: { family: 'IBM Plex Mono', size: 9 },
+            maxTicksLimit: 5,
+          },
+          grid: {
+            color: 'rgba(255,255,255,0.03)',
+            drawBorder: false,
+          }
+        }
+      }
+    }
+  });
+}
+
+const charts = {
+  fM:   makeChart('chart-fM',   '#00e5a0', 'Hz'),
+  fT:   makeChart('chart-fT',   '#4db8ff', 'Hz'),
+  comp: makeChart('chart-comp', '#ff9f43', 'nm'),
+  temp: makeChart('chart-temp', '#4db8ff', '°C'),
+};
+
+// ============================================================
+// Data push
+// ============================================================
+let sampleCount = 0;
+
+function pushPoint(chart, value) {
+  const d = chart.data;
+  d.labels.push('');
+  d.datasets[0].data.push(value);
+  if (d.labels.length > MAX_POINTS) {
+    d.labels.shift();
+    d.datasets[0].data.shift();
+  }
+  chart.update('none');
+}
+
+function fmt(v, decimals = 3) {
+  if (v === null || v === undefined) return '—';
+  return Number(v).toFixed(decimals);
+}
+
+function onMeasurement(e) {
+  // Stats
+  document.getElementById('val-fM').textContent    = fmt(e.freq_mass_mode, 3);
+  document.getElementById('val-fT').textContent    = fmt(e.freq_temp_mode, 3);
+  document.getElementById('val-T').textContent     = fmt(e.calculated_temp, 2);
+  document.getElementById('val-comp').textContent  = fmt(e.calculated_mass, 4);
+  document.getElementById('val-uncomp').textContent= fmt(e.uncompensated_mass, 4);
+
+  // Charts
+  pushPoint(charts.fM,   e.freq_mass_mode);
+  pushPoint(charts.fT,   e.freq_temp_mode);
+  pushPoint(charts.comp, e.calculated_mass);
+  pushPoint(charts.temp, e.calculated_temp);
+
+  // Footer
+  sampleCount++;
+  document.getElementById('sample-count').textContent = sampleCount;
+  document.getElementById('last-update').textContent =
+    new Date().toISOString().replace('T', '  ').slice(0, 22);
+}
+
+// ============================================================
+// WebSocket
+// ============================================================
+let ws = null;
+
+function setStatus(state) {
+  const dot   = document.getElementById('ws-dot');
+  const label = document.getElementById('ws-label');
+  dot.className = state;
+  label.textContent = state.toUpperCase();
+}
+
+function connect() {
+  ws = new WebSocket(WS_URL);
+
+  ws.onopen  = () => setStatus('connected');
+  ws.onclose = () => { setStatus(''); setTimeout(connect, 2000); };
+  ws.onerror = () => setStatus('error');
+
+  ws.onmessage = (msg) => {
+    try {
+      const event = JSON.parse(msg.data);
+      if (event.type === 'MeasurementEvent') onMeasurement(event);
+    } catch (err) {
+      console.warn('Bad message:', msg.data);
+    }
+  };
+}
+
+connect();
+
+// ============================================================
+// Control buttons
+// ============================================================
+async function sendCommand(action) {
+  const endpoint = action === 'start'
+    ? `${API_URL}/measurement/start`
+    : `${API_URL}/measurement/stop`;
+  try {
+    await fetch(endpoint, { method: 'POST' });
+  } catch (err) {
+    console.error('Command failed:', err);
+  }
+}
+</script>
+
+</body>
+</html>

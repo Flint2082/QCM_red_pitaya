@@ -60,9 +60,9 @@ def main():
     # ==================================================
 
     application = Application(
-        command_queue=app_command_queue,
-        event_queue=app_event_queue,
-        system_state=None
+        worker_command_queue=worker_command_queue,
+        worker_event_queue=worker_event_queue,
+        system_state=None # placeholder - we can add a shared state object later if needed
     )
 
     application.run()

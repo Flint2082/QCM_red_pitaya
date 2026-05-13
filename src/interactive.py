@@ -7,7 +7,7 @@ from IPython import start_ipython
 from domain.fpga_interface import FPGAInterface
 from domain.qcm_interface import QCMInterface
 from workers.qcm_worker import QCMWorker
-# from app.application import Application
+from app.application import Application
 # from api.server import RestServer
 # from opcua.client import OPCUAClient
 # from app.state import SystemState

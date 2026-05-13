@@ -35,7 +35,7 @@ class QCMWorker(threading.Thread):
         while self.running:
             try:
                 try:
-                    command = self.command_queue.get(timeout=0.01) # non-blocking with timeout
+                    command = self.command_queue.get(timeout=0.1) # non-blocking with timeout
 
                     if command is not None:
                         self.handle_command(command)
@@ -61,7 +61,7 @@ class QCMWorker(threading.Thread):
         # Start measurement
         if isinstance(command, StartMeasurementCommand) and self.state == WorkerState.IDLE:
             self.state = WorkerState.MEASURING
-            # self.qcm.start_measurement()
+            self.qcm.setMeasurementReference()
             
         # Stop measurement
         elif isinstance(command, StopMeasurementCommand) and self.state == WorkerState.MEASURING:
@@ -91,7 +91,7 @@ class QCMWorker(threading.Thread):
         
         # Perform measurement acquisition if in measuring state
         if self.state == WorkerState.MEASURING:
-            fM, fT, T_calc, uncomp_thickness_nm, comp_thickness_nm, comp_m_freq = self.qcm.get_measurement() 
+            fM, fT, T_calc, uncomp_thickness_nm, comp_thickness_nm, comp_m_freq = self.qcm.getMeasurement() 
             self.event_queue.put(
                 MeasurementEvent(
                     freq_mass_mode=fM,

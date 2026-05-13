@@ -10,6 +10,7 @@ import queue
 import threading
 from contextlib import asynccontextmanager
 
+import app
 import uvicorn
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from fastapi.staticfiles import StaticFiles
@@ -53,7 +54,7 @@ class RestServer:
         self._loop: asyncio.AbstractEventLoop | None = None
         self.app = self._build_app()
         
-        self.app.mount("/", StaticFiles(directory="static", html=True), name="static")
+
 
     # --------------------------------------------------
     # Lifecycle
@@ -116,6 +117,8 @@ class RestServer:
             yield
 
         app = FastAPI(title="QCM API", version="0.1.0", lifespan=lifespan)
+        
+        app.mount("/", StaticFiles(directory="static", html=True), name="static")
 
         # ---- WebSocket ----
 

@@ -3,9 +3,7 @@ from enum import Enum, auto
 from typing import Optional
 from datetime import datetime
 
-@dataclass
-class Event:
-    timestamp: datetime = datetime.now()
+
 
 @dataclass
 class ErrorEvent(Event):
@@ -23,3 +21,6 @@ class MeasurementEvent(Event):
     
     
 
+@dataclass
+class Event:
+    timestamp: datetime = datetime.now()

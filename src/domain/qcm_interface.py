@@ -165,7 +165,7 @@ class QCMInterface:
             amplitudes.append(amplitude)
             print(f"Freq: {f}\t Phase: {phase}\t Amplitude: {amplitude}")      
              
-    def startup(self, start_freq_mass: float, start_freq_temp: float):
+    def startupPLL(self, start_freq_mass: float, start_freq_temp: float):
         self.reset()
         
         print(f"Starting up PLLs at frequencies {start_freq_mass} and {start_freq_temp}")
@@ -205,7 +205,7 @@ class QCMInterface:
         self.T_start = T # would be nice to measure this with a thermometer
         self.temp_comp = tca.TempCompAlgorithm(
             coefficient_file = self.coeff_file,
-            T_start=T, # would be nice to measure this with a thermometer
+            T_start=T, 
             mat_dens=mat_dens,
             fM_start= self.fM_start,  # Hz
             fT_start= self.fT_start # Hz
@@ -224,59 +224,6 @@ class QCMInterface:
         self.setFreq(2, fT - (self.window_size/2))
 
 
-    def startMeasurement(self, T = 23, moving_window = True, debug=False):
-        # Measurement routine
-
-        # Initialize the temperature compensation algorithm with calibration and starting values
-        temp_comp = tca.TempCompAlgorithm(
-            coefficient_file = self.coeff_file,
-            T_start=T, # would be nice to measure this with a thermometer
-            fT_start= self.getFreq(2), # Hz
-            fM_start= self.getFreq(1)  # Hz
-        )
-
-        # Initialize measurement loop
-        if debug:
-            print("Starting frequency T mode:", self.getFreq(1))
-            print("Starting frequency M mode:", self.getFreq(2))
-            print("Starting temperature:", T)
-            print("\nStarting measurement...\n")
-            print("Time \t\t Freq_T \t Freq_M \t Temp_C \t Temp_rela \t Uncomp_thick_nm \t Comp_thick_nm")
-            with open('data/output.csv', mode='w') as log_file:
-                log_file.write("Time,Freq_T,Freq_M,Temp_C,Uncomp_thick_nm,Comp_thick_nm\n")
-        else:
-            print("Temp_freq \t Mass_freq")        
-         
-            
-        try:
-        
-            ### Measurement loop
-            while True:
-                fT = self.getFreq(2)
-                fM = self.getFreq(1)
-                
-                ### Moving window logic: if enabled, makes the window "follow" the measurement     
-                if moving_window:
-                    self.setFreq(1, fM - (self.window_size/2))
-                    self.setFreq(2, fT - (self.window_size/2))
-                
-                # Calculate temperature and compensated thickness using the temp compensation algorithm
-                T_calc, uncompensated_thickness_nm, compensated_thickness_nm, compensated_m_freq = temp_comp.FreqToTemp(fT, fM)
-
-                # Print results to console and log to file if in debug mode, otherwise just print frequencies
-                if(debug==True):
-                    print(f"{calendar.timegm(time.gmtime())} \t {fT:.8f} \t {fM:.8f} \t {T_calc:.2f} \t {uncompensated_thickness_nm:.4f} \t {compensated_thickness_nm:.4f}")
-                    with open('data/output.csv', mode='a') as log_file:
-                        log_file.write(f"{calendar.timegm(time.gmtime())},{fT},{fM},{T_calc},{uncompensated_thickness_nm},{compensated_thickness_nm}\n")
-                else:
-                    print(f"{fT:.3f} \t {fM:.3f}")
-
-                       
-                time.sleep(0.1) # <-- set measurement interval here          #TODO: make this more robust
-        except KeyboardInterrupt:
-            print("\nMeasurement stopped by user")
-            
-
     def startCalibration(self, cal_file_name):
         # confirm overwrite
         if(input(f"This will overwrite {cal_file_name}. Continue? (y/n): ") != 'y'):
@@ -287,7 +234,7 @@ class QCMInterface:
                 cal_file.write(f"Temp,Freq_T,Freq_M\n")
         
         # Calibration routine
-        self.startup()
+        self.startupPLL()
         while(True):
             temp = input("Current Temperature (C): ")
             if temp == '0':

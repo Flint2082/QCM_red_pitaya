@@ -22,4 +22,11 @@ class MeasurementEvent(Event):
     calculated_temp: float
     compensated_freq: float
     
-    
+@dataclass
+class SystemStatusEvent(Event):
+    integrator_gain_mass_mode: float
+    integrator_gain_temp_mode: float
+    inv_mass_mode: bool
+    inv_temp_mode: bool
+    lock_status_mass_mode: bool
+    lock_status_temp_mode: bool

@@ -1,36 +1,115 @@
 # Responsible for:
-
-# orchestration
-# state updates
-# interpreting events
-# job tracking
-# coordination logic
+#
+# Orchestration
+# State updates
+# Interpreting worker events and forwarding them up to the API layer
+# Receiving commands from the API layer and forwarding them down to the worker
+# Job tracking and coordination logic
 
 import queue
 import threading
 
+from messaging.worker_command import (
+    StartMeasurementCommand,
+    StopMeasurementCommand,
+    SetFrequencyCommand,
+    SetIntegratorGainCommand,
+    StartSweepCommand,
+)
+from messaging.worker_event import (
+    MeasurementEvent,
+    ErrorEvent,
+)
+
 
 class Application(threading.Thread):
-    def __init__(self, worker_command_queue, worker_event_queue, system_state):
-        super().__init__(daemon=True)
+    def __init__(
+        self,
+        # Queues facing the worker (below)
+        worker_command_queue: queue.Queue,
+        worker_event_queue: queue.Queue,
+        # Queues facing the API layer (above)
+        api_command_queue: queue.Queue,
+        api_event_queue: queue.Queue,
+        system_state=None,
+    ):
+        super().__init__(daemon=True, name="application")
 
-        self.command_queue = worker_command_queue
-        self.event_queue = worker_event_queue
+        self.worker_command_queue = worker_command_queue
+        self.worker_event_queue = worker_event_queue
+        self.api_command_queue = api_command_queue
+        self.api_event_queue = api_event_queue
         self.system_state = system_state
         self.running = True
 
     def stop(self):
         self.running = False
 
+    # --------------------------------------------------
+    # Main loop
+    # --------------------------------------------------
+
     def run(self):
         print("Application started")
 
         while self.running:
-            try:
-                event = self.event_queue.get(timeout=0.1)
-                print(f"Application received event: {event}")
-
-            except queue.Empty:
-                pass
+            self._process_api_commands()
+            self._process_worker_events()
 
         print("Application stopped")
+
+    # --------------------------------------------------
+    # Inbound: commands from API → forward to worker
+    # --------------------------------------------------
+
+    def _process_api_commands(self):
+        try:
+            while True:
+                command = self.api_command_queue.get_nowait()
+                self._handle_api_command(command)
+        except queue.Empty:
+            pass
+
+    def _handle_api_command(self, command):
+        """
+        Translate API-layer commands into worker commands.
+        Add any orchestration logic here before forwarding.
+        """
+        if isinstance(command, (
+            StartMeasurementCommand,
+            StopMeasurementCommand,
+            SetFrequencyCommand,
+            SetIntegratorGainCommand,
+            StartSweepCommand,
+        )):
+            self.worker_command_queue.put(command)
+
+        else:
+            print(f"[Application] Unknown command type: {type(command)}")
+
+    # --------------------------------------------------
+    # Inbound: events from worker → forward to API layer
+    # --------------------------------------------------
+
+    def _process_worker_events(self):
+        try:
+            while True:
+                event = self.worker_event_queue.get_nowait()
+                self._handle_worker_event(event)
+        except queue.Empty:
+            pass
+
+    def _handle_worker_event(self, event):
+        """
+        React to worker events, update system state, then forward up to the API layer.
+        Add any business logic here before forwarding.
+        """
+        if isinstance(event, MeasurementEvent):
+            if self.system_state:
+                self.system_state.update(event)
+
+        elif isinstance(event, ErrorEvent):
+            print(f"[Application] Worker error: {event.message}")
+
+        # Forward everything up to the API layer (e.g. for WebSocket broadcast)
+        self.api_event_queue.put(event)

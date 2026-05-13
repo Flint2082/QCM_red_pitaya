@@ -10,6 +10,11 @@ class WorkerCommand:
 # ===========================================
 
 @dataclass
+class StartupPLLCommand(WorkerCommand):
+    start_freq_mass: float
+    start_freq_temp: float
+
+@dataclass
 class StartMeasurementCommand(WorkerCommand):
     pass
 

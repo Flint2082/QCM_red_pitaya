@@ -58,8 +58,11 @@ class QCMWorker(threading.Thread):
         # Control commands
         # ============================
         
+        if isinstance(command, StartupPLLCommand):
+            self.qcm.startupPLL(command.start_freq_mass, command.start_freq_temp)
+        
         # Start measurement
-        if isinstance(command, StartMeasurementCommand) and self.state == WorkerState.IDLE:
+        elif isinstance(command, StartMeasurementCommand) and self.state == WorkerState.IDLE:
             self.state = WorkerState.MEASURING
             self.qcm.setMeasurementReference()
             
@@ -102,3 +105,4 @@ class QCMWorker(threading.Thread):
                     compensated_freq=comp_m_freq
                 )
             )
+            self.qcm.moveWindow(fM, fT)

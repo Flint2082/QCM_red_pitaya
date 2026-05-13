@@ -8,7 +8,7 @@ from domain.fpga_interface import FPGAInterface
 from domain.qcm_interface import QCMInterface
 from workers.qcm_worker import QCMWorker
 from app.application import Application
-# from api.server import RestServer
+from api.server import RestServer
 # from opcua.client import OPCUAClient
 # from app.state import SystemState
 
@@ -38,8 +38,15 @@ def build_system():
     application = Application(
         worker_command_queue=worker_command_queue,
         worker_event_queue=worker_event_queue,
-        system_state=None
+        api_command_queue=app_command_queue,
+        api_event_queue=app_event_queue,
     )
+    
+    rest_server = RestServer(
+        app_command_queue=app_command_queue,
+        app_event_queue=app_event_queue,
+    )
+    rest_server.start()
 
     return dict(
         fpga=fpga,

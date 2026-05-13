@@ -118,7 +118,7 @@ class RestServer:
 
         app = FastAPI(title="QCM API", version="0.1.0", lifespan=lifespan)
         
-        app.mount("/", StaticFiles(directory="static", html=True), name="static")
+        app.mount("/", StaticFiles(directory="../static", html=True), name="static")
 
         # ---- WebSocket ----
 

@@ -22,7 +22,7 @@ class Application(threading.Thread):
     def stop(self):
         self.running = False
 
-    def run(self):
+    def start(self):
         print("Application started")
 
         while self.running:

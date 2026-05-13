@@ -74,7 +74,7 @@ def run_normal(system: dict):
     """Start worker + application threads and run the main loop."""
 
     system["qcm_worker"].start()
-    system["application"].run()
+    system["application"].start()
 
     shutdown = False
 

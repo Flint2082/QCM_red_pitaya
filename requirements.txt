@@ -2,4 +2,6 @@ opcua
 numpy
 utils
 ipython
-
+uvicorn
+fastapi
+aiofiles 

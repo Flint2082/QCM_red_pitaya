@@ -53,6 +53,7 @@ def build_system():
         qcm=qcm,
         qcm_worker=qcm_worker,
         application=application,
+        rest_server=rest_server,
         worker_command_queue=worker_command_queue,
         worker_event_queue=worker_event_queue,
         app_command_queue=app_command_queue,

@@ -11,7 +11,7 @@ import threading
 from contextlib import asynccontextmanager
 
 import uvicorn
-from fastapi import FastAPI, WebSocket, WebSocketDisconnect
+from fastapi import FastAPI, WebSocket, WebSocketDisconnect, StaticFiles
 
 from messaging.worker_command import *
 
@@ -51,6 +51,8 @@ class RestServer:
         self._thread: threading.Thread | None = None
         self._loop: asyncio.AbstractEventLoop | None = None
         self.app = self._build_app()
+        
+        self.app.mount("/static", StaticFiles(directory="static"), name="static")
 
     # --------------------------------------------------
     # Lifecycle
@@ -74,7 +76,7 @@ class RestServer:
         config = uvicorn.Config(
             app=self.app,
             host="0.0.0.0",
-            port=4000,
+            port=8000,
             loop="none",        # we provide the loop ourselves
             log_level="info",
         )

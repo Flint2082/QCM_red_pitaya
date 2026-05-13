@@ -53,7 +53,7 @@ class RestServer:
         self._loop: asyncio.AbstractEventLoop | None = None
         self.app = self._build_app()
         
-        self.app.mount("/static", StaticFiles(directory="static"), name="static")
+        self.app.mount("/", StaticFiles(directory="static", html=True), name="static")
 
     # --------------------------------------------------
     # Lifecycle

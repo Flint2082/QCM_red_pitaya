@@ -59,13 +59,13 @@ def main():
     # Application layer
     # ==================================================
 
-    # application = Application(
-    #     command_queue=app_command_queue,
-    #     event_queue=app_event_queue,
-    #     system_state=system_state
-    # )
+    application = Application(
+        command_queue=app_command_queue,
+        event_queue=app_event_queue,
+        system_state=system_state
+    )
 
-    # application.start()
+    application.run()
 
     # ==================================================
     # OPC UA

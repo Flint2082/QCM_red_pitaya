@@ -16,7 +16,7 @@ import uvicorn
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from fastapi.staticfiles import StaticFiles
 
-from messaging.worker_command import *
+from messaging.api_command import *
 
 
 # ==================================================

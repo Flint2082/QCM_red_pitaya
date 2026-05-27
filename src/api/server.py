@@ -47,9 +47,9 @@ class ConnectionManager:
 # ==================================================
 
 class RestServer:
-    def __init__(self, app_command_queue: queue.Queue, app_event_queue: queue.Queue):
-        self.command_queue = app_command_queue
-        self.event_queue = app_event_queue
+    def __init__(self, api_command_queue: queue.Queue, api_event_queue: queue.Queue):
+        self.command_queue = api_command_queue
+        self.event_queue = api_event_queue
         self.manager = ConnectionManager()
         self._thread: threading.Thread | None = None
         self._loop: asyncio.AbstractEventLoop | None = None

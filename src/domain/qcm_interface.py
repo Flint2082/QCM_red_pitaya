@@ -23,6 +23,11 @@ class QCMInterface:
         self.MASS_MODE = 1
         self.TEMP_MODE = 2
         
+        self.INT_PRE_LOCK = 0.0001
+        self.INT_POST_LOCK = 0.00001
+        
+        
+        
         self.coeff_file = os.path.join(base_dir, "..", "..", "data", "coeffecients.csv")
         
         self.T_start = 0
@@ -166,6 +171,9 @@ class QCMInterface:
             print(f"Freq: {f}\t Phase: {phase}\t Amplitude: {amplitude}")      
              
     def startupPLL(self, start_freq_mass: float, start_freq_temp: float):
+        self.bothLocked = False
+        
+        
         self.reset()
         
         print(f"Starting up PLLs at frequencies {start_freq_mass} and {start_freq_temp}")
@@ -173,31 +181,32 @@ class QCMInterface:
         ## 6MHz crystal
         self.setInv(1,1)                          
         self.setFreq(1,start_freq_mass)
-        self.setIQGain(1,0.00001)
+        self.setIQGain(1, self.INT_PRE_LOCK)
         self.setInt(1,0.1)
         
         self.setInv(2,1)
         self.setFreq(2,start_freq_temp)
-        self.setIQGain(2,0.00001)
+        self.setIQGain(2, self.INT_PRE_LOCK)
         self.setInt(2,0.1)
         
         # wait for the loops to stabilize before starting measurement
-        for _ in range(300):  # Wait for up to 30 seconds
-            if self.getLockDetect(1) and self.getLockDetect(2):
+        for time in range(100):  # Wait for up to 10 seconds
+            bothLocked = self.getLockDetect(1) and self.getLockDetect(2)
+            if bothLocked:
                 break
             # self.moveWindow(start_freq_mass, start_freq_temp) 
-            print("Waiting for PLLs to lock...")
+            print(f"Waiting for PLLs to lock... (Time: {time * 0.1:.1f}s)")
             time.sleep(0.1)
         
-        if not self.getLockDetect(1) or not self.getLockDetect(2):
+        if not bothLocked:
             print("Warning: PLLs did not lock within expected time. Check starting frequencies.")
         else:
             print("PLLs locked successfully at frequencies:")
             print(f"  Oscillator 1: {self.getFreq(1)} Hz")
             print(f"  Oscillator 2: {self.getFreq(2)} Hz")
 
-        self.setInt(1,0.00001)
-        self.setInt(2,0.00001)
+        self.setInt(1, self.INT_POST_LOCK)
+        self.setInt(2, self.INT_POST_LOCK)
         
     def setMeasurementReference(self, T = 23, mat_dens=19320):
         self.fM_start = self.getFreq(1)

@@ -18,7 +18,7 @@
     --mass-mode:  #00e5a0;
     --temp-mode:  #4db8ff;
     --comp:       #ff9f43;
-    --temp:       #c46ce7;
+    --temp:       #ff6b6b;
     --alert:      #ff4d6a;
     --grid:       rgba(255,255,255,0.03);
   }
@@ -53,7 +53,7 @@
     color: var(--text);
   }
 
-  .logo span { color: var(--mass); }
+  .logo span { color: var(--mass-mode); }
 
   .header-right { display: flex; align-items: center; gap: 20px; }
 
@@ -74,7 +74,7 @@
     transition: background 0.4s;
   }
 
-  #ws-dot.connected   { background: var(--mass); box-shadow: 0 0 6px var(--mass); }
+  #ws-dot.connected   { background: var(--mass-mode); box-shadow: 0 0 6px var(--mass-mode); }
   #ws-dot.error       { background: var(--alert); box-shadow: 0 0 6px var(--alert); }
 
   .ctrl-btn {
@@ -90,8 +90,8 @@
     color: var(--text-dim);
   }
 
-  #btn-start { border-color: var(--mass); color: var(--mass); }
-  #btn-start:hover { background: var(--mass); color: var(--bg); }
+  #btn-start { border-color: var(--mass-mode); color: var(--mass-mode); }
+  #btn-start:hover { background: var(--mass-mode); color: var(--bg); }
   #btn-lock  { border-color: var(--comp); color: var(--comp); }
   #btn-lock:hover  { background: var(--comp); color: var(--bg); }
   #btn-stop  { border-color: var(--alert); color: var(--alert); }
@@ -385,7 +385,7 @@ function onMeasurement(e) {
   // Stats
   document.getElementById('val-fM').textContent    = fmt(e.freq_mass_mode, 3);
   document.getElementById('val-fT').textContent    = fmt(e.freq_temp_mode, 3);
-  document.getElementById('val-T').textContent     = fmt(e.calculated_temp, 2);
+  document.getElementById('val-T').textContent     = fmt(e.calculated_temp, 6);
   document.getElementById('val-comp').textContent  = fmt(e.calculated_mass, 4);
   document.getElementById('val-uncomp').textContent= fmt(e.uncompensated_mass, 4);
 

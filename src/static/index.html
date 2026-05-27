@@ -15,9 +15,10 @@
     --muted:      #3a4455;
     --text:       #c8d4e0;
     --text-dim:   #5a6a7e;
-    --mass:       #00e5a0;
-    --temp:       #4db8ff;
+    --mass-mode:  #00e5a0;
+    --temp-mode:  #4db8ff;
     --comp:       #ff9f43;
+    --temp:       #c46ce7;
     --alert:      #ff4d6a;
     --grid:       rgba(255,255,255,0.03);
   }
@@ -147,9 +148,10 @@
     font-weight: 300;
   }
 
-  .stat.mass   .stat-value { color: var(--mass); }
-  .stat.temp   .stat-value { color: var(--temp); }
-  .stat.comp   .stat-value { color: var(--comp); }
+  .stat.mass-mode   .stat-value { color: var(--mass-mode); }
+  .stat.temp-mode   .stat-value { color: var(--temp-mode); }
+  .stat.comp        .stat-value { color: var(--comp); }
+  .stat.temp        .stat-value { color: var(--temp); }
 
   /* ---- Charts ---- */
   .charts {
@@ -187,10 +189,11 @@
   }
 
   .chart-accent { width: 24px; height: 2px; border-radius: 1px; }
-  .acc-mass { background: var(--mass); }
-  .acc-temp { background: var(--temp); }
+  .acc-mass-mode { background: var(--mass-mode); }
+  .acc-temp-mode { background: var(--temp-mode); }
   .acc-comp { background: var(--comp); }
-  .acc-both { background: linear-gradient(90deg, var(--mass), var(--temp)); }
+  .acc-temp { background: var(--temp); }
+  .acc-both { background: linear-gradient(90deg, var(--mass-mode), var(--temp-mode)); }
 
   .chart-wrap { flex: 1; position: relative; min-height: 0; }
 
@@ -258,7 +261,7 @@
     <div class="chart-card">
       <div class="chart-header">
         <div class="chart-title">Mass Mode Frequency</div>
-        <div class="chart-accent acc-mass"></div>
+        <div class="chart-accent acc-mass-mode"></div>
       </div>
       <div class="chart-wrap"><canvas id="chart-fM"></canvas></div>
     </div>
@@ -266,7 +269,7 @@
     <div class="chart-card">
       <div class="chart-header">
         <div class="chart-title">Temp Mode Frequency</div>
-        <div class="chart-accent acc-temp"></div>
+        <div class="chart-accent acc-temp-mode"></div>
       </div>
       <div class="chart-wrap"><canvas id="chart-fT"></canvas></div>
     </div>

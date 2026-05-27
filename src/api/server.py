@@ -80,7 +80,8 @@ class RestServer:
             app=self.app,
             host="0.0.0.0",
             port=8000,
-            loop="none",        # we provide the loop ourselves
+            loop="asyncio",        
+            ws="websockets", # explicitly tell uvicorn which WS library to use
             log_level="info",
         )
         server = uvicorn.Server(config)

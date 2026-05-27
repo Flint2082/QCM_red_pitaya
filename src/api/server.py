@@ -6,6 +6,7 @@
 # No business logic — pure transport
 
 import asyncio
+import os
 import queue
 import threading
 from contextlib import asynccontextmanager
@@ -168,7 +169,8 @@ class RestServer:
         
         # ---- Static files (for frontend) ----
                 
-        app.mount("/", StaticFiles(directory="static", html=True), name="static")
+        static_dir = os.path.join(os.path.dirname(__file__), "static")
+        app.mount("/", StaticFiles(directory=static_dir, html=True), name="static")
 
 
         return app

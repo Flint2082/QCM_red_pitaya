@@ -169,8 +169,8 @@ class RestServer:
         
         # ---- Static files (for frontend) ----
                 
-        static_dir = os.path.join(os.path.dirname(__file__), "..","static")
-        app.mount("/ui", StaticFiles(directory=static_dir, html=True), name="static")
+        static_dir = os.path.join(os.path.dirname(__file__), "..", "static")
+        app.mount("/", StaticFiles(directory=static_dir, html=True), name="static")
 
 
         return app

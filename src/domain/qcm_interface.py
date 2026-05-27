@@ -26,8 +26,7 @@ class QCMInterface:
         self.INT_PRE_LOCK = 0.0001
         self.INT_POST_LOCK = 0.00001
         
-        
-        
+        # variables 
         self.coeff_file = os.path.join(base_dir, "..", "..", "data", "coeffecients.csv")
         
         self.T_start = 0
@@ -36,7 +35,6 @@ class QCMInterface:
 
 
         self.fpga = fpga
-        print("CasperFpga connected to red pitaya")
 
         print("Newest file", newest_file)
 
@@ -172,30 +170,30 @@ class QCMInterface:
              
     def startupPLL(self, start_freq_mass: float, start_freq_temp: float):
         self.bothLocked = False
-        
+        self.MAX_STARTUP_TIME = 10  # seconds
         
         self.reset()
         
-        print(f"Starting up PLLs at frequencies {start_freq_mass} and {start_freq_temp}")
+        print(f"Starting up PLLs around frequencies {start_freq_mass} and {start_freq_temp}")
         
         ## 6MHz crystal
         self.setInv(1,1)                          
-        self.setFreq(1,start_freq_mass)
+        self.setFreq(1,start_freq_mass-self.WINDOW_SIZE/2)
         self.setIQGain(1, self.INT_PRE_LOCK)
         self.setInt(1,0.1)
         
         self.setInv(2,1)
-        self.setFreq(2,start_freq_temp)
+        self.setFreq(2,start_freq_temp-self.WINDOW_SIZE/2)
         self.setIQGain(2, self.INT_PRE_LOCK)
         self.setInt(2,0.1)
         
         # wait for the loops to stabilize before starting measurement
-        for t in range(100):  # Wait for up to 10 seconds
+        for t in range(self.MAX_STARTUP_TIME * 10):  # Wait for up to MAX_STARTUP_TIME seconds
             bothLocked = self.getLockDetect(1) and self.getLockDetect(2)
             if bothLocked:
                 break
             # self.moveWindow(start_freq_mass, start_freq_temp) 
-            print(f"Waiting for PLLs to lock... (Time: {t * 0.1:.1f}s)")
+            print(f"Waiting for PLLs to lock... (Time: {t * 0.1:.1f}s / {self.MAX_STARTUP_TIME}s)")
             time.sleep(0.1)
         
         if not bothLocked:

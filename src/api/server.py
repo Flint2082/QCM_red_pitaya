@@ -118,8 +118,6 @@ class RestServer:
 
         app = FastAPI(title="QCM API", version="0.1.0", lifespan=lifespan)
         
-        app.mount("/", StaticFiles(directory="static", html=True), name="static")
-
         # ---- WebSocket ----
 
         @app.websocket("/ws")
@@ -167,5 +165,10 @@ class RestServer:
         @app.get("/health")
         def health():
             return {"status": "ok"}
+        
+        # ---- Static files (for frontend) ----
+                
+        app.mount("/", StaticFiles(directory="static", html=True), name="static")
+
 
         return app

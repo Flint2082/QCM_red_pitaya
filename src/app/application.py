@@ -114,7 +114,7 @@ class Application(threading.Thread):
         if isinstance(event, we.MeasurementEvent):
             if self.system_state:
                 self.system_state.update(event)
-            self.api_event_queue.put(ae.MeasurementUpdateEvent(
+            self.api_event_queue.put(ae.MeasurementEvent(
                 event.freq_mass_mode,
                 event.freq_temp_mode,
                 event.uncompensated_mass,

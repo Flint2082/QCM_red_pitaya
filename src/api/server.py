@@ -137,6 +137,11 @@ class RestServer:
         def start_measurement():
             self.command_queue.put(StartMeasurementCommand())
             return {"status": "ok"}
+        
+        @app.post("/measurement/get_lock")
+        def get_lock():
+            self.command_queue.put(StartupPLLCommand())
+            return {"status": "ok"}
 
         @app.post("/measurement/stop")
         def stop_measurement():

@@ -9,17 +9,10 @@
 import queue
 import threading
 
-from messaging.worker_command import (
-    StartMeasurementCommand,
-    StopMeasurementCommand,
-    SetFrequencyCommand,
-    SetIntegratorGainCommand,
-    StartSweepCommand,
-)
-from messaging.worker_event import (
-    MeasurementEvent,
-    ErrorEvent,
-)
+import messaging.api_command as ac
+import messaging.api_event as ae
+import messaging.worker_command as wc
+import messaging.worker_event as we
 
 
 class Application(threading.Thread):
@@ -31,6 +24,7 @@ class Application(threading.Thread):
         # Queues facing the API layer (above)
         api_command_queue: queue.Queue,
         api_event_queue: queue.Queue,
+        
         system_state=None,
     ):
         super().__init__(daemon=True, name="application")
@@ -41,6 +35,9 @@ class Application(threading.Thread):
         self.api_event_queue = api_event_queue
         self.system_state = system_state
         self.running = True
+        
+        self.mass_mode_frequency = 5983000
+        self.temp_mode_frequency = 6570000
 
     def stop(self):
         self.running = False
@@ -75,14 +72,24 @@ class Application(threading.Thread):
         Translate API-layer commands into worker commands.
         Add any orchestration logic here before forwarding.
         """
-        if isinstance(command, (
-            StartMeasurementCommand,
-            StopMeasurementCommand,
-            SetFrequencyCommand,
-            SetIntegratorGainCommand,
-            StartSweepCommand,
-        )):
-            self.worker_command_queue.put(command)
+        if isinstance(command, ac.StartMeasurementCommand):     
+            self.worker_command_queue.put(wc.StartMeasurementCommand())
+        elif isinstance(command, ac.StopMeasurementCommand):
+            self.worker_command_queue.put(wc.StopMeasurementCommand())
+        elif isinstance(command, ac.StartupPLLCommand):
+            self.worker_command_queue.put(wc.StartupPLLCommand(self.mass_mode_frequency, self.temp_mode_frequency))
+        elif isinstance(command, ac.StartSweepCommand):
+            self.worker_command_queue.put(wc.StartSweepCommand(command.start_freq, command.stop_freq, command.step_size, command.settle_time))
+        elif isinstance(command, ac.SetFrequencyCommand):
+            self.worker_command_queue.put(wc.SetFrequencyCommand(command.oscillator_idx, command.frequency))
+        elif isinstance(command, ac.SetIntegratorGainCommand):
+            self.worker_command_queue.put(wc.SetIntegratorGainCommand(command.oscillator_idx, command.gain))
+        elif isinstance(command, ac.SetInvertedCommand):
+            self.worker_command_queue.put(wc.SetInvertedCommand(command.oscillator_idx, command.inverted))
+        elif isinstance(command, ac.SetIQGainCommand):
+            self.worker_command_queue.put(wc.SetIQGainCommand(command.oscillator_idx, command.gain))
+        elif isinstance(command, ac.SetOutputModeCommand):
+            self.worker_command_queue.put(wc.SetOutputModeCommand(command.oscillator_idx, command.mode))
 
         else:
             print(f"[Application] Unknown command type: {type(command)}")
@@ -104,12 +111,19 @@ class Application(threading.Thread):
         React to worker events, update system state, then forward up to the API layer.
         Add any business logic here before forwarding.
         """
-        if isinstance(event, MeasurementEvent):
+        if isinstance(event, we.MeasurementEvent):
             if self.system_state:
                 self.system_state.update(event)
+            self.api_event_queue.put(ae.MeasurementUpdateEvent(
+                event.freq_mass_mode,
+                event.freq_temp_mode,
+                event.uncompensated_mass,
+                event.calculated_mass,
+                event.calculated_temp,
+                event.compensated_freq
+            ))
 
-        elif isinstance(event, ErrorEvent):
+        elif isinstance(event, we.ErrorEvent):
             print(f"[Application] Worker error: {event.message}")
+            self.api_event_queue.put(ae.ErrorEvent(event.message))
 
-        # Forward everything up to the API layer (e.g. for WebSocket broadcast)
-        self.api_event_queue.put(event)

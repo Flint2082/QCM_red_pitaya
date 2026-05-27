@@ -91,6 +91,8 @@
 
   #btn-start { border-color: var(--mass); color: var(--mass); }
   #btn-start:hover { background: var(--mass); color: var(--bg); }
+  #btn-lock  { border-color: var(--comp); color: var(--comp); }
+  #btn-lock:hover  { background: var(--comp); color: var(--bg); }
   #btn-stop  { border-color: var(--alert); color: var(--alert); }
   #btn-stop:hover  { background: var(--alert); color: #fff; }
 
@@ -214,6 +216,7 @@
   <div class="header-right">
     <div id="ws-status"><div id="ws-dot"></div><span id="ws-label">DISCONNECTED</span></div>
     <button class="ctrl-btn" id="btn-start" onclick="sendCommand('start')">START</button>
+    <button class="ctrl-btn" id="btn-lock"  onclick="sendCommand('lock')">GET LOCK</button>
     <button class="ctrl-btn" id="btn-stop"  onclick="sendCommand('stop')">STOP</button>
   </div>
 </header>
@@ -433,7 +436,11 @@ connect();
 async function sendCommand(action) {
   const endpoint = action === 'start'
     ? `${API_URL}/measurement/start`
-    : `${API_URL}/measurement/stop`;
+    : action === 'stop'
+      ? `${API_URL}/measurement/stop`
+      : action === 'lock'
+        ? `${API_URL}/measurement/get_lock`
+        : null;
   try {
     await fetch(endpoint, { method: 'POST' });
   } catch (err) {

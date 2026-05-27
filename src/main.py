@@ -19,8 +19,8 @@ def build_system():
     worker_command_queue = queue.Queue()
     worker_event_queue = queue.Queue()
 
-    app_command_queue = queue.Queue()
-    app_event_queue = queue.Queue()
+    api_command_queue = queue.Queue()
+    api_event_queue = queue.Queue()
 
     fpga = FPGAInterface()
     if not fpga.load_bitstream():
@@ -38,13 +38,13 @@ def build_system():
     application = Application(
         worker_command_queue=worker_command_queue,
         worker_event_queue=worker_event_queue,
-        api_command_queue=app_command_queue,
-        api_event_queue=app_event_queue,
+        api_command_queue=api_command_queue,
+        api_event_queue=api_event_queue,
     )
     
     rest_server = RestServer(
-        app_command_queue=app_command_queue,
-        app_event_queue=app_event_queue,
+        api_command_queue=api_command_queue,
+        api_event_queue=api_event_queue,
     )
     rest_server.start()
 
@@ -56,8 +56,8 @@ def build_system():
         rest_server=rest_server,
         worker_command_queue=worker_command_queue,
         worker_event_queue=worker_event_queue,
-        app_command_queue=app_command_queue,
-        app_event_queue=app_event_queue,
+        api_command_queue=api_command_queue,
+        api_event_queue=api_event_queue,
     )
 
 

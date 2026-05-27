@@ -190,12 +190,12 @@ class QCMInterface:
         self.setInt(2,0.1)
         
         # wait for the loops to stabilize before starting measurement
-        for time in range(100):  # Wait for up to 10 seconds
+        for t in range(100):  # Wait for up to 10 seconds
             bothLocked = self.getLockDetect(1) and self.getLockDetect(2)
             if bothLocked:
                 break
             # self.moveWindow(start_freq_mass, start_freq_temp) 
-            print(f"Waiting for PLLs to lock... (Time: {time * 0.1:.1f}s)")
+            print(f"Waiting for PLLs to lock... (Time: {t * 0.1:.1f}s)")
             time.sleep(0.1)
         
         if not bothLocked:

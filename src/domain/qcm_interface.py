@@ -227,8 +227,8 @@ class QCMInterface:
         return fM, fT, T_calc, uncompensated_thickness_nm, compensated_thickness_nm, compensated_m_freq
     
     def moveWindow(self, fM, fT):
-        self.setFreq(1, fM - (self.window_size/2))
-        self.setFreq(2, fT - (self.window_size/2))
+        self.setFreq(1, fM - (self.WINDOW_SIZE/2))
+        self.setFreq(2, fT - (self.WINDOW_SIZE/2))
 
 
     def startCalibration(self, cal_file_name):

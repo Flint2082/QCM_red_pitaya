@@ -97,6 +97,49 @@
   #btn-stop  { border-color: var(--alert); color: var(--alert); }
   #btn-stop:hover  { background: var(--alert); color: #fff; }
 
+  /* ---- Temp input ---- */
+
+    .temp-input-wrap {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    border: 1px solid var(--border);
+    border-radius: 3px;
+    padding: 0 10px;
+    height: 30px;
+  }
+ 
+  .temp-input-wrap label {
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 10px;
+    letter-spacing: 0.08em;
+    color: var(--text-dim);
+    white-space: nowrap;
+  }
+ 
+  .temp-input-wrap input {
+    background: transparent;
+    border: none;
+    outline: none;
+    color: var(--text);
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 13px;
+    width: 52px;
+    text-align: right;
+  }
+ 
+  /* remove browser number input arrows */
+  .temp-input-wrap input::-webkit-outer-spin-button,
+  .temp-input-wrap input::-webkit-inner-spin-button { -webkit-appearance: none; }
+  .temp-input-wrap input[type=number] { -moz-appearance: textfield; }
+ 
+  .temp-input-wrap span {
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 10px;
+    color: var(--text-dim);
+  }
+ 
+
   /* ---- Layout ---- */
   main {
     flex: 1;
@@ -218,6 +261,11 @@
   <div class="logo">QCM<span>//</span>MONITOR</div>
   <div class="header-right">
     <div id="ws-status"><div id="ws-dot"></div><span id="ws-label">DISCONNECTED</span></div>
+    <div class="temp-input-wrap">
+      <label for="input-amb-temp">AMB TEMP</label>
+      <input id="input-amb-temp" type="number" value="23" min="-40" max="100" step="0.5">
+      <span>°C</span>
+    </div>
     <button class="ctrl-btn" id="btn-start" onclick="sendCommand('start')">START</button>
     <button class="ctrl-btn" id="btn-lock"  onclick="sendCommand('lock')">GET LOCK</button>
     <button class="ctrl-btn" id="btn-stop"  onclick="sendCommand('stop')">STOP</button>
@@ -437,13 +485,21 @@ connect();
 // Control buttons
 // ============================================================
 async function sendCommand(action) {
-  const endpoint = action === 'start'
-    ? `${API_URL}/measurement/start`
-    : action === 'stop'
-      ? `${API_URL}/measurement/stop`
-      : action === 'lock'
-        ? `${API_URL}/measurement/get_lock`
-        : null;
+  if (action === 'start') {
+    const ambTemp = parseFloat(document.getElementById('input-amb-temp').value);
+    if (isNaN(ambTemp)) {
+      alert('Enter a valid ambient temperature before starting.');
+      return;
+    }
+    endpoint = `${API_URL}/measurement/start?ambient_temp=${ambTemp}`;
+  } else if (action === 'stop') {
+    endpoint = `${API_URL}/measurement/stop`;
+  } else if (action === 'lock') {
+    endpoint = `${API_URL}/measurement/get_lock`;
+  } else {
+    console.error('Unknown command:', action);
+    return;
+  }
   try {
     await fetch(endpoint, { method: 'POST' });
   } catch (err) {

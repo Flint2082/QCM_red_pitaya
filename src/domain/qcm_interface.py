@@ -23,8 +23,9 @@ class QCMInterface:
         self.MASS_MODE = 1
         self.TEMP_MODE = 2
         
-        self.INT_PRE_LOCK = 0.0001
-        self.INT_POST_LOCK = 0.00001
+        self.INT_GAIN_PRE_LOCK = 0.0001
+        self.INT_GAIN_POST_LOCK = 0.00001
+        self.IQ_GAIN = 0.0001
         
         # variables 
         self.coeff_file = os.path.join(base_dir, "..", "..", "data", "coeffecients.csv")
@@ -136,7 +137,7 @@ class QCMInterface:
         self.standby(2)
         self.setFreq(1, 6000000)
         self.setInt(1, 0.00)
-        self.setIQGain(1, 0.00001)
+        self.setIQGain(1, self.IQ_GAIN)
 
         while True:
             try:
@@ -179,13 +180,13 @@ class QCMInterface:
         ## 6MHz crystal
         self.setInv(1,1)                          
         self.setFreq(1,start_freq_mass-self.WINDOW_SIZE/2)
-        self.setIQGain(1, self.INT_PRE_LOCK)
-        self.setInt(1,0.1)
+        self.setIQGain(1, self.IQ_GAIN)
+        self.setInt(1,self.INT_GAIN_PRE_LOCK)
         
         self.setInv(2,1)
         self.setFreq(2,start_freq_temp-self.WINDOW_SIZE/2)
-        self.setIQGain(2, self.INT_PRE_LOCK)
-        self.setInt(2,0.1)
+        self.setIQGain(2, self.IQ_GAIN)
+        self.setInt(2,self.INT_GAIN_PRE_LOCK)
         
         # wait for the loops to stabilize before starting measurement
         for t in range(self.MAX_STARTUP_TIME * 10):  # Wait for up to MAX_STARTUP_TIME seconds
@@ -203,8 +204,8 @@ class QCMInterface:
             print(f"  Oscillator 1: {self.getFreq(1)} Hz")
             print(f"  Oscillator 2: {self.getFreq(2)} Hz")
 
-        self.setInt(1, self.INT_POST_LOCK)
-        self.setInt(2, self.INT_POST_LOCK)
+        self.setInt(1, self.INT_GAIN_POST_LOCK)
+        self.setInt(2, self.INT_GAIN_POST_LOCK)
         
     def setMeasurementReference(self, T = 23, mat_dens=19320):
         self.fM_start = self.getFreq(1)

@@ -380,7 +380,8 @@ function switchSettings(name, el) {
 
 // ---- Chart factory ----
 const YAXIS = { display: true, ticks: { color: '#6b7585', font: { family: 'DM Mono', size: 9 }, maxTicksLimit: 4 }, grid: { color: 'rgba(255,255,255,0.03)' }, border: { color: 'transparent' } };
-const BASE_OPTS = { responsive: true, maintainAspectRatio: false, animation: false, plugins: { legend: { display: false }, tooltip: { enabled: false } }, scales: { x: { display: false }, y: YAXIS } };
+const TAXIS = { display: true, ticks: { color: '#6b7585', font: { family: 'DM Mono', size: 9 }, maxTicksLimit: 5, autoSkip: true }, grid: { display: false }, border: { color: 'transparent' } };
+const BASE_OPTS = { responsive: true, maintainAspectRatio: false, animation: false, plugins: { legend: { display: false }, tooltip: { enabled: false } }, scales: { x: TAXIS, y: YAXIS } };
 
 function makeChart(id, color) {
   const ctx = document.getElementById(id); if (!ctx) return null;
@@ -397,7 +398,7 @@ function makeDualChart(id, c1, c2) {
     ]},
     options: { ...structuredClone(BASE_OPTS),
       plugins: { tooltip: { enabled: false }, legend: { display: true, labels: { color: '#6b7585', font: { family: 'DM Mono', size: 9 }, boxWidth: 14, padding: 8 } } },
-      scales: { x: { display: false }, y: { ...YAXIS, position: 'left' }, y2: { ...YAXIS, position: 'right', grid: { drawOnChartArea: false } } }
+      scales: { x: TAXIS, y: { ...YAXIS, position: 'left' }, y2: { ...YAXIS, position: 'right', grid: { drawOnChartArea: false } } }
     }
   });
 }
@@ -456,10 +457,10 @@ function clearSweep() {
 
 let sampleCount = 0;
 
-function push(chart, value, dsIdx = 0, max = MAX_PTS_MAIN) {
+function push(chart, value, dsIdx = 0, max = MAX_PTS_MAIN, label = '') {
   if (!chart) return;
   const d = chart.data;
-  if (dsIdx === 0) d.labels.push('');
+  if (dsIdx === 0) d.labels.push(label);
   d.datasets[dsIdx].data.push(value);
   if (d.labels.length > max) { d.labels.shift(); d.datasets.forEach(ds => { if (ds.data.length > max) ds.data.shift(); }); }
   if (dsIdx === d.datasets.length - 1) chart.update('none');
@@ -478,6 +479,8 @@ function setMeta(id, v, u) { const el = document.getElementById(id); if (el) el.
 function setText(id, v) { const el = document.getElementById(id); if (el) el.textContent = v; }
 
 function onMeasurement(e) {
+  const ts = e.timestamp ? new Date(e.timestamp * 1000).toLocaleTimeString() : '';
+
   setText('val-comp',    fmt(e.calculated_thickness, 4));
   setText('val-T',       fmt(e.calculated_temp, 3));
   setText('val-uncomp',  fmt(e.uncompensated_thickness, 4));
@@ -487,15 +490,15 @@ function onMeasurement(e) {
   setText('val-uncomp-a',fmt(e.uncompensated_thickness, 4));
   setText('val-T-a',     fmt(e.calculated_temp, 6));
 
-  push(charts.mainComp, e.calculated_thickness);
-  push(charts.mainTemp, e.calculated_temp);
-  push(charts.fM,    e.freq_mass_mode,       0, MAX_PTS_MONITOR);
-  push(charts.fT,    e.freq_temp_mode,        0, MAX_PTS_MONITOR);
-  push(charts.compA, e.calculated_thickness,  0, MAX_PTS_MONITOR);
-  push(charts.tempA, e.calculated_temp,        0, MAX_PTS_MONITOR);
+  push(charts.mainComp, e.calculated_thickness,  0, MAX_PTS_MAIN,    ts);
+  push(charts.mainTemp, e.calculated_temp,         0, MAX_PTS_MAIN,    ts);
+  push(charts.fM,       e.freq_mass_mode,          0, MAX_PTS_MONITOR, ts);
+  push(charts.fT,       e.freq_temp_mode,           0, MAX_PTS_MONITOR, ts);
+  push(charts.compA,    e.calculated_thickness,    0, MAX_PTS_MONITOR, ts);
+  push(charts.tempA,    e.calculated_temp,          0, MAX_PTS_MONITOR, ts);
 
-  if (e.amp_mass != null) { push(charts.iq1, e.amp_mass, 0, MAX_PTS_MONITOR); push(charts.iq1, e.phase_mass, 1, MAX_PTS_MONITOR); }
-  if (e.amp_temp != null) { push(charts.iq2, e.amp_temp, 0, MAX_PTS_MONITOR); push(charts.iq2, e.phase_temp, 1, MAX_PTS_MONITOR); }
+  if (e.amp_mass != null) { push(charts.iq1, e.amp_mass,   0, MAX_PTS_MONITOR, ts); push(charts.iq1, e.phase_mass, 1, MAX_PTS_MONITOR); }
+  if (e.amp_temp != null) { push(charts.iq2, e.amp_temp,   0, MAX_PTS_MONITOR, ts); push(charts.iq2, e.phase_temp, 1, MAX_PTS_MONITOR); }
 
   setLock('mass', e.lock_mass);
   setLock('temp', e.lock_temp);

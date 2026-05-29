@@ -227,6 +227,7 @@ class QCMInterface:
         amp_temp, phase_temp = self.getAmpAndPhase(2)
         T_calc, uncompensated_thickness_nm, compensated_thickness_nm, compensated_m_freq = self.temp_comp.FreqToTemp(fT, fM)
         return MeasurementData(
+            timestamp=time.time(),
             freq_mass_mode=fM,
             freq_temp_mode=fT,
             uncompensated_thickness=uncompensated_thickness_nm,

@@ -3,6 +3,7 @@ from dataclasses import dataclass
 
 @dataclass
 class MeasurementData:
+    timestamp: float
     freq_mass_mode: float
     freq_temp_mode: float
     uncompensated_thickness: float

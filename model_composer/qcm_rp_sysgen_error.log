@@ -5,32 +5,19 @@ Matlab 9.10.0.2015706 (R2021a) Update 7 /usr/local/MATLAB/R2021a
 Vivado 2021.1                           /tools/Xilinx/Vivado/2021.1
 --------------------------------------------------------------------------------
 Summary of Errors:
-Error 0001: Illegal parameterization: Width of slice (number of bits)
-     Block: 'qcm_rp/Slice5'
-Error 0002: Incorrect slice end point
-     Block: 'qcm_rp/Slice5'
+Error 0001: Illegal number of bits
+     Block: 'qcm_rp/PLL_1/loop_filter1/AddSub1'
 --------------------------------------------------------------------------------
 
 Error 0001:
 
 Reported by:
-  'qcm_rp/Slice5'
+  'qcm_rp/PLL_1/loop_filter1/AddSub1'
 
 Details:
-Width of slice (number of bits) is set to a value of 32, but the
-value must be less than or equal to 17.  The input signal
-bit-width, 17, determines the upper bound for the width of the slice.
-Error occurred during "Rate and Type Error Checking".
+The data width on the s output port of this block grew to over
+4096 bits, and consequently rate and type propagation was aborted.
 
---------------------------------------------------------------------------------
-
-Error 0001:
-
-Reported by:
-  'qcm_rp/Slice5'
-
-Details:
-Slice endpoints must lie between the LSB and MSB
-Error occurred during "Rate and Type Error Checking".
-
+Check for unstable feedback through this block via the use of
+full precision arithmetic.
 --------------------------------------------------------------------------------

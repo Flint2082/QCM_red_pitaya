@@ -1,7 +1,6 @@
 from dataclasses import dataclass, field
 from enum import Enum, auto
 from typing import Optional
-from datetime import datetime, time
 
 from domain.measurement import MeasurementData
 from messaging.defines import WorkerState

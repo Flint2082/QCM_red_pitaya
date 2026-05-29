@@ -23,7 +23,7 @@ class QCMInterface:
         self.MASS_MODE = 1
         self.TEMP_MODE = 2
         
-        self.INT_GAIN_PRE_LOCK = 0.0001
+        self.INT_GAIN_PRE_LOCK = 0.01
         self.INT_GAIN_POST_LOCK = 0.00001
         self.IQ_GAIN = 0.0001
         

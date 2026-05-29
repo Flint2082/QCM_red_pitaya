@@ -6,507 +6,454 @@
 <title>QCM Monitor</title>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
 <style>
-  @import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@300;400;500&family=IBM+Plex+Sans:wght@300;400;500&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=DM+Mono:wght@300;400;500&family=DM+Sans:wght@300;400;500;600&display=swap');
 
-  :root {
-    --bg:         #0a0c0f;
-    --surface:    #111418;
-    --border:     #1e2530;
-    --muted:      #3a4455;
-    --text:       #c8d4e0;
-    --text-dim:   #5a6a7e;
-    --mass-mode:  #00e5a0;
-    --temp-mode:  #4db8ff;
-    --comp:       #ff9f43;
-    --temp:       #ff6b6b;
-    --alert:      #ff4d6a;
-    --grid:       rgba(255,255,255,0.03);
-  }
+:root {
+  --bg:          #1a1d23;
+  --surface:     #20242c;
+  --surface-2:   #272b35;
+  --border:      #2e3340;
+  --border-2:    #3a4050;
+  --text:        #d8dde8;
+  --text-dim:    #6b7585;
+  --text-mid:    #9aa3b2;
+  --blue:        #4a9eff;
+  --blue-dim:    rgba(74,158,255,0.12);
+  --green:       #2ecc8a;
+  --green-dim:   rgba(46,204,138,0.12);
+  --orange:      #f5a623;
+  --orange-dim:  rgba(245,166,35,0.12);
+  --red:         #e05c5c;
+  --red-dim:     rgba(224,92,92,0.12);
+  --purple:      #a78bfa;
+  --tab-h:       36px;
+  --header-h:    48px;
+  --toolbar-h:   44px;
+  --radius:      3px;
+}
 
-  * { box-sizing: border-box; margin: 0; padding: 0; }
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+body { background: var(--bg); color: var(--text); font-family: 'DM Sans', sans-serif; font-size: 13px; height: 100vh; display: flex; flex-direction: column; overflow: hidden; }
 
-  body {
-    background: var(--bg);
-    color: var(--text);
-    font-family: 'IBM Plex Sans', sans-serif;
-    font-size: 13px;
-    min-height: 100vh;
-    display: flex;
-    flex-direction: column;
-  }
+header { height: var(--header-h); background: var(--surface); border-bottom: 1px solid var(--border); display: flex; align-items: center; padding: 0 16px; gap: 16px; flex-shrink: 0; }
+.logo { font-family: 'DM Mono', monospace; font-size: 13px; font-weight: 500; letter-spacing: 0.14em; color: var(--text); display: flex; align-items: center; gap: 8px; flex-shrink: 0; }
+.logo-icon { width: 22px; height: 22px; border: 1.5px solid var(--blue); border-radius: 2px; display: flex; align-items: center; justify-content: center; }
+.logo-icon svg { width: 12px; height: 12px; stroke: var(--blue); fill: none; }
+.logo-sep { width: 1px; height: 20px; background: var(--border); }
+.device-badge { font-family: 'DM Mono', monospace; font-size: 10px; color: var(--text-dim); letter-spacing: 0.06em; background: var(--surface-2); border: 1px solid var(--border); border-radius: 2px; padding: 2px 8px; }
+.header-spacer { flex: 1; }
+.ws-indicator { display: flex; align-items: center; gap: 6px; font-family: 'DM Mono', monospace; font-size: 10px; color: var(--text-dim); letter-spacing: 0.06em; }
+.ws-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--border-2); transition: background 0.3s, box-shadow 0.3s; }
+.ws-dot.connected { background: var(--green); box-shadow: 0 0 5px var(--green); }
+.ws-dot.error     { background: var(--red);   box-shadow: 0 0 5px var(--red); }
 
-  /* ---- Header ---- */
-  header {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    padding: 14px 24px;
-    border-bottom: 1px solid var(--border);
-    background: var(--surface);
-  }
+.tab-bar { height: var(--tab-h); background: var(--surface); border-bottom: 1px solid var(--border); display: flex; align-items: flex-end; padding: 0 16px; gap: 2px; flex-shrink: 0; }
+.tab { height: 30px; padding: 0 18px; font-family: 'DM Mono', monospace; font-size: 11px; letter-spacing: 0.08em; color: var(--text-dim); background: transparent; border: 1px solid transparent; border-bottom: none; border-radius: 3px 3px 0 0; cursor: pointer; transition: color 0.15s, background 0.15s; display: flex; align-items: center; gap: 7px; position: relative; top: 1px; }
+.tab:hover { color: var(--text-mid); }
+.tab.active { color: var(--text); background: var(--bg); border-color: var(--border); }
+.tab-dot { width: 5px; height: 5px; border-radius: 50%; }
 
-  .logo {
-    font-family: 'IBM Plex Mono', monospace;
-    font-size: 15px;
-    font-weight: 500;
-    letter-spacing: 0.12em;
-    color: var(--text);
-  }
+.toolbar { height: var(--toolbar-h); background: var(--surface-2); border-bottom: 1px solid var(--border); display: flex; align-items: center; padding: 0 16px; gap: 8px; flex-shrink: 0; }
+.toolbar-sep { width: 1px; height: 20px; background: var(--border); margin: 0 4px; }
+.toolbar-label { font-family: 'DM Mono', monospace; font-size: 10px; color: var(--text-dim); letter-spacing: 0.08em; }
 
-  .logo span { color: var(--mass-mode); }
+.btn { font-family: 'DM Mono', monospace; font-size: 11px; letter-spacing: 0.06em; padding: 0 14px; height: 26px; border-radius: var(--radius); border: 1px solid var(--border); background: var(--surface); color: var(--text-mid); cursor: pointer; transition: all 0.12s; display: flex; align-items: center; gap: 6px; white-space: nowrap; }
+.btn:hover { border-color: var(--border-2); color: var(--text); background: var(--surface-2); }
+.btn.btn-green  { border-color: var(--green);  color: var(--green); }
+.btn.btn-green:hover  { background: var(--green-dim); }
+.btn.btn-blue   { border-color: var(--blue);   color: var(--blue); }
+.btn.btn-blue:hover   { background: var(--blue-dim); }
+.btn.btn-orange { border-color: var(--orange); color: var(--orange); }
+.btn.btn-orange:hover { background: var(--orange-dim); }
+.btn.btn-red    { border-color: var(--red);    color: var(--red); }
+.btn.btn-red:hover    { background: var(--red-dim); }
+.btn svg { width: 11px; height: 11px; fill: currentColor; flex-shrink: 0; }
 
-  .header-right { display: flex; align-items: center; gap: 20px; }
+.num-input-wrap { display: flex; align-items: center; gap: 5px; background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 0 8px; height: 26px; transition: border-color 0.12s; }
+.num-input-wrap:focus-within { border-color: var(--blue); }
+.num-input-wrap input { background: transparent; border: none; outline: none; color: var(--text); font-family: 'DM Mono', monospace; font-size: 12px; width: 56px; text-align: right; }
+.num-input-wrap input::-webkit-outer-spin-button, .num-input-wrap input::-webkit-inner-spin-button { -webkit-appearance: none; }
+.num-input-wrap input[type=number] { -moz-appearance: textfield; }
+.num-input-unit { font-family: 'DM Mono', monospace; font-size: 10px; color: var(--text-dim); }
 
-  #ws-status {
-    display: flex;
-    align-items: center;
-    gap: 7px;
-    font-family: 'IBM Plex Mono', monospace;
-    font-size: 11px;
-    color: var(--text-dim);
-    letter-spacing: 0.06em;
-  }
+.status-pill { font-family: 'DM Mono', monospace; font-size: 10px; letter-spacing: 0.06em; padding: 0 10px; height: 20px; border-radius: 10px; display: flex; align-items: center; gap: 5px; background: var(--surface); border: 1px solid var(--border); color: var(--text-dim); }
+.status-pill.idle    { border-color: var(--border-2); color: var(--text-dim); }
+.status-pill.running { border-color: var(--green); color: var(--green); background: var(--green-dim); }
+.status-pill.locking { border-color: var(--orange); color: var(--orange); background: var(--orange-dim); }
+.status-pill.error   { border-color: var(--red); color: var(--red); background: var(--red-dim); }
 
-  #ws-dot {
-    width: 7px; height: 7px;
-    border-radius: 50%;
-    background: var(--muted);
-    transition: background 0.4s;
-  }
+.content { flex: 1; overflow: hidden; display: flex; flex-direction: column; }
+.tab-panel { display: none; flex: 1; overflow: hidden; flex-direction: column; }
+.tab-panel.active { display: flex; }
 
-  #ws-dot.connected   { background: var(--mass-mode); box-shadow: 0 0 6px var(--mass-mode); }
-  #ws-dot.error       { background: var(--alert); box-shadow: 0 0 6px var(--alert); }
+.stat-bar { display: flex; gap: 1px; background: var(--border); border-bottom: 1px solid var(--border); flex-shrink: 0; }
+.stat { flex: 1; background: var(--surface-2); padding: 8px 14px; display: flex; flex-direction: column; gap: 3px; }
+.stat-label { font-family: 'DM Mono', monospace; font-size: 9px; letter-spacing: 0.1em; color: var(--text-dim); text-transform: uppercase; }
+.stat-value { font-family: 'DM Mono', monospace; font-size: 18px; font-weight: 500; color: var(--text); letter-spacing: -0.02em; line-height: 1; }
+.stat-unit  { font-family: 'DM Mono', monospace; font-size: 9px; color: var(--text-dim); }
 
-  .ctrl-btn {
-    font-family: 'IBM Plex Mono', monospace;
-    font-size: 11px;
-    letter-spacing: 0.08em;
-    padding: 6px 16px;
-    border-radius: 3px;
-    border: 1px solid var(--border);
-    cursor: pointer;
-    transition: all 0.15s;
-    background: transparent;
-    color: var(--text-dim);
-  }
+.chart-grid { flex: 1; display: grid; gap: 10px; background: var(--bg); overflow: hidden; padding: 12px; }
+.chart-card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); display: flex; flex-direction: column; overflow: hidden; min-height: 0; }
+.chart-card-header { display: flex; align-items: center; justify-content: space-between; padding: 7px 12px; border-bottom: 1px solid var(--border); flex-shrink: 0; }
+.chart-card-title { font-family: 'DM Mono', monospace; font-size: 10px; letter-spacing: 0.1em; text-transform: uppercase; color: var(--text-dim); display: flex; align-items: center; gap: 7px; }
+.chart-color-bar { width: 20px; height: 2px; border-radius: 1px; }
+.chart-card-meta { font-family: 'DM Mono', monospace; font-size: 10px; color: var(--text-mid); }
+.chart-body { flex: 1; padding: 6px 8px 8px; position: relative; min-height: 0; }
 
-  #btn-start { border-color: var(--mass-mode); color: var(--mass-mode); }
-  #btn-start:hover { background: var(--mass-mode); color: var(--bg); }
-  #btn-lock  { border-color: var(--comp); color: var(--comp); }
-  #btn-lock:hover  { background: var(--comp); color: var(--bg); }
-  #btn-stop  { border-color: var(--alert); color: var(--alert); }
-  #btn-stop:hover  { background: var(--alert); color: #fff; }
+.settings-layout { flex: 1; display: grid; grid-template-columns: 200px 1fr; overflow: hidden; }
+.settings-nav { background: var(--surface-2); border-right: 1px solid var(--border); padding: 12px 0; overflow-y: auto; }
+.settings-nav-item { padding: 8px 16px; font-family: 'DM Mono', monospace; font-size: 11px; letter-spacing: 0.06em; color: var(--text-dim); cursor: pointer; transition: color 0.12s, background 0.12s; display: flex; align-items: center; gap: 8px; }
+.settings-nav-item:hover { color: var(--text-mid); background: rgba(255,255,255,0.02); }
+.settings-nav-item.active { color: var(--blue); background: var(--blue-dim); }
+.settings-nav-section { padding: 14px 16px 4px; font-family: 'DM Mono', monospace; font-size: 9px; letter-spacing: 0.12em; text-transform: uppercase; color: var(--text-dim); opacity: 0.6; }
+.settings-content { overflow-y: auto; padding: 20px 24px; }
+.settings-panel { display: none; }
+.settings-panel.active { display: block; }
+.settings-section-title { font-family: 'DM Mono', monospace; font-size: 11px; letter-spacing: 0.1em; text-transform: uppercase; color: var(--text-mid); margin-bottom: 14px; padding-bottom: 8px; border-bottom: 1px solid var(--border); }
+.settings-group { margin-bottom: 28px; }
+.settings-row { display: grid; grid-template-columns: 220px 1fr auto; align-items: center; gap: 16px; padding: 8px 0; border-bottom: 1px solid rgba(255,255,255,0.03); }
+.settings-row-label { font-size: 12px; color: var(--text-mid); }
+.settings-row-desc { font-size: 11px; color: var(--text-dim); margin-top: 2px; }
+.settings-input { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); color: var(--text); font-family: 'DM Mono', monospace; font-size: 12px; padding: 4px 10px; width: 150px; text-align: right; outline: none; transition: border-color 0.12s; }
+.settings-input:focus { border-color: var(--blue); }
+.settings-input::-webkit-outer-spin-button, .settings-input::-webkit-inner-spin-button { -webkit-appearance: none; }
+.settings-input[type=number] { -moz-appearance: textfield; }
+.settings-unit { font-family: 'DM Mono', monospace; font-size: 10px; color: var(--text-dim); width: 36px; }
 
-  /* ---- Temp input ---- */
-
-    .temp-input-wrap {
-    display: flex;
-    align-items: center;
-    gap: 6px;
-    border: 1px solid var(--border);
-    border-radius: 3px;
-    padding: 0 10px;
-    height: 30px;
-  }
- 
-  .temp-input-wrap label {
-    font-family: 'IBM Plex Mono', monospace;
-    font-size: 10px;
-    letter-spacing: 0.08em;
-    color: var(--text-dim);
-    white-space: nowrap;
-  }
- 
-  .temp-input-wrap input {
-    background: transparent;
-    border: none;
-    outline: none;
-    color: var(--text);
-    font-family: 'IBM Plex Mono', monospace;
-    font-size: 13px;
-    width: 52px;
-    text-align: right;
-  }
- 
-  /* remove browser number input arrows */
-  .temp-input-wrap input::-webkit-outer-spin-button,
-  .temp-input-wrap input::-webkit-inner-spin-button { -webkit-appearance: none; }
-  .temp-input-wrap input[type=number] { -moz-appearance: textfield; }
- 
-  .temp-input-wrap span {
-    font-family: 'IBM Plex Mono', monospace;
-    font-size: 10px;
-    color: var(--text-dim);
-  }
- 
-
-  /* ---- Layout ---- */
-  main {
-    flex: 1;
-    display: grid;
-    grid-template-rows: auto 1fr auto;
-    grid-template-columns: 1fr;
-    gap: 0;
-    padding: 20px 24px;
-    gap: 16px;
-  }
-
-  /* ---- Stat bar ---- */
-  .stat-bar {
-    display: grid;
-    grid-template-columns: repeat(5, 1fr);
-    gap: 10px;
-  }
-
-  .stat {
-    background: var(--surface);
-    border: 1px solid var(--border);
-    border-radius: 4px;
-    padding: 12px 16px;
-    display: flex;
-    flex-direction: column;
-    gap: 6px;
-  }
-
-  .stat-label {
-    font-family: 'IBM Plex Mono', monospace;
-    font-size: 10px;
-    letter-spacing: 0.1em;
-    color: var(--text-dim);
-    text-transform: uppercase;
-  }
-
-  .stat-value {
-    font-family: 'IBM Plex Mono', monospace;
-    font-size: 20px;
-    font-weight: 500;
-    color: var(--text);
-    letter-spacing: -0.02em;
-    transition: color 0.2s;
-  }
-
-  .stat-unit {
-    font-size: 10px;
-    color: var(--text-dim);
-    font-weight: 300;
-  }
-
-  .stat.mass-mode   .stat-value { color: var(--mass-mode); }
-  .stat.temp-mode   .stat-value { color: var(--temp-mode); }
-  .stat.comp        .stat-value { color: var(--comp); }
-  .stat.temp        .stat-value { color: var(--temp); }
-
-  /* ---- Charts ---- */
-  .charts {
-    display: grid;
-    grid-template-columns: 1fr 1fr;
-    grid-template-rows: 1fr 1fr;
-    gap: 12px;
-  }
-
-  .chart-card {
-    background: var(--surface);
-    border: 1px solid var(--border);
-    border-radius: 4px;
-    padding: 14px 16px 10px;
-    display: flex;
-    flex-direction: column;
-    gap: 8px;
-    min-height: 200px;
-  }
-
-  .chart-card.span2 { grid-column: span 2; }
-
-  .chart-header {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-  }
-
-  .chart-title {
-    font-family: 'IBM Plex Mono', monospace;
-    font-size: 10px;
-    letter-spacing: 0.12em;
-    text-transform: uppercase;
-    color: var(--text-dim);
-  }
-
-  .chart-accent { width: 24px; height: 2px; border-radius: 1px; }
-  .acc-mass-mode { background: var(--mass-mode); }
-  .acc-temp-mode { background: var(--temp-mode); }
-  .acc-comp { background: var(--comp); }
-  .acc-temp { background: var(--temp); }
-  .acc-both { background: linear-gradient(90deg, var(--mass-mode), var(--temp-mode)); }
-
-  .chart-wrap { flex: 1; position: relative; min-height: 0; }
-
-  /* ---- Footer ---- */
-  footer {
-    padding: 8px 24px;
-    border-top: 1px solid var(--border);
-    display: flex;
-    justify-content: space-between;
-    font-family: 'IBM Plex Mono', monospace;
-    font-size: 10px;
-    color: var(--text-dim);
-    letter-spacing: 0.06em;
-  }
-
-  #sample-count::before { content: 'n = '; }
+footer { height: 24px; background: var(--surface); border-top: 1px solid var(--border); display: flex; align-items: center; justify-content: space-between; padding: 0 16px; flex-shrink: 0; }
+.footer-text { font-family: 'DM Mono', monospace; font-size: 10px; color: var(--text-dim); letter-spacing: 0.04em; }
 </style>
 </head>
 <body>
 
 <header>
-  <div class="logo">QCM<span>//</span>MONITOR</div>
-  <div class="header-right">
-    <div id="ws-status"><div id="ws-dot"></div><span id="ws-label">DISCONNECTED</span></div>
-    <div class="temp-input-wrap">
-      <label for="input-amb-temp">AMB TEMP</label>
-      <input id="input-amb-temp" type="number" value="23" min="-40" max="100" step="0.5">
-      <span>°C</span>
+  <div class="logo">
+    <div class="logo-icon">
+      <svg viewBox="0 0 12 12" stroke-width="1.5"><circle cx="6" cy="6" r="4"/><circle cx="6" cy="6" r="1.5" fill="var(--blue)" stroke="none"/></svg>
     </div>
-    <button class="ctrl-btn" id="btn-start" onclick="sendCommand('start')">START</button>
-    <button class="ctrl-btn" id="btn-lock"  onclick="sendCommand('lock')">GET LOCK</button>
-    <button class="ctrl-btn" id="btn-stop"  onclick="sendCommand('stop')">STOP</button>
+    QCM MONITOR
+  </div>
+  <div class="logo-sep"></div>
+  <div class="device-badge">RED PITAYA · ZYNQ 7010</div>
+  <div class="header-spacer"></div>
+  <div class="ws-indicator">
+    <div class="ws-dot" id="ws-dot"></div>
+    <span id="ws-label">DISCONNECTED</span>
   </div>
 </header>
 
-<main>
+<div class="tab-bar">
+  <button class="tab active" onclick="switchTab('main',this)"><div class="tab-dot" style="background:var(--green)"></div>MAIN</button>
+  <button class="tab" onclick="switchTab('analysis',this)"><div class="tab-dot" style="background:var(--blue)"></div>ANALYSIS</button>
+  <button class="tab" onclick="switchTab('settings',this)"><div class="tab-dot" style="background:var(--orange)"></div>SETTINGS</button>
+</div>
 
-  <!-- Stat bar -->
-  <div class="stat-bar">
-    <div class="stat mass">
-      <div class="stat-label">Mass Mode Freq</div>
-      <div class="stat-value" id="val-fM">—</div>
-      <div class="stat-unit">Hz</div>
+<div class="content">
+
+  <!-- MAIN -->
+  <div class="tab-panel active" id="panel-main">
+    <div class="toolbar">
+      <span class="toolbar-label">STATUS</span>
+      <div class="status-pill idle" id="status-pill"><div class="ws-dot" id="state-dot"></div><span id="state-label">IDLE</span></div>
+      <div class="toolbar-sep"></div>
+      <span class="toolbar-label">AMB TEMP</span>
+      <div class="num-input-wrap">
+        <input id="input-amb-temp" type="number" value="23" min="-40" max="100" step="0.5">
+        <span class="num-input-unit">°C</span>
+      </div>
+      <div class="toolbar-sep"></div>
+      <button class="btn btn-orange" onclick="sendCommand('lock')"><svg viewBox="0 0 12 12"><path d="M6 1a3 3 0 0 0-3 3v1H2v6h8V5H9V4a3 3 0 0 0-3-3zm0 1.5a1.5 1.5 0 0 1 1.5 1.5v1h-3V4A1.5 1.5 0 0 1 6 2.5z"/></svg>GET LOCK</button>
+      <button class="btn btn-green"  onclick="sendCommand('start')"><svg viewBox="0 0 12 12"><polygon points="3,2 10,6 3,10"/></svg>START</button>
+      <button class="btn btn-red"    onclick="sendCommand('stop')"><svg viewBox="0 0 12 12"><rect x="2.5" y="2.5" width="7" height="7"/></svg>STOP</button>
+      <div class="header-spacer"></div>
+      <button class="btn" onclick="clearCharts()">CLEAR</button>
     </div>
-    <div class="stat temp">
-      <div class="stat-label">Temp Mode Freq</div>
-      <div class="stat-value" id="val-fT">—</div>
-      <div class="stat-unit">Hz</div>
+    <div class="stat-bar">
+      <div class="stat"><div class="stat-label">Comp. Thickness</div><div class="stat-value" id="val-comp" style="color:var(--green)">—</div><div class="stat-unit">nm</div></div>
+      <div class="stat"><div class="stat-label">Temperature</div><div class="stat-value" id="val-T" style="color:var(--orange)">—</div><div class="stat-unit">°C</div></div>
+      <div class="stat"><div class="stat-label">Uncomp. Thickness</div><div class="stat-value" id="val-uncomp">—</div><div class="stat-unit">nm</div></div>
+      <div class="stat"><div class="stat-label">Sample Count</div><div class="stat-value" id="val-n">0</div><div class="stat-unit">points</div></div>
     </div>
-    <div class="stat">
-      <div class="stat-label">Temperature</div>
-      <div class="stat-value" id="val-T">—</div>
-      <div class="stat-unit">°C</div>
-    </div>
-    <div class="stat comp">
-      <div class="stat-label">Comp. Thickness</div>
-      <div class="stat-value" id="val-comp">—</div>
-      <div class="stat-unit">nm</div>
-    </div>
-    <div class="stat">
-      <div class="stat-label">Uncomp. Thickness</div>
-      <div class="stat-value" id="val-uncomp">—</div>
-      <div class="stat-unit">nm</div>
+    <div class="chart-grid" style="grid-template-columns:1fr; grid-template-rows:1fr 1fr;">
+      <div class="chart-card">
+        <div class="chart-card-header"><div class="chart-card-title"><div class="chart-color-bar" style="background:var(--green)"></div>COMPENSATED THICKNESS</div><div class="chart-card-meta" id="meta-comp">—</div></div>
+        <div class="chart-body"><canvas id="chart-main-comp"></canvas></div>
+      </div>
+      <div class="chart-card">
+        <div class="chart-card-header"><div class="chart-card-title"><div class="chart-color-bar" style="background:var(--orange)"></div>TEMPERATURE</div><div class="chart-card-meta" id="meta-temp">—</div></div>
+        <div class="chart-body"><canvas id="chart-main-temp"></canvas></div>
+      </div>
     </div>
   </div>
 
-  <!-- Charts -->
-  <div class="charts">
-
-    <div class="chart-card">
-      <div class="chart-header">
-        <div class="chart-title">Mass Mode Frequency</div>
-        <div class="chart-accent acc-mass-mode"></div>
+  <!-- ANALYSIS -->
+  <div class="tab-panel" id="panel-analysis">
+    <div class="toolbar">
+      <span class="toolbar-label">WINDOW</span>
+      <div class="num-input-wrap">
+        <input id="input-window" type="number" value="300" min="50" max="5000" step="50" onchange="MAX_PTS=Math.max(50,parseInt(this.value)||300)">
+        <span class="num-input-unit">pts</span>
       </div>
-      <div class="chart-wrap"><canvas id="chart-fM"></canvas></div>
+      <div class="toolbar-sep"></div>
+      <button class="btn" onclick="clearCharts()">CLEAR ALL</button>
+      <div class="header-spacer"></div>
+      <span style="font-family:'DM Mono',monospace;font-size:10px;color:var(--text-dim);letter-spacing:.06em"><span style="color:var(--green)">—</span> MASS &nbsp;<span style="color:var(--blue)">—</span> TEMP &nbsp;<span style="color:var(--purple)">- -</span> PHASE</span>
     </div>
-
-    <div class="chart-card">
-      <div class="chart-header">
-        <div class="chart-title">Temp Mode Frequency</div>
-        <div class="chart-accent acc-temp-mode"></div>
-      </div>
-      <div class="chart-wrap"><canvas id="chart-fT"></canvas></div>
+    <div class="stat-bar">
+      <div class="stat"><div class="stat-label">Mass Mode Freq</div><div class="stat-value" id="val-fM" style="color:var(--green)">—</div><div class="stat-unit">Hz</div></div>
+      <div class="stat"><div class="stat-label">Temp Mode Freq</div><div class="stat-value" id="val-fT" style="color:var(--blue)">—</div><div class="stat-unit">Hz</div></div>
+      <div class="stat"><div class="stat-label">Comp. Thickness</div><div class="stat-value" id="val-comp-a" style="color:var(--green)">—</div><div class="stat-unit">nm</div></div>
+      <div class="stat"><div class="stat-label">Uncomp. Thickness</div><div class="stat-value" id="val-uncomp-a">—</div><div class="stat-unit">nm</div></div>
+      <div class="stat"><div class="stat-label">Temperature</div><div class="stat-value" id="val-T-a" style="color:var(--orange)">—</div><div class="stat-unit">°C</div></div>
     </div>
-
-    <div class="chart-card">
-      <div class="chart-header">
-        <div class="chart-title">Compensated Thickness</div>
-        <div class="chart-accent acc-comp"></div>
-      </div>
-      <div class="chart-wrap"><canvas id="chart-comp"></canvas></div>
+    <div class="chart-grid" style="grid-template-columns:1fr 1fr; grid-template-rows:1fr 1fr 1fr; overflow-y:auto;">
+      <div class="chart-card"><div class="chart-card-header"><div class="chart-card-title"><div class="chart-color-bar" style="background:var(--green)"></div>MASS MODE FREQ</div><div class="chart-card-meta" id="meta-fM">—</div></div><div class="chart-body" style="min-height:110px"><canvas id="chart-fM"></canvas></div></div>
+      <div class="chart-card"><div class="chart-card-header"><div class="chart-card-title"><div class="chart-color-bar" style="background:var(--blue)"></div>TEMP MODE FREQ</div><div class="chart-card-meta" id="meta-fT">—</div></div><div class="chart-body" style="min-height:110px"><canvas id="chart-fT"></canvas></div></div>
+      <div class="chart-card"><div class="chart-card-header"><div class="chart-card-title"><div class="chart-color-bar" style="background:var(--green)"></div>COMP. THICKNESS</div><div class="chart-card-meta" id="meta-comp-a">—</div></div><div class="chart-body" style="min-height:110px"><canvas id="chart-comp-a"></canvas></div></div>
+      <div class="chart-card"><div class="chart-card-header"><div class="chart-card-title"><div class="chart-color-bar" style="background:var(--orange)"></div>TEMPERATURE</div><div class="chart-card-meta" id="meta-temp-a">—</div></div><div class="chart-body" style="min-height:110px"><canvas id="chart-temp-a"></canvas></div></div>
+      <div class="chart-card"><div class="chart-card-header"><div class="chart-card-title"><div class="chart-color-bar" style="background:var(--green)"></div>MASS MODE — AMP &amp; PHASE</div></div><div class="chart-body" style="min-height:110px"><canvas id="chart-iq1"></canvas></div></div>
+      <div class="chart-card"><div class="chart-card-header"><div class="chart-card-title"><div class="chart-color-bar" style="background:var(--blue)"></div>TEMP MODE — AMP &amp; PHASE</div></div><div class="chart-body" style="min-height:110px"><canvas id="chart-iq2"></canvas></div></div>
     </div>
-
-    <div class="chart-card">
-      <div class="chart-header">
-        <div class="chart-title">Temperature</div>
-        <div class="chart-accent acc-temp"></div>
-      </div>
-      <div class="chart-wrap"><canvas id="chart-temp"></canvas></div>
-    </div>
-
   </div>
 
-</main>
+  <!-- SETTINGS -->
+  <div class="tab-panel" id="panel-settings">
+    <div class="toolbar">
+      <button class="btn btn-blue" onclick="applyAllSettings()">APPLY ALL</button>
+      <div class="toolbar-sep"></div>
+      <span style="font-family:'DM Mono',monospace;font-size:10px;color:var(--text-dim);letter-spacing:.06em">Changes take effect on next START</span>
+    </div>
+    <div class="settings-layout">
+      <div class="settings-nav">
+        <div class="settings-nav-section">OSCILLATORS</div>
+        <div class="settings-nav-item active" onclick="switchSettings('osc1',this)">OSC 1 — Mass Mode</div>
+        <div class="settings-nav-item" onclick="switchSettings('osc2',this)">OSC 2 — Temp Mode</div>
+        <div class="settings-nav-section">MEASUREMENT</div>
+        <div class="settings-nav-item" onclick="switchSettings('meas',this)">Measurement</div>
+        <div class="settings-nav-section">SYSTEM</div>
+        <div class="settings-nav-item" onclick="switchSettings('system',this)">System</div>
+      </div>
+      <div class="settings-content">
+
+        <div class="settings-panel active" id="spanel-osc1">
+          <div class="settings-section-title">OSCILLATOR 1 — MASS MODE</div>
+          <div class="settings-group">
+            <div class="settings-row"><div><div class="settings-row-label">Start Frequency</div><div class="settings-row-desc">Initial PLL lock frequency</div></div><div></div><div style="display:flex;align-items:center;gap:6px"><input class="settings-input" type="number" id="s-osc1-freq" value="6000000" step="100"><span class="settings-unit">Hz</span></div></div>
+            <div class="settings-row"><div><div class="settings-row-label">Integrator Gain</div><div class="settings-row-desc">PLL loop integrator coefficient</div></div><div></div><div style="display:flex;align-items:center;gap:6px"><input class="settings-input" type="number" id="s-osc1-int" value="0.00001" step="0.000001"><span class="settings-unit"></span></div></div>
+            <div class="settings-row"><div><div class="settings-row-label">IQ Gain</div><div class="settings-row-desc">Demodulator gain factor</div></div><div></div><div style="display:flex;align-items:center;gap:6px"><input class="settings-input" type="number" id="s-osc1-iq" value="0.00001" step="0.000001"><span class="settings-unit"></span></div></div>
+            <div class="settings-row"><div><div class="settings-row-label">Invert Feedback</div><div class="settings-row-desc">Invert the feedback signal</div></div><div></div><div style="display:flex;align-items:center;gap:6px"><select class="settings-input" id="s-osc1-inv" style="width:150px;text-align:left"><option value="1">Enabled</option><option value="0">Disabled</option></select></div></div>
+          </div>
+          <button class="btn btn-blue" onclick="applyOscSettings(1)">APPLY OSC 1</button>
+        </div>
+
+        <div class="settings-panel" id="spanel-osc2">
+          <div class="settings-section-title">OSCILLATOR 2 — TEMP MODE</div>
+          <div class="settings-group">
+            <div class="settings-row"><div><div class="settings-row-label">Start Frequency</div><div class="settings-row-desc">Initial PLL lock frequency</div></div><div></div><div style="display:flex;align-items:center;gap:6px"><input class="settings-input" type="number" id="s-osc2-freq" value="6002000" step="100"><span class="settings-unit">Hz</span></div></div>
+            <div class="settings-row"><div><div class="settings-row-label">Integrator Gain</div><div class="settings-row-desc">PLL loop integrator coefficient</div></div><div></div><div style="display:flex;align-items:center;gap:6px"><input class="settings-input" type="number" id="s-osc2-int" value="0.00001" step="0.000001"><span class="settings-unit"></span></div></div>
+            <div class="settings-row"><div><div class="settings-row-label">IQ Gain</div><div class="settings-row-desc">Demodulator gain factor</div></div><div></div><div style="display:flex;align-items:center;gap:6px"><input class="settings-input" type="number" id="s-osc2-iq" value="0.00001" step="0.000001"><span class="settings-unit"></span></div></div>
+            <div class="settings-row"><div><div class="settings-row-label">Invert Feedback</div><div class="settings-row-desc">Invert the feedback signal</div></div><div></div><div style="display:flex;align-items:center;gap:6px"><select class="settings-input" id="s-osc2-inv" style="width:150px;text-align:left"><option value="1">Enabled</option><option value="0">Disabled</option></select></div></div>
+          </div>
+          <button class="btn btn-blue" onclick="applyOscSettings(2)">APPLY OSC 2</button>
+        </div>
+
+        <div class="settings-panel" id="spanel-meas">
+          <div class="settings-section-title">MEASUREMENT</div>
+          <div class="settings-group">
+            <div class="settings-row"><div><div class="settings-row-label">Ambient Temperature</div><div class="settings-row-desc">Starting reference temperature</div></div><div></div><div style="display:flex;align-items:center;gap:6px"><input class="settings-input" type="number" id="s-amb-temp" value="23" step="0.5"><span class="settings-unit">°C</span></div></div>
+            <div class="settings-row"><div><div class="settings-row-label">Material Density</div><div class="settings-row-desc">Deposited film material density</div></div><div></div><div style="display:flex;align-items:center;gap:6px"><input class="settings-input" type="number" id="s-mat-dens" value="19320" step="10"><span class="settings-unit">kg/m³</span></div></div>
+          </div>
+        </div>
+
+        <div class="settings-panel" id="spanel-system">
+          <div class="settings-section-title">SYSTEM</div>
+          <div class="settings-group">
+            <div class="settings-row"><div><div class="settings-row-label">API Host</div><div class="settings-row-desc">Backend server address</div></div><div></div><input class="settings-input" type="text" id="s-api-host" style="width:200px;text-align:left" value=""></div>
+            <div class="settings-row"><div><div class="settings-row-label">API Port</div><div class="settings-row-desc">Backend server port</div></div><div></div><div style="display:flex;align-items:center;gap:6px"><input class="settings-input" type="number" id="s-api-port" value="8000"><span class="settings-unit"></span></div></div>
+            <div class="settings-row"><div><div class="settings-row-label">Chart Window</div><div class="settings-row-desc">Number of points shown in charts</div></div><div></div><div style="display:flex;align-items:center;gap:6px"><input class="settings-input" type="number" id="s-window" value="300" step="50"><span class="settings-unit">pts</span></div></div>
+          </div>
+          <button class="btn btn-blue" onclick="applySystemSettings()">APPLY SYSTEM</button>
+        </div>
+
+      </div>
+    </div>
+  </div>
+
+</div>
 
 <footer>
-  <span id="sample-count">0</span>
-  <span id="last-update">—</span>
+  <span class="footer-text" id="footer-left">n = 0</span>
+  <span class="footer-text" id="footer-right">—</span>
 </footer>
 
 <script>
-// ============================================================
-// Config
-// ============================================================
-const WS_URL      = `ws://${location.hostname}:8000/ws`;
-const API_URL     = `http://${location.hostname}:8000`;
-const MAX_POINTS  = 300;
+let API_URL = `http://${location.hostname}:8000`;
+let WS_URL  = `ws://${location.hostname}:8000/ws`;
+let MAX_PTS = 300;
+document.getElementById('s-api-host').value = location.hostname;
 
-// ============================================================
-// Chart factory
-// ============================================================
-function makeChart(id, color, yLabel) {
-  const ctx = document.getElementById(id).getContext('2d');
+// ---- Tab switching ----
+function switchTab(name, el) {
+  document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+  el.classList.add('active');
+  document.querySelectorAll('.tab-panel').forEach(p => p.classList.toggle('active', p.id === 'panel-' + name));
+  setTimeout(() => Object.values(charts).forEach(c => c && c.resize()), 50);
+}
+
+function switchSettings(name, el) {
+  document.querySelectorAll('.settings-nav-item').forEach(i => i.classList.remove('active'));
+  el.classList.add('active');
+  document.querySelectorAll('.settings-panel').forEach(p => p.classList.toggle('active', p.id === 'spanel-' + name));
+}
+
+// ---- Chart factory ----
+const YAXIS = { display: true, ticks: { color: '#6b7585', font: { family: 'DM Mono', size: 9 }, maxTicksLimit: 4 }, grid: { color: 'rgba(255,255,255,0.03)' }, border: { color: 'transparent' } };
+const BASE_OPTS = { responsive: true, maintainAspectRatio: false, animation: false, plugins: { legend: { display: false }, tooltip: { enabled: false } }, scales: { x: { display: false }, y: YAXIS } };
+
+function makeChart(id, color) {
+  const ctx = document.getElementById(id); if (!ctx) return null;
+  return new Chart(ctx, { type: 'line', data: { labels: [], datasets: [{ data: [], borderColor: color, borderWidth: 1.5, pointRadius: 0, tension: 0.2, fill: true, backgroundColor: color + '14' }] }, options: structuredClone(BASE_OPTS) });
+}
+
+function makeDualChart(id, c1, c2) {
+  const ctx = document.getElementById(id); if (!ctx) return null;
   return new Chart(ctx, {
     type: 'line',
-    data: {
-      labels: [],
-      datasets: [{
-        data: [],
-        borderColor: color,
-        borderWidth: 1.5,
-        pointRadius: 0,
-        tension: 0.3,
-        fill: true,
-        backgroundColor: color + '12',
-      }]
-    },
-    options: {
-      responsive: true,
-      maintainAspectRatio: false,
-      animation: false,
-      plugins: { legend: { display: false }, tooltip: { enabled: false } },
-      scales: {
-        x: {
-          display: false,
-        },
-        y: {
-          display: true,
-          title: { display: false },
-          ticks: {
-            color: '#3a4455',
-            font: { family: 'IBM Plex Mono', size: 10 },
-            maxTicksLimit: 5,
-          },
-          grid: {
-            color: 'rgba(255,255,255,0.03)',
-            drawBorder: false,
-          }
-        }
-      }
+    data: { labels: [], datasets: [
+      { data: [], borderColor: c1, borderWidth: 1.5, pointRadius: 0, tension: 0.2, fill: false, yAxisID: 'y', label: 'AMP' },
+      { data: [], borderColor: c2, borderWidth: 1.5, pointRadius: 0, tension: 0.2, fill: false, yAxisID: 'y2', borderDash: [4,2], label: 'PHASE' },
+    ]},
+    options: { ...structuredClone(BASE_OPTS),
+      plugins: { tooltip: { enabled: false }, legend: { display: true, labels: { color: '#6b7585', font: { family: 'DM Mono', size: 9 }, boxWidth: 14, padding: 8 } } },
+      scales: { x: { display: false }, y: { ...YAXIS, position: 'left' }, y2: { ...YAXIS, position: 'right', grid: { drawOnChartArea: false } } }
     }
   });
 }
 
 const charts = {
-  fM:   makeChart('chart-fM',   '#00e5a0', 'Hz'),
-  fT:   makeChart('chart-fT',   '#4db8ff', 'Hz'),
-  comp: makeChart('chart-comp', '#ff9f43', 'nm'),
-  temp: makeChart('chart-temp', '#ff6b6b', '°C'),
+  mainComp: makeChart('chart-main-comp', '#2ecc8a'),
+  mainTemp: makeChart('chart-main-temp', '#f5a623'),
+  fM:       makeChart('chart-fM',        '#2ecc8a'),
+  fT:       makeChart('chart-fT',        '#4a9eff'),
+  compA:    makeChart('chart-comp-a',    '#2ecc8a'),
+  tempA:    makeChart('chart-temp-a',    '#f5a623'),
+  iq1:      makeDualChart('chart-iq1',   '#2ecc8a', '#a78bfa'),
+  iq2:      makeDualChart('chart-iq2',   '#4a9eff', '#a78bfa'),
 };
 
-// ============================================================
-// Data push
-// ============================================================
 let sampleCount = 0;
 
-function pushPoint(chart, value) {
+function push(chart, value, dsIdx = 0) {
+  if (!chart) return;
   const d = chart.data;
-  d.labels.push('');
-  d.datasets[0].data.push(value);
-  if (d.labels.length > MAX_POINTS) {
-    d.labels.shift();
-    d.datasets[0].data.shift();
-  }
-  chart.update('none');
+  if (dsIdx === 0) d.labels.push('');
+  d.datasets[dsIdx].data.push(value);
+  const max = MAX_PTS;
+  if (d.labels.length > max) { d.labels.shift(); d.datasets.forEach(ds => { if (ds.data.length > max) ds.data.shift(); }); }
+  if (dsIdx === d.datasets.length - 1) chart.update('none');
 }
 
-function fmt(v, decimals = 3) {
-  if (v === null || v === undefined) return '—';
-  return Number(v).toFixed(decimals);
-}
+function fmt(v, d = 3) { return (v == null) ? '—' : Number(v).toFixed(d); }
+function setMeta(id, v, u) { const el = document.getElementById(id); if (el) el.textContent = v != null ? `${fmt(v,4)} ${u}` : '—'; }
+function setText(id, v) { const el = document.getElementById(id); if (el) el.textContent = v; }
 
 function onMeasurement(e) {
-  // Stats
-  document.getElementById('val-fM').textContent    = fmt(e.freq_mass_mode, 3);
-  document.getElementById('val-fT').textContent    = fmt(e.freq_temp_mode, 3);
-  document.getElementById('val-T').textContent     = fmt(e.calculated_temp, 6);
-  document.getElementById('val-comp').textContent  = fmt(e.calculated_mass, 4);
-  document.getElementById('val-uncomp').textContent= fmt(e.uncompensated_mass, 4);
+  setText('val-comp',    fmt(e.calculated_mass, 4));
+  setText('val-T',       fmt(e.calculated_temp, 2));
+  setText('val-uncomp',  fmt(e.uncompensated_mass, 4));
+  setText('val-fM',      fmt(e.freq_mass_mode, 2));
+  setText('val-fT',      fmt(e.freq_temp_mode, 2));
+  setText('val-comp-a',  fmt(e.calculated_mass, 4));
+  setText('val-uncomp-a',fmt(e.uncompensated_mass, 4));
+  setText('val-T-a',     fmt(e.calculated_temp, 2));
 
-  // Charts
-  pushPoint(charts.fM,   e.freq_mass_mode);
-  pushPoint(charts.fT,   e.freq_temp_mode);
-  pushPoint(charts.comp, e.calculated_mass);
-  pushPoint(charts.temp, e.calculated_temp);
+  push(charts.mainComp, e.calculated_mass);
+  push(charts.mainTemp, e.calculated_temp);
+  push(charts.fM,       e.freq_mass_mode);
+  push(charts.fT,       e.freq_temp_mode);
+  push(charts.compA,    e.calculated_mass);
+  push(charts.tempA,    e.calculated_temp);
 
-  // Footer
+  if (e.amp_1 != null) { push(charts.iq1, e.amp_1, 0); push(charts.iq1, e.phase_1, 1); }
+  if (e.amp_2 != null) { push(charts.iq2, e.amp_2, 0); push(charts.iq2, e.phase_2, 1); }
+
+  setMeta('meta-comp',   e.calculated_mass,  'nm');
+  setMeta('meta-temp',   e.calculated_temp,  '°C');
+  setMeta('meta-fM',     e.freq_mass_mode,   'Hz');
+  setMeta('meta-fT',     e.freq_temp_mode,   'Hz');
+  setMeta('meta-comp-a', e.calculated_mass,  'nm');
+  setMeta('meta-temp-a', e.calculated_temp,  '°C');
+
   sampleCount++;
-  document.getElementById('sample-count').textContent = sampleCount;
-  document.getElementById('last-update').textContent =
-    new Date().toISOString().replace('T', '  ').slice(0, 22);
+  setText('val-n', sampleCount);
+  setText('footer-left', `n = ${sampleCount}`);
+  setText('footer-right', new Date().toISOString().replace('T','  ').slice(0,22) + ' UTC');
 }
 
-// ============================================================
-// WebSocket
-// ============================================================
+function clearCharts() {
+  sampleCount = 0; setText('val-n','0'); setText('footer-left','n = 0');
+  Object.values(charts).forEach(c => { if (!c) return; c.data.labels=[]; c.data.datasets.forEach(d=>d.data=[]); c.update('none'); });
+}
+
+// ---- WebSocket ----
 let ws = null;
-
-function setStatus(state) {
-  const dot   = document.getElementById('ws-dot');
-  const label = document.getElementById('ws-label');
-  dot.className = state;
-  label.textContent = state.toUpperCase();
+function setWsStatus(s) {
+  document.getElementById('ws-dot').className = 'ws-dot ' + s;
+  document.getElementById('ws-label').textContent = s === 'connected' ? 'CONNECTED' : s === 'error' ? 'ERROR' : 'DISCONNECTED';
 }
-
 function connect() {
   ws = new WebSocket(WS_URL);
-
-  ws.onopen  = () => setStatus('connected');
-  ws.onclose = () => { setStatus(''); setTimeout(connect, 2000); };
-  ws.onerror = () => setStatus('error');
-
-  ws.onmessage = (msg) => {
+  ws.onopen  = () => setWsStatus('connected');
+  ws.onclose = () => { setWsStatus(''); setTimeout(connect, 2000); };
+  ws.onerror = () => setWsStatus('error');
+  ws.onmessage = msg => {
     try {
-      const event = JSON.parse(msg.data);
-      if (event.type === 'MeasurementEvent') onMeasurement(event);
-    } catch (err) {
-      console.warn('Bad message:', msg.data);
-    }
+      const ev = JSON.parse(msg.data);
+      if (ev.type === 'MeasurementEvent') onMeasurement(ev);
+      if (ev.type === 'StateEvent') onStateChange(ev.state);
+    } catch(e) { console.warn('Bad WS msg', e); }
   };
 }
-
 connect();
 
-// ============================================================
-// Control buttons
-// ============================================================
-async function sendCommand(action) {
-  if (action === 'start') {
-    const ambTemp = parseFloat(document.getElementById('input-amb-temp').value);
-    if (isNaN(ambTemp)) {
-      alert('Enter a valid ambient temperature before starting.');
-      return;
-    }
-    endpoint = `${API_URL}/measurement/start?ambient_temp=${ambTemp}`;
-  } else if (action === 'stop') {
-    endpoint = `${API_URL}/measurement/stop`;
-  } else if (action === 'lock') {
-    endpoint = `${API_URL}/measurement/get_lock`;
-  } else {
-    console.error('Unknown command:', action);
-    return;
-  }
-  try {
-    await fetch(endpoint, { method: 'POST' });
-  } catch (err) {
-    console.error('Command failed:', err);
-  }
+function onStateChange(state) {
+  const pill = document.getElementById('status-pill');
+  pill.className = 'status-pill ' + state.toLowerCase();
+  document.getElementById('state-label').textContent = state.toUpperCase();
 }
-</script>
 
+// ---- Commands ----
+async function sendCommand(action) {
+  let url;
+  if (action === 'start') {
+    const t = parseFloat(document.getElementById('input-amb-temp').value);
+    if (isNaN(t)) { alert('Enter a valid ambient temperature.'); return; }
+    url = `${API_URL}/measurement/start?ambient_temp=${t}`;
+  } else if (action === 'stop') {
+    url = `${API_URL}/measurement/stop`;
+  } else if (action === 'lock') {
+    url = `${API_URL}/measurement/get_lock`;
+  }
+  try { await fetch(url, { method: 'POST' }); } catch(e) { console.error('Command failed:', e); }
+}
+
+async function applyOscSettings(osc) {
+  const freq = parseFloat(document.getElementById(`s-osc${osc}-freq`).value);
+  const gain = parseFloat(document.getElementById(`s-osc${osc}-int`).value);
+  await fetch(`${API_URL}/settings/frequency?oscillator_idx=${osc}&frequency=${freq}`, { method: 'POST' });
+  await fetch(`${API_URL}/settings/integrator_gain?oscillator_idx=${osc}&gain=${gain}`, { method: 'POST' });
+}
+
+function applySystemSettings() {
+  const host = document.getElementById('s-api-host').value;
+  const port = document.getElementById('s-api-port').value;
+  MAX_PTS = Math.max(50, parseInt(document.getElementById('s-window').value) || 300);
+  API_URL = `http://${host}:${port}`;
+  WS_URL  = `ws://${host}:${port}/ws`;
+  if (ws) ws.close();
+}
+
+async function applyAllSettings() { await applyOscSettings(1); await applyOscSettings(2); applySystemSettings(); }
+</script>
 </body>
 </html>

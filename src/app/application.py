@@ -13,6 +13,15 @@ import messaging.api_command as ac
 import messaging.api_event as ae
 import messaging.worker_command as wc
 import messaging.worker_event as we
+from messaging.defines import WorkerState
+
+_STATE_MAP = {
+    WorkerState.IDLE:        "IDLE",
+    WorkerState.LOCKING:     "LOCKING",
+    WorkerState.MEASURING:   "RUNNING",
+    WorkerState.SWEEPING:    "SWEEPING",
+    WorkerState.CALIBRATING: "IDLE",
+}
 
 
 class Application(threading.Thread):
@@ -79,7 +88,7 @@ class Application(threading.Thread):
         elif isinstance(command, ac.StartupPLLCommand):
             self.worker_command_queue.put(wc.StartupPLLCommand(self.mass_mode_frequency, self.temp_mode_frequency))
         elif isinstance(command, ac.StartSweepCommand):
-            self.worker_command_queue.put(wc.StartSweepCommand(command.start_freq, command.stop_freq, command.step_size, command.settle_time))
+            self.worker_command_queue.put(wc.StartSweepCommand(command.oscillator_idx, command.start_freq, command.stop_freq, command.step_size, command.settle_time))
         elif isinstance(command, ac.SetFrequencyCommand):
             self.worker_command_queue.put(wc.SetFrequencyCommand(command.oscillator_idx, command.frequency))
         elif isinstance(command, ac.SetIntegratorGainCommand):
@@ -111,7 +120,10 @@ class Application(threading.Thread):
         React to worker events, update system state, then forward up to the API layer.
         Add any business logic here before forwarding.
         """
-        if isinstance(event, we.MeasurementEvent):
+        if isinstance(event, we.StateEvent):
+            self.api_event_queue.put(ae.StateEvent(state=_STATE_MAP.get(event.state, "IDLE")))
+
+        elif isinstance(event, we.MeasurementEvent):
             if self.system_state:
                 self.system_state.update(event)
             self.api_event_queue.put(ae.MeasurementEvent(data=event.data))

@@ -2,6 +2,7 @@ from enum import Enum, auto
 
 class WorkerState(Enum):
     IDLE = auto()
+    LOCKING = auto()
     MEASURING = auto()
     SWEEPING = auto()
     CALIBRATING = auto()

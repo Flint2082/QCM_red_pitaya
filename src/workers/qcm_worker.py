@@ -52,30 +52,35 @@ class QCMWorker(threading.Thread):
 
         print("QCM worker stopped")
 
+    def _set_state(self, new_state: WorkerState):
+        self.state = new_state
+        self.event_queue.put(StateEvent(state=new_state))
+
     def handle_command(self, command):
 
         # ============================
         # Control commands
         # ============================
-        
+
         if isinstance(command, StartupPLLCommand):
+            self._set_state(WorkerState.LOCKING)
             self.qcm.startupPLL(command.start_freq_mass, command.start_freq_temp)
-        
+            self._set_state(WorkerState.IDLE)
+
         # Start measurement
         elif isinstance(command, StartMeasurementCommand) and self.state == WorkerState.IDLE:
-            self.state = WorkerState.MEASURING
             self.qcm.setMeasurementReference(T=command.ambient_temp)
-            
+            self._set_state(WorkerState.MEASURING)
+
         # Stop measurement
         elif isinstance(command, StopMeasurementCommand) and self.state == WorkerState.MEASURING:
-            self.state = WorkerState.IDLE
-            # self.qcm.stop_measurement()
-            
+            self._set_state(WorkerState.IDLE)
+
         # Sweep
         elif isinstance(command, StartSweepCommand) and self.state == WorkerState.IDLE:
-            self.state = WorkerState.SWEEPING
-            self.qcm.sweep(command.start_freq, command.stop_freq, command.step_size, command.settle_time)
-            self.state = WorkerState.IDLE
+            self._set_state(WorkerState.SWEEPING)
+            self.qcm.sweep(command.oscillator_idx, command.start_freq, command.stop_freq, command.step_size, command.settle_time)
+            self._set_state(WorkerState.IDLE)
 
         # ============================
         # Setting commands

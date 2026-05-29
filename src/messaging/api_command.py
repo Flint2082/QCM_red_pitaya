@@ -23,6 +23,7 @@ class StopMeasurementCommand(ApiCommand):
 
 @dataclass
 class StartSweepCommand(ApiCommand):
+    oscillator_idx: int
     start_freq: float
     stop_freq: float
     step_size: float

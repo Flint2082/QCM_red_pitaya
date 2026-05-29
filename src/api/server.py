@@ -53,6 +53,7 @@ class RestServer:
         self.manager = ConnectionManager()
         self._thread: threading.Thread | None = None
         self._loop: asyncio.AbstractEventLoop | None = None
+        self._last_state: str = "IDLE"
         self.app = self._build_app()
         
 
@@ -95,7 +96,10 @@ class RestServer:
         while True:
             try:
                 event = self.event_queue.get_nowait()
-                await self.manager.broadcast(self._serialise_event(event))
+                msg = self._serialise_event(event)
+                if msg.get("type") == "StateEvent":
+                    self._last_state = msg.get("state", "IDLE")
+                await self.manager.broadcast(msg)
             except queue.Empty:
                 await asyncio.sleep(0.01)
 
@@ -128,6 +132,7 @@ class RestServer:
         @app.websocket("/ws")
         async def websocket_endpoint(ws: WebSocket):
             await self.manager.connect(ws)
+            await ws.send_json({"type": "StateEvent", "state": self._last_state})
             try:
                 while True:
                     await ws.receive_text()   # keep connection alive; we only push, not receive
@@ -166,9 +171,13 @@ class RestServer:
         # ---- Sweep ----
 
         @app.post("/sweep/start")
-        def start_sweep(start_freq: float, stop_freq: float, step_size: float, settle_time: float):
-            self.command_queue.put(StartSweepCommand(start_freq, stop_freq, step_size, settle_time))
+        def start_sweep(oscillator_idx: int, start_freq: float, stop_freq: float, step_size: float, settle_time: float):
+            self.command_queue.put(StartSweepCommand(oscillator_idx, start_freq, stop_freq, step_size, settle_time))
             return {"status": "ok"}
+
+        @app.get("/state")
+        def get_state():
+            return {"state": self._last_state}
 
         # ---- Health ----
 

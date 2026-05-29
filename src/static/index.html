@@ -77,10 +77,11 @@ header { height: var(--header-h); background: var(--surface); border-bottom: 1px
 .num-input-unit { font-family: 'DM Mono', monospace; font-size: 10px; color: var(--text-dim); }
 
 .status-pill { font-family: 'DM Mono', monospace; font-size: 10px; letter-spacing: 0.06em; padding: 0 10px; height: 20px; border-radius: 10px; display: flex; align-items: center; gap: 5px; background: var(--surface); border: 1px solid var(--border); color: var(--text-dim); }
-.status-pill.idle    { border-color: var(--border-2); color: var(--text-dim); }
-.status-pill.running { border-color: var(--green); color: var(--green); background: var(--green-dim); }
-.status-pill.locking { border-color: var(--orange); color: var(--orange); background: var(--orange-dim); }
-.status-pill.error   { border-color: var(--red); color: var(--red); background: var(--red-dim); }
+.status-pill.idle     { border-color: var(--border-2); color: var(--text-dim); }
+.status-pill.running  { border-color: var(--green);  color: var(--green);  background: var(--green-dim); }
+.status-pill.locking  { border-color: var(--orange); color: var(--orange); background: var(--orange-dim); }
+.status-pill.sweeping { border-color: var(--blue);   color: var(--blue);   background: var(--blue-dim); }
+.status-pill.error    { border-color: var(--red);    color: var(--red);    background: var(--red-dim); }
 
 .content { flex: 1; overflow: hidden; display: flex; flex-direction: column; }
 .tab-panel { display: none; flex: 1; overflow: hidden; flex-direction: column; }

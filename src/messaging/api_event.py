@@ -15,6 +15,10 @@ class ErrorEvent(ApiEvent):
     message: str
 
 @dataclass
+class StateEvent(ApiEvent):
+    state: str
+
+@dataclass
 class MeasurementEvent(ApiEvent):
     data: MeasurementData
     

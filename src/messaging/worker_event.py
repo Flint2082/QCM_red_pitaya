@@ -4,6 +4,7 @@ from typing import Optional
 from datetime import datetime, time
 
 from domain.measurement import MeasurementData
+from messaging.defines import WorkerState
 
 @dataclass(kw_only=True)
 class Event:
@@ -13,6 +14,10 @@ class Event:
 @dataclass
 class ErrorEvent(Event):
     message: str
+
+@dataclass
+class StateEvent(Event):
+    state: WorkerState
 
 @dataclass
 class MeasurementEvent(Event):

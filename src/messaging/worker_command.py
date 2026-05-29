@@ -24,6 +24,7 @@ class StopMeasurementCommand(WorkerCommand):
 
 @dataclass
 class StartSweepCommand(WorkerCommand):
+    oscillator_idx: int
     start_freq: float
     stop_freq: float
     step_size: float

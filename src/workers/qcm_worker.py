@@ -94,7 +94,7 @@ class QCMWorker(threading.Thread):
         
         # Perform measurement acquisition if in measuring state
         if self.state == WorkerState.MEASURING:
-            fM, fT, T_calc, uncomp_thickness_nm, comp_thickness_nm, comp_m_freq = self.qcm.getMeasurement() 
+            fM, fT, T_calc, uncomp_thickness_nm, comp_thickness_nm, comp_m_freq, amp_mass, phase_mass, amp_temp, phase_temp = self.qcm.getMeasurement()
             self.event_queue.put(
                 MeasurementEvent(
                     freq_mass_mode=fM,
@@ -102,7 +102,11 @@ class QCMWorker(threading.Thread):
                     uncompensated_thickness=uncomp_thickness_nm,
                     calculated_thickness=comp_thickness_nm,
                     calculated_temp=T_calc,
-                    compensated_freq=comp_m_freq
+                    compensated_freq=comp_m_freq,
+                    amp_mass=amp_mass,
+                    phase_mass=phase_mass,
+                    amp_temp=amp_temp,
+                    phase_temp=phase_temp,
                 )
             )
             # self.qcm.moveWindow(fM, fT)

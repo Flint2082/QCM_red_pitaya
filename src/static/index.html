@@ -287,10 +287,12 @@ footer { height: 24px; background: var(--surface); border-top: 1px solid var(--b
 </footer>
 
 <script>
-let API_URL = `http://${location.hostname}:8000`;
-let WS_URL  = `ws://${location.hostname}:8000/ws`;
+const DEV_HOSTS = ['localhost', '127.0.0.1', ''];
+const backendHost = DEV_HOSTS.includes(location.hostname) ? 'rp-f0ea58.local' : location.hostname;
+let API_URL = `http://${backendHost}:8000`;
+let WS_URL  = `ws://${backendHost}:8000/ws`;
 let MAX_PTS = 300;
-document.getElementById('s-api-host').value = location.hostname;
+document.getElementById('s-api-host').value = backendHost;
 
 // ---- Tab switching ----
 function switchTab(name, el) {
@@ -374,8 +376,8 @@ function onMeasurement(e) {
   push(charts.compA,    e.calculated_thickness);
   push(charts.tempA,    e.calculated_temp);
 
-  if (e.amp_1 != null) { push(charts.iq1, e.amp_1, 0); push(charts.iq1, e.phase_1, 1); }
-  if (e.amp_2 != null) { push(charts.iq2, e.amp_2, 0); push(charts.iq2, e.phase_2, 1); }
+  if (e.amp_mass != null) { push(charts.iq1, e.amp_mass, 0); push(charts.iq1, e.phase_mass, 1); }
+  if (e.amp_temp != null) { push(charts.iq2, e.amp_temp, 0); push(charts.iq2, e.phase_temp, 1); }
 
   setMeta('meta-comp',   e.calculated_thickness,  'nm');
   setMeta('meta-temp',   e.calculated_temp,  '°C');

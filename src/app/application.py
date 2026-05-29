@@ -120,7 +120,11 @@ class Application(threading.Thread):
                 event.uncompensated_thickness,
                 event.calculated_thickness,
                 event.calculated_temp,
-                event.compensated_freq
+                event.compensated_freq,
+                event.amp_mass,
+                event.phase_mass,
+                event.amp_temp,
+                event.phase_temp,
             ))
 
         elif isinstance(event, we.ErrorEvent):

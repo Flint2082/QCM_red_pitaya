@@ -224,8 +224,10 @@ class QCMInterface:
     def getMeasurement(self):
         fM = self.getFreq(1)
         fT = self.getFreq(2)
+        amp_mass, phase_mass = self.getAmpAndPhase(1)
+        amp_temp, phase_temp = self.getAmpAndPhase(2)
         T_calc, uncompensated_thickness_nm, compensated_thickness_nm, compensated_m_freq = self.temp_comp.FreqToTemp(fT, fM)
-        return fM, fT, T_calc, uncompensated_thickness_nm, compensated_thickness_nm, compensated_m_freq
+        return fM, fT, T_calc, uncompensated_thickness_nm, compensated_thickness_nm, compensated_m_freq, amp_mass, phase_mass, amp_temp, phase_temp
     
     def moveWindow(self, fM, fT):
         self.setFreq(1, fM - (self.WINDOW_SIZE/2))

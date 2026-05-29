@@ -156,6 +156,10 @@ footer { height: 24px; background: var(--surface); border-top: 1px solid var(--b
       <span class="toolbar-label">STATUS</span>
       <div class="status-pill idle" id="status-pill"><div class="ws-dot" id="state-dot"></div><span id="state-label">IDLE</span></div>
       <div class="toolbar-sep"></div>
+      <span class="toolbar-label">PLL</span>
+      <div class="ws-indicator"><div class="ws-dot" id="lock-dot-mass"></div><span id="lock-label-mass" style="font-size:10px">MASS</span></div>
+      <div class="ws-indicator"><div class="ws-dot" id="lock-dot-temp"></div><span id="lock-label-temp" style="font-size:10px">TEMP</span></div>
+      <div class="toolbar-sep"></div>
       <span class="toolbar-label">AMB TEMP</span>
       <div class="num-input-wrap">
         <input id="input-amb-temp" type="number" value="23" min="-40" max="100" step="0.5">
@@ -213,10 +217,10 @@ footer { height: 24px; background: var(--surface); border-top: 1px solid var(--b
       <div class="stat"><div class="stat-label">Temperature</div><div class="stat-value" id="val-T-a" style="color:var(--orange)">—</div><div class="stat-unit">°C</div></div>
     </div>
     <div class="chart-grid" style="grid-template-columns:1fr 1fr; grid-template-rows:1fr 1fr 1fr; overflow-y:auto;">
-      <div class="chart-card"><div class="chart-card-header"><div class="chart-card-title"><div class="chart-color-bar" style="background:var(--green)"></div>MASS MODE FREQ</div><div class="chart-card-meta" id="meta-fM">—</div></div><div class="chart-body" style="min-height:110px"><canvas id="chart-fM"></canvas></div></div>
-      <div class="chart-card"><div class="chart-card-header"><div class="chart-card-title"><div class="chart-color-bar" style="background:var(--blue)"></div>TEMP MODE FREQ</div><div class="chart-card-meta" id="meta-fT">—</div></div><div class="chart-body" style="min-height:110px"><canvas id="chart-fT"></canvas></div></div>
       <div class="chart-card"><div class="chart-card-header"><div class="chart-card-title"><div class="chart-color-bar" style="background:var(--green)"></div>COMP. THICKNESS</div><div class="chart-card-meta" id="meta-comp-a">—</div></div><div class="chart-body" style="min-height:110px"><canvas id="chart-comp-a"></canvas></div></div>
       <div class="chart-card"><div class="chart-card-header"><div class="chart-card-title"><div class="chart-color-bar" style="background:var(--orange)"></div>TEMPERATURE</div><div class="chart-card-meta" id="meta-temp-a">—</div></div><div class="chart-body" style="min-height:110px"><canvas id="chart-temp-a"></canvas></div></div>
+      <div class="chart-card"><div class="chart-card-header"><div class="chart-card-title"><div class="chart-color-bar" style="background:var(--green)"></div>MASS MODE FREQ</div><div class="chart-card-meta" id="meta-fM">—</div></div><div class="chart-body" style="min-height:110px"><canvas id="chart-fM"></canvas></div></div>
+      <div class="chart-card"><div class="chart-card-header"><div class="chart-card-title"><div class="chart-color-bar" style="background:var(--blue)"></div>TEMP MODE FREQ</div><div class="chart-card-meta" id="meta-fT">—</div></div><div class="chart-body" style="min-height:110px"><canvas id="chart-fT"></canvas></div></div>
       <div class="chart-card"><div class="chart-card-header"><div class="chart-card-title"><div class="chart-color-bar" style="background:var(--green)"></div>MASS MODE — AMP &amp; PHASE</div></div><div class="chart-body" style="min-height:110px"><canvas id="chart-iq1"></canvas></div></div>
       <div class="chart-card"><div class="chart-card-header"><div class="chart-card-title"><div class="chart-color-bar" style="background:var(--blue)"></div>TEMP MODE — AMP &amp; PHASE</div></div><div class="chart-body" style="min-height:110px"><canvas id="chart-iq2"></canvas></div></div>
     </div>
@@ -297,7 +301,8 @@ const DEV_HOSTS = ['localhost', '127.0.0.1', ''];
 const backendHost = DEV_HOSTS.includes(location.hostname) ? 'rp-f0ea58.local' : location.hostname;
 let API_URL = `http://${backendHost}:8000`;
 let WS_URL  = `ws://${backendHost}:8000/ws`;
-let MAX_PTS = 300;
+let MAX_PTS_MAIN = 3000;
+let MAX_PTS_ANALYSIS = 300;
 function setWindow(v) {
   MAX_PTS = Math.max(50, parseInt(v) || 300);
   document.getElementById('input-window-main').value     = MAX_PTS;
@@ -367,6 +372,14 @@ function push(chart, value, dsIdx = 0) {
   if (dsIdx === d.datasets.length - 1) chart.update('none');
 }
 
+function setLock(mode, locked) {
+  const dot   = document.getElementById(`lock-dot-${mode}`);
+  const label = document.getElementById(`lock-label-${mode}`);
+  if (!dot) return;
+  dot.className   = 'ws-dot ' + (locked ? 'connected' : 'error');
+  label.textContent = (mode === 'mass' ? 'MASS' : 'TEMP') + (locked ? ' LOCKED' : ' UNLOCKED');
+}
+
 function fmt(v, d = 3) { return (v == null) ? '—' : Number(v).toFixed(d); }
 function setMeta(id, v, u) { const el = document.getElementById(id); if (el) el.textContent = v != null ? `${fmt(v,4)} ${u}` : '—'; }
 function setText(id, v) { const el = document.getElementById(id); if (el) el.textContent = v; }
@@ -390,6 +403,9 @@ function onMeasurement(e) {
 
   if (e.amp_mass != null) { push(charts.iq1, e.amp_mass, 0); push(charts.iq1, e.phase_mass, 1); }
   if (e.amp_temp != null) { push(charts.iq2, e.amp_temp, 0); push(charts.iq2, e.phase_temp, 1); }
+
+  setLock('mass', e.lock_mass);
+  setLock('temp', e.lock_temp);
 
   setMeta('meta-comp',   e.calculated_thickness,  'nm');
   setMeta('meta-temp',   e.calculated_temp,  '°C');

@@ -114,18 +114,7 @@ class Application(threading.Thread):
         if isinstance(event, we.MeasurementEvent):
             if self.system_state:
                 self.system_state.update(event)
-            self.api_event_queue.put(ae.MeasurementEvent(
-                event.freq_mass_mode,
-                event.freq_temp_mode,
-                event.uncompensated_thickness,
-                event.calculated_thickness,
-                event.calculated_temp,
-                event.compensated_freq,
-                event.amp_mass,
-                event.phase_mass,
-                event.amp_temp,
-                event.phase_temp,
-            ))
+            self.api_event_queue.put(ae.MeasurementEvent(data=event.data))
 
         elif isinstance(event, we.ErrorEvent):
             print(f"[Application] Worker error: {event.message}")

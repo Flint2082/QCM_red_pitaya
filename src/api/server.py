@@ -101,11 +101,14 @@ class RestServer:
 
     @staticmethod
     def _serialise_event(event) -> dict:
-        """Convert an event object to a JSON-serialisable dict."""
-        return {
-            "type": type(event).__name__,
-            **vars(event),
-        }
+        """Convert an event object to a JSON-serialisable dict, flattening nested dataclasses."""
+        result = {"type": type(event).__name__}
+        for k, v in vars(event).items():
+            if hasattr(v, "__dataclass_fields__"):
+                result.update(vars(v))
+            else:
+                result[k] = v
+        return result
 
     # --------------------------------------------------
     # FastAPI app

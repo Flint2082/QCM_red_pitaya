@@ -3,6 +3,8 @@ from enum import Enum, auto
 from typing import Optional
 from datetime import datetime, time
 
+from domain.measurement import MeasurementData
+
 @dataclass(kw_only=True)
 class Event:
     # timestamp: float = field(default_factory=time.time)
@@ -10,21 +12,11 @@ class Event:
 
 @dataclass
 class ErrorEvent(Event):
-    message: str    
-    
-    
+    message: str
+
 @dataclass
 class MeasurementEvent(Event):
-    freq_mass_mode: float
-    freq_temp_mode: float
-    uncompensated_thickness: float
-    calculated_thickness: float
-    calculated_temp: float
-    compensated_freq: float
-    amp_mass: float
-    phase_mass: float
-    amp_temp: float
-    phase_temp: float
+    data: MeasurementData
     
 @dataclass
 class SystemStatusEvent(Event):

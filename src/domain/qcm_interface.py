@@ -7,6 +7,8 @@ import calendar
 from collections import deque
 import numpy as np
 
+from domain.measurement import MeasurementData
+
 
 
 class QCMInterface:
@@ -115,14 +117,11 @@ class QCMInterface:
         Q = self.getQ(osc_index)
         return (I**2 + Q**2)**0.5, np.arctan2(Q, I)
     
-    def getLockDetect(self, osc_index):
-        amp, phase = self.getAmpAndPhase(osc_index)
-        
-        # Checks if the amplitude is above a certain threshold and if the phase is about 1 PI (which is expected for a properly locked loop in this configuration)
-        if amp > 0.1 and round(phase) == 3:
-            return True
-        else:
-            return False
+    def getLockDetect(self, osc_index, amp=None, phase=None):
+        if amp is None or phase is None:
+            amp, phase = self.getAmpAndPhase(osc_index)
+        # Amplitude above threshold and phase ~π (expected for a locked loop)
+        return amp > 0.1 and abs(round(phase)) == 3
     
     # ===========================
     # Control methods
@@ -227,7 +226,20 @@ class QCMInterface:
         amp_mass, phase_mass = self.getAmpAndPhase(1)
         amp_temp, phase_temp = self.getAmpAndPhase(2)
         T_calc, uncompensated_thickness_nm, compensated_thickness_nm, compensated_m_freq = self.temp_comp.FreqToTemp(fT, fM)
-        return fM, fT, T_calc, uncompensated_thickness_nm, compensated_thickness_nm, compensated_m_freq, amp_mass, phase_mass, amp_temp, phase_temp
+        return MeasurementData(
+            freq_mass_mode=fM,
+            freq_temp_mode=fT,
+            uncompensated_thickness=uncompensated_thickness_nm,
+            calculated_thickness=compensated_thickness_nm,
+            calculated_temp=T_calc,
+            compensated_freq=compensated_m_freq,
+            amp_mass=amp_mass,
+            phase_mass=phase_mass,
+            amp_temp=amp_temp,
+            phase_temp=phase_temp,
+            lock_mass=self.getLockDetect(1, amp=amp_mass, phase=phase_mass),
+            lock_temp=self.getLockDetect(2, amp=amp_temp, phase=phase_temp),
+        )
     
     def moveWindow(self, fM, fT):
         self.setFreq(1, fM - (self.WINDOW_SIZE/2))

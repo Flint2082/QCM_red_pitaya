@@ -16,7 +16,7 @@ class StartupPLLCommand(WorkerCommand):
 
 @dataclass
 class StartMeasurementCommand(WorkerCommand):
-    pass
+    ambient_temp: float
 
 @dataclass
 class StopMeasurementCommand(WorkerCommand):

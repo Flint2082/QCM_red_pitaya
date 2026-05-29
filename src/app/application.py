@@ -72,8 +72,8 @@ class Application(threading.Thread):
         Translate API-layer commands into worker commands.
         Add any orchestration logic here before forwarding.
         """
-        if isinstance(command, ac.StartMeasurementCommand):     
-            self.worker_command_queue.put(wc.StartMeasurementCommand())
+        if isinstance(command, ac.StartMeasurementCommand):
+            self.worker_command_queue.put(wc.StartMeasurementCommand(ambient_temp=command.ambient_temp))
         elif isinstance(command, ac.StopMeasurementCommand):
             self.worker_command_queue.put(wc.StopMeasurementCommand())
         elif isinstance(command, ac.StartupPLLCommand):

@@ -64,7 +64,7 @@ class QCMWorker(threading.Thread):
         # Start measurement
         elif isinstance(command, StartMeasurementCommand) and self.state == WorkerState.IDLE:
             self.state = WorkerState.MEASURING
-            self.qcm.setMeasurementReference()
+            self.qcm.setMeasurementReference(T=command.ambient_temp)
             
         # Stop measurement
         elif isinstance(command, StopMeasurementCommand) and self.state == WorkerState.MEASURING:

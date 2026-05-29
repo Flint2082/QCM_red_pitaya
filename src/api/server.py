@@ -134,8 +134,8 @@ class RestServer:
         # ---- Measurement control ----
 
         @app.post("/measurement/start")
-        def start_measurement():
-            self.command_queue.put(StartMeasurementCommand())
+        def start_measurement(ambient_temp: float):
+            self.command_queue.put(StartMeasurementCommand(ambient_temp=ambient_temp))
             return {"status": "ok"}
         
         @app.post("/measurement/get_lock")

@@ -15,7 +15,7 @@ class StartupPLLCommand(ApiCommand):
 
 @dataclass
 class StartMeasurementCommand(ApiCommand):
-    pass
+    ambient_temp: float
 
 @dataclass
 class StopMeasurementCommand(ApiCommand):

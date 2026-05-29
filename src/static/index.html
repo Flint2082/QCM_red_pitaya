@@ -162,6 +162,12 @@ footer { height: 24px; background: var(--surface); border-top: 1px solid var(--b
         <span class="num-input-unit">°C</span>
       </div>
       <div class="toolbar-sep"></div>
+      <span class="toolbar-label">WINDOW</span>
+      <div class="num-input-wrap">
+        <input id="input-window-main" type="number" value="300" min="50" max="5000" step="50" onchange="setWindow(this.value)">
+        <span class="num-input-unit">pts</span>
+      </div>
+      <div class="toolbar-sep"></div>
       <button class="btn btn-orange" onclick="sendCommand('lock')"><svg viewBox="0 0 12 12"><path d="M6 1a3 3 0 0 0-3 3v1H2v6h8V5H9V4a3 3 0 0 0-3-3zm0 1.5a1.5 1.5 0 0 1 1.5 1.5v1h-3V4A1.5 1.5 0 0 1 6 2.5z"/></svg>GET LOCK</button>
       <button class="btn btn-green"  onclick="sendCommand('start')"><svg viewBox="0 0 12 12"><polygon points="3,2 10,6 3,10"/></svg>START</button>
       <button class="btn btn-red"    onclick="sendCommand('stop')"><svg viewBox="0 0 12 12"><rect x="2.5" y="2.5" width="7" height="7"/></svg>STOP</button>
@@ -191,7 +197,7 @@ footer { height: 24px; background: var(--surface); border-top: 1px solid var(--b
     <div class="toolbar">
       <span class="toolbar-label">WINDOW</span>
       <div class="num-input-wrap">
-        <input id="input-window" type="number" value="300" min="50" max="5000" step="50" onchange="MAX_PTS=Math.max(50,parseInt(this.value)||300)">
+        <input id="input-window-analysis" type="number" value="300" min="50" max="5000" step="50" onchange="setWindow(this.value)">
         <span class="num-input-unit">pts</span>
       </div>
       <div class="toolbar-sep"></div>
@@ -292,6 +298,12 @@ const backendHost = DEV_HOSTS.includes(location.hostname) ? 'rp-f0ea58.local' : 
 let API_URL = `http://${backendHost}:8000`;
 let WS_URL  = `ws://${backendHost}:8000/ws`;
 let MAX_PTS = 300;
+function setWindow(v) {
+  MAX_PTS = Math.max(50, parseInt(v) || 300);
+  document.getElementById('input-window-main').value     = MAX_PTS;
+  document.getElementById('input-window-analysis').value = MAX_PTS;
+  document.getElementById('s-window').value              = MAX_PTS;
+}
 document.getElementById('s-api-host').value = backendHost;
 
 // ---- Tab switching ----
@@ -449,7 +461,7 @@ async function applyOscSettings(osc) {
 function applySystemSettings() {
   const host = document.getElementById('s-api-host').value;
   const port = document.getElementById('s-api-port').value;
-  MAX_PTS = Math.max(50, parseInt(document.getElementById('s-window').value) || 300);
+  setWindow(document.getElementById('s-window').value);
   API_URL = `http://${host}:${port}`;
   WS_URL  = `ws://${host}:${port}/ws`;
   if (ws) ws.close();

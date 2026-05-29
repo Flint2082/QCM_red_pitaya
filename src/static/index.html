@@ -136,6 +136,12 @@ footer { height: 24px; background: var(--surface); border-top: 1px solid var(--b
   <div class="logo-sep"></div>
   <div class="device-badge">RED PITAYA · ZYNQ 7010</div>
   <div class="header-spacer"></div>
+  <div class="status-pill idle" id="status-pill"><div class="ws-dot" id="state-dot"></div><span id="state-label">IDLE</span></div>
+  <div class="logo-sep"></div>
+  <span class="toolbar-label">PLL</span>
+  <div class="ws-indicator"><div class="ws-dot" id="lock-dot-mass"></div><span id="lock-label-mass" style="font-size:10px">MASS</span></div>
+  <div class="ws-indicator"><div class="ws-dot" id="lock-dot-temp"></div><span id="lock-label-temp" style="font-size:10px">TEMP</span></div>
+  <div class="logo-sep"></div>
   <div class="ws-indicator">
     <div class="ws-dot" id="ws-dot"></div>
     <span id="ws-label">DISCONNECTED</span>
@@ -144,7 +150,8 @@ footer { height: 24px; background: var(--surface); border-top: 1px solid var(--b
 
 <div class="tab-bar">
   <button class="tab active" onclick="switchTab('main',this)"><div class="tab-dot" style="background:var(--green)"></div>MAIN</button>
-  <button class="tab" onclick="switchTab('analysis',this)"><div class="tab-dot" style="background:var(--blue)"></div>ANALYSIS</button>
+  <button class="tab" onclick="switchTab('monitor',this)"><div class="tab-dot" style="background:var(--blue)"></div>MONITOR</button>
+  <button class="tab" onclick="switchTab('analysis',this)"><div class="tab-dot" style="background:var(--purple)"></div>ANALYSIS</button>
   <button class="tab" onclick="switchTab('settings',this)"><div class="tab-dot" style="background:var(--orange)"></div>SETTINGS</button>
 </div>
 
@@ -153,13 +160,6 @@ footer { height: 24px; background: var(--surface); border-top: 1px solid var(--b
   <!-- MAIN -->
   <div class="tab-panel active" id="panel-main">
     <div class="toolbar">
-      <span class="toolbar-label">STATUS</span>
-      <div class="status-pill idle" id="status-pill"><div class="ws-dot" id="state-dot"></div><span id="state-label">IDLE</span></div>
-      <div class="toolbar-sep"></div>
-      <span class="toolbar-label">PLL</span>
-      <div class="ws-indicator"><div class="ws-dot" id="lock-dot-mass"></div><span id="lock-label-mass" style="font-size:10px">MASS</span></div>
-      <div class="ws-indicator"><div class="ws-dot" id="lock-dot-temp"></div><span id="lock-label-temp" style="font-size:10px">TEMP</span></div>
-      <div class="toolbar-sep"></div>
       <span class="toolbar-label">AMB TEMP</span>
       <div class="num-input-wrap">
         <input id="input-amb-temp" type="number" value="23" min="-40" max="100" step="0.5">
@@ -168,7 +168,7 @@ footer { height: 24px; background: var(--surface); border-top: 1px solid var(--b
       <div class="toolbar-sep"></div>
       <span class="toolbar-label">WINDOW</span>
       <div class="num-input-wrap">
-        <input id="input-window-main" type="number" value="300" min="50" max="5000" step="50" onchange="setWindow(this.value)">
+        <input id="input-window-main" type="number" value="3000" min="50" max="50000" step="50" onchange="setWindowMain(this.value)">
         <span class="num-input-unit">pts</span>
       </div>
       <div class="toolbar-sep"></div>
@@ -196,12 +196,12 @@ footer { height: 24px; background: var(--surface); border-top: 1px solid var(--b
     </div>
   </div>
 
-  <!-- ANALYSIS -->
-  <div class="tab-panel" id="panel-analysis">
+  <!-- MONITOR -->
+  <div class="tab-panel" id="panel-monitor">
     <div class="toolbar">
       <span class="toolbar-label">WINDOW</span>
       <div class="num-input-wrap">
-        <input id="input-window-analysis" type="number" value="300" min="50" max="5000" step="50" onchange="setWindow(this.value)">
+        <input id="input-window-monitor" type="number" value="300" min="50" max="50000" step="50" onchange="setWindowMonitor(this.value)">
         <span class="num-input-unit">pts</span>
       </div>
       <div class="toolbar-sep"></div>
@@ -223,6 +223,58 @@ footer { height: 24px; background: var(--surface); border-top: 1px solid var(--b
       <div class="chart-card"><div class="chart-card-header"><div class="chart-card-title"><div class="chart-color-bar" style="background:var(--blue)"></div>TEMP MODE FREQ</div><div class="chart-card-meta" id="meta-fT">—</div></div><div class="chart-body" style="min-height:110px"><canvas id="chart-fT"></canvas></div></div>
       <div class="chart-card"><div class="chart-card-header"><div class="chart-card-title"><div class="chart-color-bar" style="background:var(--green)"></div>MASS MODE — AMP &amp; PHASE</div></div><div class="chart-body" style="min-height:110px"><canvas id="chart-iq1"></canvas></div></div>
       <div class="chart-card"><div class="chart-card-header"><div class="chart-card-title"><div class="chart-color-bar" style="background:var(--blue)"></div>TEMP MODE — AMP &amp; PHASE</div></div><div class="chart-body" style="min-height:110px"><canvas id="chart-iq2"></canvas></div></div>
+    </div>
+  </div>
+
+  <!-- ANALYSIS -->
+  <div class="tab-panel" id="panel-analysis">
+    <div class="toolbar">
+      <span class="toolbar-label">OSC</span>
+      <select id="sweep-osc" style="background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);color:var(--text);font-family:'DM Mono',monospace;font-size:11px;padding:0 8px;height:26px;outline:none;">
+        <option value="1">1 — Mass</option>
+        <option value="2">2 — Temp</option>
+      </select>
+      <div class="toolbar-sep"></div>
+      <span class="toolbar-label">START</span>
+      <div class="num-input-wrap">
+        <input id="sweep-start" type="number" value="5900000" min="100000" max="50000000" step="1000">
+        <span class="num-input-unit">Hz</span>
+      </div>
+      <span class="toolbar-label">STOP</span>
+      <div class="num-input-wrap">
+        <input id="sweep-stop" type="number" value="6100000" min="100000" max="50000000" step="1000">
+        <span class="num-input-unit">Hz</span>
+      </div>
+      <span class="toolbar-label">STEP</span>
+      <div class="num-input-wrap">
+        <input id="sweep-step" type="number" value="1000" min="10" max="100000" step="100">
+        <span class="num-input-unit">Hz</span>
+      </div>
+      <span class="toolbar-label">SETTLE</span>
+      <div class="num-input-wrap">
+        <input id="sweep-settle" type="number" value="0.05" min="0.001" max="10" step="0.01">
+        <span class="num-input-unit">s</span>
+      </div>
+      <div class="toolbar-sep"></div>
+      <button class="btn btn-blue" onclick="runSweep()"><svg viewBox="0 0 12 12" style="width:11px;height:11px;fill:currentColor"><polygon points="3,2 10,6 3,10"/></svg>RUN SWEEP</button>
+      <div class="header-spacer"></div>
+      <button class="btn" onclick="clearSweep()">CLEAR</button>
+    </div>
+    <div class="stat-bar">
+      <div class="stat"><div class="stat-label">Points</div><div class="stat-value" id="val-sweep-n">—</div><div class="stat-unit"></div></div>
+      <div class="stat"><div class="stat-label">Peak Amplitude</div><div class="stat-value" id="val-sweep-peak-amp" style="color:var(--blue)">—</div><div class="stat-unit"></div></div>
+      <div class="stat"><div class="stat-label">Peak Frequency</div><div class="stat-value" id="val-sweep-peak-freq" style="color:var(--blue)">—</div><div class="stat-unit">Hz</div></div>
+      <div class="stat"><div class="stat-label">Status</div><div class="stat-value" id="val-sweep-status">IDLE</div><div class="stat-unit"></div></div>
+    </div>
+    <div class="chart-grid" style="grid-template-columns:1fr; grid-template-rows:1fr 1fr;">
+      <div class="chart-card">
+        <div class="chart-card-header"><div class="chart-card-title"><div class="chart-color-bar" style="background:var(--blue)"></div>AMPLITUDE vs FREQUENCY</div><div class="chart-card-meta" id="meta-sweep-amp">—</div></div>
+        <div class="chart-body"><canvas id="chart-sweep-amp"></canvas></div>
+      </div>
+      <div class="chart-card">
+        <div class="chart-card-header"><div class="chart-card-title"><div class="chart-color-bar" style="background:var(--purple)"></div>PHASE vs FREQUENCY</div><div class="chart-card-meta" id="meta-sweep-phase">—</div></div>
+        <div class="chart-body"><canvas id="chart-sweep-phase"></canvas></div>
+      </div>
     </div>
   </div>
 
@@ -280,7 +332,6 @@ footer { height: 24px; background: var(--surface); border-top: 1px solid var(--b
           <div class="settings-group">
             <div class="settings-row"><div><div class="settings-row-label">API Host</div><div class="settings-row-desc">Backend server address</div></div><div></div><input class="settings-input" type="text" id="s-api-host" style="width:200px;text-align:left" value=""></div>
             <div class="settings-row"><div><div class="settings-row-label">API Port</div><div class="settings-row-desc">Backend server port</div></div><div></div><div style="display:flex;align-items:center;gap:6px"><input class="settings-input" type="number" id="s-api-port" value="8000"><span class="settings-unit"></span></div></div>
-            <div class="settings-row"><div><div class="settings-row-label">Chart Window</div><div class="settings-row-desc">Number of points shown in charts</div></div><div></div><div style="display:flex;align-items:center;gap:6px"><input class="settings-input" type="number" id="s-window" value="300" step="50"><span class="settings-unit">pts</span></div></div>
           </div>
           <button class="btn btn-blue" onclick="applySystemSettings()">APPLY SYSTEM</button>
         </div>
@@ -302,12 +353,14 @@ const backendHost = DEV_HOSTS.includes(location.hostname) ? 'rp-f0ea58.local' : 
 let API_URL = `http://${backendHost}:8000`;
 let WS_URL  = `ws://${backendHost}:8000/ws`;
 let MAX_PTS_MAIN = 3000;
-let MAX_PTS_ANALYSIS = 300;
-function setWindow(v) {
-  MAX_PTS = Math.max(50, parseInt(v) || 300);
-  document.getElementById('input-window-main').value     = MAX_PTS;
-  document.getElementById('input-window-analysis').value = MAX_PTS;
-  document.getElementById('s-window').value              = MAX_PTS;
+let MAX_PTS_MONITOR = 300;
+function setWindowMain(v) {
+  MAX_PTS_MAIN = Math.max(50, parseInt(v) || 3000);
+  document.getElementById('input-window-main').value = MAX_PTS_MAIN;
+}
+function setWindowMonitor(v) {
+  MAX_PTS_MONITOR = Math.max(50, parseInt(v) || 300);
+  document.getElementById('input-window-monitor').value = MAX_PTS_MONITOR;
 }
 document.getElementById('s-api-host').value = backendHost;
 
@@ -316,7 +369,7 @@ function switchTab(name, el) {
   document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
   el.classList.add('active');
   document.querySelectorAll('.tab-panel').forEach(p => p.classList.toggle('active', p.id === 'panel-' + name));
-  setTimeout(() => Object.values(charts).forEach(c => c && c.resize()), 50);
+  setTimeout(() => [...Object.values(charts), ...Object.values(sweepCharts)].forEach(c => c && c.resize()), 50);
 }
 
 function switchSettings(name, el) {
@@ -360,14 +413,54 @@ const charts = {
   iq2:      makeDualChart('chart-iq2',   '#4a9eff', '#a78bfa'),
 };
 
+// ---- Sweep charts (x-axis = frequency) ----
+const XAXIS = { display: true, ticks: { color: '#6b7585', font: { family: 'DM Mono', size: 9 }, maxTicksLimit: 8, callback: v => (v/1e6).toFixed(3) + 'M' }, grid: { color: 'rgba(255,255,255,0.03)' }, border: { color: 'transparent' } };
+function makeSweepChart(id, color) {
+  const ctx = document.getElementById(id); if (!ctx) return null;
+  const opts = structuredClone(BASE_OPTS);
+  opts.scales.x = XAXIS;
+  return new Chart(ctx, { type: 'line', data: { labels: [], datasets: [{ data: [], borderColor: color, borderWidth: 1.5, pointRadius: 0, tension: 0, fill: true, backgroundColor: color + '14' }] }, options: opts });
+}
+const sweepCharts = {
+  amp:   makeSweepChart('chart-sweep-amp',   '#4a9eff'),
+  phase: makeSweepChart('chart-sweep-phase', '#a78bfa'),
+};
+
+async function runSweep() {
+  const osc    = parseInt(document.getElementById('sweep-osc').value);
+  const start  = parseFloat(document.getElementById('sweep-start').value);
+  const stop   = parseFloat(document.getElementById('sweep-stop').value);
+  const step   = parseFloat(document.getElementById('sweep-step').value);
+  const settle = parseFloat(document.getElementById('sweep-settle').value);
+  if ([start, stop, step, settle].some(isNaN)) { alert('Enter valid sweep parameters.'); return; }
+  document.getElementById('val-sweep-status').textContent = 'RUNNING';
+  clearSweep();
+  try {
+    await fetch(`${API_URL}/sweep/start?oscillator_idx=${osc}&start_freq=${start}&stop_freq=${stop}&step_size=${step}&settle_time=${settle}`, { method: 'POST' });
+    document.getElementById('val-sweep-status').textContent = 'DONE';
+  } catch(e) {
+    console.error('Sweep failed:', e);
+    document.getElementById('val-sweep-status').textContent = 'ERROR';
+  }
+}
+
+function clearSweep() {
+  ['amp','phase'].forEach(k => {
+    const c = sweepCharts[k]; if (!c) return;
+    c.data.labels = []; c.data.datasets.forEach(d => d.data = []); c.update('none');
+  });
+  ['val-sweep-n','val-sweep-peak-amp','val-sweep-peak-freq'].forEach(id => setText(id, '—'));
+  document.getElementById('meta-sweep-amp').textContent = '—';
+  document.getElementById('meta-sweep-phase').textContent = '—';
+}
+
 let sampleCount = 0;
 
-function push(chart, value, dsIdx = 0) {
+function push(chart, value, dsIdx = 0, max = MAX_PTS_MAIN) {
   if (!chart) return;
   const d = chart.data;
   if (dsIdx === 0) d.labels.push('');
   d.datasets[dsIdx].data.push(value);
-  const max = MAX_PTS;
   if (d.labels.length > max) { d.labels.shift(); d.datasets.forEach(ds => { if (ds.data.length > max) ds.data.shift(); }); }
   if (dsIdx === d.datasets.length - 1) chart.update('none');
 }
@@ -396,13 +489,13 @@ function onMeasurement(e) {
 
   push(charts.mainComp, e.calculated_thickness);
   push(charts.mainTemp, e.calculated_temp);
-  push(charts.fM,       e.freq_mass_mode);
-  push(charts.fT,       e.freq_temp_mode);
-  push(charts.compA,    e.calculated_thickness);
-  push(charts.tempA,    e.calculated_temp);
+  push(charts.fM,    e.freq_mass_mode,       0, MAX_PTS_MONITOR);
+  push(charts.fT,    e.freq_temp_mode,        0, MAX_PTS_MONITOR);
+  push(charts.compA, e.calculated_thickness,  0, MAX_PTS_MONITOR);
+  push(charts.tempA, e.calculated_temp,        0, MAX_PTS_MONITOR);
 
-  if (e.amp_mass != null) { push(charts.iq1, e.amp_mass, 0); push(charts.iq1, e.phase_mass, 1); }
-  if (e.amp_temp != null) { push(charts.iq2, e.amp_temp, 0); push(charts.iq2, e.phase_temp, 1); }
+  if (e.amp_mass != null) { push(charts.iq1, e.amp_mass, 0, MAX_PTS_MONITOR); push(charts.iq1, e.phase_mass, 1, MAX_PTS_MONITOR); }
+  if (e.amp_temp != null) { push(charts.iq2, e.amp_temp, 0, MAX_PTS_MONITOR); push(charts.iq2, e.phase_temp, 1, MAX_PTS_MONITOR); }
 
   setLock('mass', e.lock_mass);
   setLock('temp', e.lock_temp);
@@ -477,7 +570,6 @@ async function applyOscSettings(osc) {
 function applySystemSettings() {
   const host = document.getElementById('s-api-host').value;
   const port = document.getElementById('s-api-port').value;
-  setWindow(document.getElementById('s-window').value);
   API_URL = `http://${host}:${port}`;
   WS_URL  = `ws://${host}:${port}/ws`;
   if (ws) ws.close();

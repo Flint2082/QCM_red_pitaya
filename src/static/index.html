@@ -137,7 +137,7 @@ footer { height: 24px; background: var(--surface); border-top: 1px solid var(--b
   <div class="logo-sep"></div>
   <div class="device-badge">RED PITAYA · ZYNQ 7010</div>
   <div class="header-spacer"></div>
-  <div class="status-pill idle" id="status-pill"><div class="ws-dot" id="state-dot"></div><span id="state-label">IDLE</span></div>
+  <div class="status-pill idle" id="status-pill"><span id="state-label">IDLE</span></div>
   <div class="logo-sep"></div>
   <span class="toolbar-label">PLL</span>
   <div class="ws-indicator"><div class="ws-dot" id="lock-dot-mass"></div><span id="lock-label-mass" style="font-size:10px">MASS</span></div>
@@ -428,6 +428,9 @@ const sweepCharts = {
   phase: makeSweepChart('chart-sweep-phase', '#a78bfa'),
 };
 
+let _sweepPeakAmp = -Infinity;
+let _sweepPeakFreq = null;
+
 async function runSweep() {
   const osc    = parseInt(document.getElementById('sweep-osc').value);
   const start  = parseFloat(document.getElementById('sweep-start').value);
@@ -435,25 +438,52 @@ async function runSweep() {
   const step   = parseFloat(document.getElementById('sweep-step').value);
   const settle = parseFloat(document.getElementById('sweep-settle').value);
   if ([start, stop, step, settle].some(isNaN)) { alert('Enter valid sweep parameters.'); return; }
-  document.getElementById('val-sweep-status').textContent = 'RUNNING';
   clearSweep();
+  document.getElementById('val-sweep-status').textContent = 'PENDING';
   try {
     await fetch(`${API_URL}/sweep/start?oscillator_idx=${osc}&start_freq=${start}&stop_freq=${stop}&step_size=${step}&settle_time=${settle}`, { method: 'POST' });
-    document.getElementById('val-sweep-status').textContent = 'DONE';
   } catch(e) {
     console.error('Sweep failed:', e);
     document.getElementById('val-sweep-status').textContent = 'ERROR';
   }
 }
 
+function onSweepPoint(e) {
+  sweepCharts.amp.data.labels.push(e.frequency);
+  sweepCharts.amp.data.datasets[0].data.push(e.amplitude);
+  sweepCharts.phase.data.labels.push(e.frequency);
+  sweepCharts.phase.data.datasets[0].data.push(e.phase);
+  sweepCharts.amp.update('none');
+  sweepCharts.phase.update('none');
+
+  setText('val-sweep-n', sweepCharts.amp.data.labels.length);
+  document.getElementById('meta-sweep-amp').textContent   = fmt(e.amplitude, 4);
+  document.getElementById('meta-sweep-phase').textContent = fmt(e.phase, 4);
+  document.getElementById('val-sweep-status').textContent = 'RUNNING';
+
+  if (e.amplitude > _sweepPeakAmp) {
+    _sweepPeakAmp  = e.amplitude;
+    _sweepPeakFreq = e.frequency;
+    setText('val-sweep-peak-amp',  fmt(_sweepPeakAmp, 4));
+    setText('val-sweep-peak-freq', fmt(_sweepPeakFreq, 0));
+  }
+}
+
+function onSweepComplete() {
+  document.getElementById('val-sweep-status').textContent = 'DONE';
+}
+
 function clearSweep() {
+  _sweepPeakAmp = -Infinity;
+  _sweepPeakFreq = null;
   ['amp','phase'].forEach(k => {
     const c = sweepCharts[k]; if (!c) return;
     c.data.labels = []; c.data.datasets.forEach(d => d.data = []); c.update('none');
   });
   ['val-sweep-n','val-sweep-peak-amp','val-sweep-peak-freq'].forEach(id => setText(id, '—'));
-  document.getElementById('meta-sweep-amp').textContent = '—';
+  document.getElementById('meta-sweep-amp').textContent   = '—';
   document.getElementById('meta-sweep-phase').textContent = '—';
+  document.getElementById('val-sweep-status').textContent = 'IDLE';
 }
 
 let sampleCount = 0;
@@ -536,8 +566,10 @@ function connect() {
   ws.onmessage = msg => {
     try {
       const ev = JSON.parse(msg.data);
-      if (ev.type === 'MeasurementEvent') onMeasurement(ev);
-      if (ev.type === 'StateEvent') onStateChange(ev.state);
+      if (ev.type === 'MeasurementEvent')  onMeasurement(ev);
+      if (ev.type === 'StateEvent')        onStateChange(ev.state);
+      if (ev.type === 'SweepPointEvent')   onSweepPoint(ev);
+      if (ev.type === 'SweepCompleteEvent') onSweepComplete();
     } catch(e) { console.warn('Bad WS msg', e); }
   };
 }

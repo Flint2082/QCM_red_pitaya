@@ -20,6 +20,16 @@ class StateEvent(Event):
     state: WorkerState
 
 @dataclass
+class SweepPointEvent(Event):
+    frequency: float
+    amplitude: float
+    phase: float
+
+@dataclass
+class SweepCompleteEvent(Event):
+    pass
+
+@dataclass
 class MeasurementEvent(Event):
     data: MeasurementData
     

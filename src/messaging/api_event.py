@@ -19,6 +19,16 @@ class StateEvent(ApiEvent):
     state: str
 
 @dataclass
+class SweepPointEvent(ApiEvent):
+    frequency: float
+    amplitude: float
+    phase: float
+
+@dataclass
+class SweepCompleteEvent(ApiEvent):
+    pass
+
+@dataclass
 class MeasurementEvent(ApiEvent):
     data: MeasurementData
     

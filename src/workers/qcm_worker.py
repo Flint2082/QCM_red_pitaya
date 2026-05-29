@@ -9,12 +9,14 @@
 # Listens for commands from application, executes them
 # Sends events back to application (e.g. measurement complete, sweep step done, etc.)
 
+import math
+import time
 import threading
 import queue
 
-from messaging.defines import WorkerState 
+from messaging.defines import WorkerState
 from messaging.worker_event import *
-from messaging.worker_command import *  
+from messaging.worker_command import *
 
 class QCMWorker(threading.Thread):
     def __init__(self, qcm, command_queue, event_queue):
@@ -79,7 +81,7 @@ class QCMWorker(threading.Thread):
         # Sweep
         elif isinstance(command, StartSweepCommand) and self.state == WorkerState.IDLE:
             self._set_state(WorkerState.SWEEPING)
-            self.qcm.sweep(command.oscillator_idx, command.start_freq, command.stop_freq, command.step_size, command.settle_time)
+            self._run_sweep(command)
             self._set_state(WorkerState.IDLE)
 
         # ============================
@@ -95,6 +97,19 @@ class QCMWorker(threading.Thread):
         
         
         
+    def _run_sweep(self, command: StartSweepCommand):
+        self.qcm.standby(1)
+        self.qcm.standby(2)
+        n_points = int(math.floor((command.stop_freq - command.start_freq) / command.step_size)) + 1
+        for i in range(n_points):
+            freq = command.start_freq + i * command.step_size
+            self.qcm.setFreq(command.oscillator_idx, freq)
+            self.qcm.reset()
+            time.sleep(command.settle_time)
+            amplitude, phase = self.qcm.getAmpAndPhase(command.oscillator_idx)
+            self.event_queue.put(SweepPointEvent(frequency=freq, amplitude=amplitude, phase=phase))
+        self.event_queue.put(SweepCompleteEvent())
+
     def update(self):
         
         # Perform measurement acquisition if in measuring state

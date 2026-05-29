@@ -123,6 +123,13 @@ class Application(threading.Thread):
         if isinstance(event, we.StateEvent):
             self.api_event_queue.put(ae.StateEvent(state=_STATE_MAP.get(event.state, "IDLE")))
 
+        elif isinstance(event, we.SweepPointEvent):
+            self.api_event_queue.put(ae.SweepPointEvent(
+                frequency=event.frequency, amplitude=event.amplitude, phase=event.phase))
+
+        elif isinstance(event, we.SweepCompleteEvent):
+            self.api_event_queue.put(ae.SweepCompleteEvent())
+
         elif isinstance(event, we.MeasurementEvent):
             if self.system_state:
                 self.system_state.update(event)

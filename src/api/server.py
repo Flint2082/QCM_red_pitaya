@@ -175,6 +175,11 @@ class RestServer:
             self.command_queue.put(StartSweepCommand(oscillator_idx, start_freq, stop_freq, step_size, settle_time))
             return {"status": "ok"}
 
+        @app.post("/sweep/abort")
+        def abort_sweep():
+            self.command_queue.put(AbortSweepCommand())
+            return {"status": "ok"}
+
         @app.get("/state")
         def get_state():
             return {"state": self._last_state}

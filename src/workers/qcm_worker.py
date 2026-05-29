@@ -100,11 +100,22 @@ class QCMWorker(threading.Thread):
     def _run_sweep(self, command: StartSweepCommand):
         self.qcm.standby(1)
         self.qcm.standby(2)
+        # make sure IQ filter gain is set to the default for sweeps to keep things consistent
+        self.qcm.setIQGain(command.oscillator_idx, self.qcm.IQ_GAIN)
         n_points = int(math.floor((command.stop_freq - command.start_freq) / command.step_size)) + 1
         for i in range(n_points):
+            # Check for abort between points
+            try:
+                cmd = self.command_queue.get_nowait()
+                if isinstance(cmd, AbortSweepCommand):
+                    self.event_queue.put(SweepCompleteEvent())
+                    return
+            except queue.Empty:
+                pass
+
             freq = command.start_freq + i * command.step_size
             self.qcm.setFreq(command.oscillator_idx, freq)
-            self.qcm.reset()
+            # No reset() here — it would clear the frequency register we just wrote
             time.sleep(command.settle_time)
             amplitude, phase = self.qcm.getAmpAndPhase(command.oscillator_idx)
             self.event_queue.put(SweepPointEvent(frequency=freq, amplitude=amplitude, phase=phase))

@@ -30,6 +30,10 @@ class StartSweepCommand(WorkerCommand):
     step_size: float
     settle_time: float
 
+@dataclass
+class AbortSweepCommand(WorkerCommand):
+    pass
+
 # ===========================================
 # Setting commands
 # ===========================================

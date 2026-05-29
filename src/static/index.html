@@ -258,6 +258,7 @@ footer { height: 24px; background: var(--surface); border-top: 1px solid var(--b
       </div>
       <div class="toolbar-sep"></div>
       <button class="btn btn-blue" onclick="runSweep()"><svg viewBox="0 0 12 12" style="width:11px;height:11px;fill:currentColor"><polygon points="3,2 10,6 3,10"/></svg>RUN SWEEP</button>
+      <button class="btn btn-red"  onclick="abortSweep()"><svg viewBox="0 0 12 12" style="width:11px;height:11px;fill:currentColor"><rect x="2.5" y="2.5" width="7" height="7"/></svg>ABORT</button>
       <div class="header-spacer"></div>
       <button class="btn" onclick="clearSweep()">CLEAR</button>
     </div>
@@ -430,6 +431,7 @@ const sweepCharts = {
 
 let _sweepPeakAmp = -Infinity;
 let _sweepPeakFreq = null;
+let _sweepTotal = 0;
 
 async function runSweep() {
   const osc    = parseInt(document.getElementById('sweep-osc').value);
@@ -438,6 +440,7 @@ async function runSweep() {
   const step   = parseFloat(document.getElementById('sweep-step').value);
   const settle = parseFloat(document.getElementById('sweep-settle').value);
   if ([start, stop, step, settle].some(isNaN)) { alert('Enter valid sweep parameters.'); return; }
+  _sweepTotal = Math.floor((stop - start) / step) + 1;
   clearSweep();
   document.getElementById('val-sweep-status').textContent = 'PENDING';
   try {
@@ -448,6 +451,11 @@ async function runSweep() {
   }
 }
 
+async function abortSweep() {
+  try { await fetch(`${API_URL}/sweep/abort`, { method: 'POST' }); }
+  catch(e) { console.error('Abort failed:', e); }
+}
+
 function onSweepPoint(e) {
   sweepCharts.amp.data.labels.push(e.frequency);
   sweepCharts.amp.data.datasets[0].data.push(e.amplitude);
@@ -456,10 +464,12 @@ function onSweepPoint(e) {
   sweepCharts.amp.update('none');
   sweepCharts.phase.update('none');
 
-  setText('val-sweep-n', sweepCharts.amp.data.labels.length);
+  const n = sweepCharts.amp.data.labels.length;
+  const pct = _sweepTotal > 0 ? Math.round(100 * n / _sweepTotal) : 0;
+  setText('val-sweep-n', n);
   document.getElementById('meta-sweep-amp').textContent   = fmt(e.amplitude, 4);
   document.getElementById('meta-sweep-phase').textContent = fmt(e.phase, 4);
-  document.getElementById('val-sweep-status').textContent = 'RUNNING';
+  document.getElementById('val-sweep-status').textContent = `${pct}%`;
 
   if (e.amplitude > _sweepPeakAmp) {
     _sweepPeakAmp  = e.amplitude;

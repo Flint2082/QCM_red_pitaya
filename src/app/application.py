@@ -89,6 +89,8 @@ class Application(threading.Thread):
             self.worker_command_queue.put(wc.StartupPLLCommand(self.mass_mode_frequency, self.temp_mode_frequency))
         elif isinstance(command, ac.StartSweepCommand):
             self.worker_command_queue.put(wc.StartSweepCommand(command.oscillator_idx, command.start_freq, command.stop_freq, command.step_size, command.settle_time))
+        elif isinstance(command, ac.AbortSweepCommand):
+            self.worker_command_queue.put(wc.AbortSweepCommand())
         elif isinstance(command, ac.SetFrequencyCommand):
             self.worker_command_queue.put(wc.SetFrequencyCommand(command.oscillator_idx, command.frequency))
         elif isinstance(command, ac.SetIntegratorGainCommand):

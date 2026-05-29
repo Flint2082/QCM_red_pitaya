@@ -29,6 +29,10 @@ class StartSweepCommand(ApiCommand):
     step_size: float
     settle_time: float
 
+@dataclass
+class AbortSweepCommand(ApiCommand):
+    pass
+
 # ===========================================
 # Setting commands
 # ===========================================

@@ -99,10 +99,10 @@ class QCMWorker(threading.Thread):
                 MeasurementEvent(
                     freq_mass_mode=fM,
                     freq_temp_mode=fT,
-                    uncompensated_mass=uncomp_thickness_nm,
-                    calculated_mass=comp_thickness_nm,
+                    uncompensated_thickness=uncomp_thickness_nm,
+                    calculated_thickness=comp_thickness_nm,
                     calculated_temp=T_calc,
                     compensated_freq=comp_m_freq
                 )
             )
-            self.qcm.moveWindow(fM, fT)
+            # self.qcm.moveWindow(fM, fT)

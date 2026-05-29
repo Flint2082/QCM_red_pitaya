@@ -117,8 +117,8 @@ class Application(threading.Thread):
             self.api_event_queue.put(ae.MeasurementEvent(
                 event.freq_mass_mode,
                 event.freq_temp_mode,
-                event.uncompensated_mass,
-                event.calculated_mass,
+                event.uncompensated_thickness,
+                event.calculated_thickness,
                 event.calculated_temp,
                 event.compensated_freq
             ))

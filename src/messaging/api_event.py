@@ -17,8 +17,8 @@ class ErrorEvent(ApiEvent):
 class MeasurementEvent(ApiEvent):
     freq_mass_mode: float 
     freq_temp_mode: float
-    uncompensated_mass: float
-    calculated_mass: float
+    uncompensated_thickness: float
+    calculated_thickness: float
     calculated_temp: float
     compensated_freq: float
     

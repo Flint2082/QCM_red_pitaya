@@ -358,30 +358,30 @@ function setMeta(id, v, u) { const el = document.getElementById(id); if (el) el.
 function setText(id, v) { const el = document.getElementById(id); if (el) el.textContent = v; }
 
 function onMeasurement(e) {
-  setText('val-comp',    fmt(e.calculated_mass, 4));
-  setText('val-T',       fmt(e.calculated_temp, 2));
-  setText('val-uncomp',  fmt(e.uncompensated_mass, 4));
+  setText('val-comp',    fmt(e.calculated_thickness, 4));
+  setText('val-T',       fmt(e.calculated_temp, 3));
+  setText('val-uncomp',  fmt(e.uncompensated_thickness, 4));
   setText('val-fM',      fmt(e.freq_mass_mode, 2));
   setText('val-fT',      fmt(e.freq_temp_mode, 2));
-  setText('val-comp-a',  fmt(e.calculated_mass, 4));
-  setText('val-uncomp-a',fmt(e.uncompensated_mass, 4));
-  setText('val-T-a',     fmt(e.calculated_temp, 2));
+  setText('val-comp-a',  fmt(e.calculated_thickness, 4));
+  setText('val-uncomp-a',fmt(e.uncompensated_thickness, 4));
+  setText('val-T-a',     fmt(e.calculated_temp, 6));
 
-  push(charts.mainComp, e.calculated_mass);
+  push(charts.mainComp, e.calculated_thickness);
   push(charts.mainTemp, e.calculated_temp);
   push(charts.fM,       e.freq_mass_mode);
   push(charts.fT,       e.freq_temp_mode);
-  push(charts.compA,    e.calculated_mass);
+  push(charts.compA,    e.calculated_thickness);
   push(charts.tempA,    e.calculated_temp);
 
   if (e.amp_1 != null) { push(charts.iq1, e.amp_1, 0); push(charts.iq1, e.phase_1, 1); }
   if (e.amp_2 != null) { push(charts.iq2, e.amp_2, 0); push(charts.iq2, e.phase_2, 1); }
 
-  setMeta('meta-comp',   e.calculated_mass,  'nm');
+  setMeta('meta-comp',   e.calculated_thickness,  'nm');
   setMeta('meta-temp',   e.calculated_temp,  '°C');
   setMeta('meta-fM',     e.freq_mass_mode,   'Hz');
   setMeta('meta-fT',     e.freq_temp_mode,   'Hz');
-  setMeta('meta-comp-a', e.calculated_mass,  'nm');
+  setMeta('meta-comp-a', e.calculated_thickness,  'nm');
   setMeta('meta-temp-a', e.calculated_temp,  '°C');
 
   sampleCount++;

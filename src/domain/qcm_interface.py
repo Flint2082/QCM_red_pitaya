@@ -27,7 +27,7 @@ class QCMInterface:
         
         self.INT_GAIN_PRE_LOCK = 0.01
         self.INT_GAIN_POST_LOCK = 0.00001
-        self.IQ_GAIN = 0.0001
+        self.IQ_GAIN = 0.00001
         
         # variables 
         self.coeff_file = os.path.join(base_dir, "..", "..", "data", "coeffecients.csv")

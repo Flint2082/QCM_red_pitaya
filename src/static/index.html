@@ -417,7 +417,7 @@ const charts = {
 };
 
 // ---- Sweep charts (x-axis = frequency) ----
-const XAXIS = { display: true, ticks: { color: '#6b7585', font: { family: 'DM Mono', size: 9 }, maxTicksLimit: 8, callback: v => (v/1e6).toFixed(3) + 'M' }, grid: { color: 'rgba(255,255,255,0.03)' }, border: { color: 'transparent' } };
+const XAXIS = { display: true, ticks: { color: '#6b7585', font: { family: 'DM Mono', size: 9 }, maxTicksLimit: 8, callback: function(v) { return (this.getLabelForValue(v)/1e6).toFixed(3) + 'M'; } }, grid: { color: 'rgba(255,255,255,0.03)' }, border: { color: 'transparent' } };
 function makeSweepChart(id, color) {
   const ctx = document.getElementById(id); if (!ctx) return null;
   const opts = structuredClone(BASE_OPTS);

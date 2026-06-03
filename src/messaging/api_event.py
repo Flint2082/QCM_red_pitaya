@@ -39,3 +39,12 @@ class SystemStatusEvent(ApiEvent):
     inv_temp_mode: bool
     lock_status_mass_mode: bool
     lock_status_temp_mode: bool
+
+@dataclass
+class OpcStatusEvent(ApiEvent):
+    connected: bool
+    ambient_temp:    float | None = None
+    start_freq_mass: float | None = None
+    start_freq_temp: float | None = None
+    density:         float | None = None
+    z_ratio:         float | None = None

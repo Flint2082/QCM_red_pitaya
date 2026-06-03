@@ -143,6 +143,8 @@ footer { height: 24px; background: var(--surface); border-top: 1px solid var(--b
   <div class="ws-indicator"><div class="ws-dot" id="lock-dot-mass"></div><span id="lock-label-mass" style="font-size:10px">MASS</span></div>
   <div class="ws-indicator"><div class="ws-dot" id="lock-dot-temp"></div><span id="lock-label-temp" style="font-size:10px">TEMP</span></div>
   <div class="logo-sep"></div>
+  <div class="ws-indicator"><div class="ws-dot" id="opc-dot"></div><span id="opc-label" style="font-size:10px">OPC</span></div>
+  <div class="logo-sep"></div>
   <div class="ws-indicator">
     <div class="ws-dot" id="ws-dot"></div>
     <span id="ws-label">DISCONNECTED</span>
@@ -290,33 +292,57 @@ footer { height: 24px; background: var(--surface); border-top: 1px solid var(--b
     <div class="settings-layout">
       <div class="settings-nav">
         <div class="settings-nav-section">OSCILLATORS</div>
-        <div class="settings-nav-item active" onclick="switchSettings('osc1',this)">OSC 1 — Mass Mode</div>
-        <div class="settings-nav-item" onclick="switchSettings('osc2',this)">OSC 2 — Temp Mode</div>
+        <div class="settings-nav-item active" onclick="switchSettings('osc',this)">OSC 1 &amp; 2</div>
         <div class="settings-nav-section">MEASUREMENT</div>
         <div class="settings-nav-item" onclick="switchSettings('meas',this)">Measurement</div>
         <div class="settings-nav-section">SYSTEM</div>
         <div class="settings-nav-item" onclick="switchSettings('system',this)">System</div>
+        <div class="settings-nav-item" onclick="switchSettings('opc',this)">OPC-UA</div>
       </div>
       <div class="settings-content">
 
-        <div class="settings-panel active" id="spanel-osc1">
+        <div class="settings-panel active" id="spanel-osc">
           <div class="settings-section-title">OSCILLATOR 1 — MASS MODE</div>
           <div class="settings-group">
             <div class="settings-row"><div><div class="settings-row-label">Start Frequency</div><div class="settings-row-desc">Initial PLL lock frequency</div></div><div></div><div style="display:flex;align-items:center;gap:6px"><input class="settings-input" type="number" id="s-osc1-freq" value="6000000" step="100"><span class="settings-unit">Hz</span></div></div>
             <div class="settings-row"><div><div class="settings-row-label">Integrator Gain</div><div class="settings-row-desc">PLL loop integrator coefficient</div></div><div></div><div style="display:flex;align-items:center;gap:6px"><input class="settings-input" type="number" id="s-osc1-int" value="0.00001" step="0.000001"><span class="settings-unit"></span></div></div>
             <div class="settings-row"><div><div class="settings-row-label">IQ Gain</div><div class="settings-row-desc">Demodulator gain factor</div></div><div></div><div style="display:flex;align-items:center;gap:6px"><input class="settings-input" type="number" id="s-osc1-iq" value="0.00001" step="0.000001"><span class="settings-unit"></span></div></div>
-            <div class="settings-row"><div><div class="settings-row-label">Invert Feedback</div><div class="settings-row-desc">Invert the feedback signal</div></div><div></div><div style="display:flex;align-items:center;gap:6px"><select class="settings-input" id="s-osc1-inv" style="width:150px;text-align:left"><option value="1">Enabled</option><option value="0">Disabled</option></select></div></div>
+            <div class="settings-row"><div><div class="settings-row-label">Invert Feedback</div><div class="settings-row-desc">Invert the feedback signal</div></div><div></div><div style="display:flex;align-items:center;gap:6px"><select class="settings-input" id="s-osc1-inv" style="width:150px;text-align:left"><option value="0">Disabled</option><option value="1">Enabled</option></select></div></div>
+            <div class="settings-row"><div><div class="settings-row-label">Output Mode</div><div class="settings-row-desc">Signal routed to analog output</div></div><div></div><div style="display:flex;align-items:center;gap:6px"><select class="settings-input" id="s-osc1-mode" style="width:200px;text-align:left">
+              <option value="0">Δ Error Signal</option>
+              <option value="1">OSC1 Freq (Fine)</option>
+              <option value="2">OSC1 Freq (Coarse)</option>
+              <option value="3">OSC1 Multiplier</option>
+              <option value="4">OSC1 I</option>
+              <option value="5">OSC1 Q</option>
+              <option value="6">OSC2 Freq (Fine)</option>
+              <option value="7">OSC2 Freq (Coarse)</option>
+              <option value="8">OSC2 Multiplier</option>
+              <option value="9">OSC2 I</option>
+              <option value="10">OSC2 Q</option>
+            </select></div></div>
           </div>
-          <button class="btn btn-blue" onclick="applyOscSettings(1)">APPLY OSC 1</button>
-        </div>
+          <button class="btn btn-blue" onclick="applyOscSettings(1)" style="margin-bottom:28px">APPLY OSC 1</button>
 
-        <div class="settings-panel" id="spanel-osc2">
           <div class="settings-section-title">OSCILLATOR 2 — TEMP MODE</div>
           <div class="settings-group">
             <div class="settings-row"><div><div class="settings-row-label">Start Frequency</div><div class="settings-row-desc">Initial PLL lock frequency</div></div><div></div><div style="display:flex;align-items:center;gap:6px"><input class="settings-input" type="number" id="s-osc2-freq" value="6002000" step="100"><span class="settings-unit">Hz</span></div></div>
             <div class="settings-row"><div><div class="settings-row-label">Integrator Gain</div><div class="settings-row-desc">PLL loop integrator coefficient</div></div><div></div><div style="display:flex;align-items:center;gap:6px"><input class="settings-input" type="number" id="s-osc2-int" value="0.00001" step="0.000001"><span class="settings-unit"></span></div></div>
             <div class="settings-row"><div><div class="settings-row-label">IQ Gain</div><div class="settings-row-desc">Demodulator gain factor</div></div><div></div><div style="display:flex;align-items:center;gap:6px"><input class="settings-input" type="number" id="s-osc2-iq" value="0.00001" step="0.000001"><span class="settings-unit"></span></div></div>
-            <div class="settings-row"><div><div class="settings-row-label">Invert Feedback</div><div class="settings-row-desc">Invert the feedback signal</div></div><div></div><div style="display:flex;align-items:center;gap:6px"><select class="settings-input" id="s-osc2-inv" style="width:150px;text-align:left"><option value="1">Enabled</option><option value="0">Disabled</option></select></div></div>
+            <div class="settings-row"><div><div class="settings-row-label">Invert Feedback</div><div class="settings-row-desc">Invert the feedback signal</div></div><div></div><div style="display:flex;align-items:center;gap:6px"><select class="settings-input" id="s-osc2-inv" style="width:150px;text-align:left"><option value="0">Disabled</option><option value="1">Enabled</option></select></div></div>
+            <div class="settings-row"><div><div class="settings-row-label">Output Mode</div><div class="settings-row-desc">Signal routed to analog output</div></div><div></div><div style="display:flex;align-items:center;gap:6px"><select class="settings-input" id="s-osc2-mode" style="width:200px;text-align:left">
+              <option value="0">Δ Error Signal</option>
+              <option value="1">OSC1 Freq (Fine)</option>
+              <option value="2">OSC1 Freq (Coarse)</option>
+              <option value="3">OSC1 Multiplier</option>
+              <option value="4">OSC1 I</option>
+              <option value="5">OSC1 Q</option>
+              <option value="6">OSC2 Freq (Fine)</option>
+              <option value="7">OSC2 Freq (Coarse)</option>
+              <option value="8">OSC2 Multiplier</option>
+              <option value="9">OSC2 I</option>
+              <option value="10">OSC2 Q</option>
+            </select></div></div>
           </div>
           <button class="btn btn-blue" onclick="applyOscSettings(2)">APPLY OSC 2</button>
         </div>
@@ -336,6 +362,28 @@ footer { height: 24px; background: var(--surface); border-top: 1px solid var(--b
             <div class="settings-row"><div><div class="settings-row-label">API Port</div><div class="settings-row-desc">Backend server port</div></div><div></div><div style="display:flex;align-items:center;gap:6px"><input class="settings-input" type="number" id="s-api-port" value="8000"><span class="settings-unit"></span></div></div>
           </div>
           <button class="btn btn-blue" onclick="applySystemSettings()">APPLY SYSTEM</button>
+        </div>
+
+        <div class="settings-panel" id="spanel-opc">
+          <div class="settings-section-title">OPC-UA STATUS</div>
+          <div class="settings-group">
+            <div class="settings-row">
+              <div><div class="settings-row-label">Connection</div><div class="settings-row-desc">WAGO PLC link</div></div>
+              <div></div>
+              <div style="display:flex;align-items:center;gap:8px">
+                <div class="ws-dot" id="opc-panel-dot"></div>
+                <span id="opc-panel-label" style="font-family:'DM Mono',monospace;font-size:11px;color:var(--text-dim)">DISCONNECTED</span>
+              </div>
+            </div>
+          </div>
+          <div class="settings-section-title">PLC SETTINGS <span style="font-size:9px;opacity:0.5;font-weight:normal">(read from PLC)</span></div>
+          <div class="settings-group">
+            <div class="settings-row"><div><div class="settings-row-label">Ambient Temperature</div></div><div></div><span id="opc-val-amb" style="font-family:'DM Mono',monospace;font-size:12px;color:var(--text-mid)">—</span></div>
+            <div class="settings-row"><div><div class="settings-row-label">Start Freq. Mass</div></div><div></div><span id="opc-val-fmass" style="font-family:'DM Mono',monospace;font-size:12px;color:var(--text-mid)">—</span></div>
+            <div class="settings-row"><div><div class="settings-row-label">Start Freq. Temp</div></div><div></div><span id="opc-val-ftemp" style="font-family:'DM Mono',monospace;font-size:12px;color:var(--text-mid)">—</span></div>
+            <div class="settings-row"><div><div class="settings-row-label">Material Density</div></div><div></div><span id="opc-val-dens" style="font-family:'DM Mono',monospace;font-size:12px;color:var(--text-mid)">—</span></div>
+            <div class="settings-row"><div><div class="settings-row-label">Z-ratio</div></div><div></div><span id="opc-val-zratio" style="font-family:'DM Mono',monospace;font-size:12px;color:var(--text-mid)">—</span></div>
+          </div>
         </div>
 
       </div>
@@ -576,10 +624,11 @@ function connect() {
   ws.onmessage = msg => {
     try {
       const ev = JSON.parse(msg.data);
-      if (ev.type === 'MeasurementEvent')  onMeasurement(ev);
-      if (ev.type === 'StateEvent')        onStateChange(ev.state);
-      if (ev.type === 'SweepPointEvent')   onSweepPoint(ev);
+      if (ev.type === 'MeasurementEvent')   onMeasurement(ev);
+      if (ev.type === 'StateEvent')         onStateChange(ev.state);
+      if (ev.type === 'SweepPointEvent')    onSweepPoint(ev);
       if (ev.type === 'SweepCompleteEvent') onSweepComplete();
+      if (ev.type === 'OpcStatusEvent')     onOpcStatus(ev);
     } catch(e) { console.warn('Bad WS msg', e); }
   };
 }
@@ -589,6 +638,22 @@ function onStateChange(state) {
   const pill = document.getElementById('status-pill');
   pill.className = 'status-pill ' + state.toLowerCase();
   document.getElementById('state-label').textContent = state.toUpperCase();
+}
+
+function onOpcStatus(ev) {
+  const connected = ev.connected;
+  // Header dot
+  document.getElementById('opc-dot').className       = 'ws-dot ' + (connected ? 'connected' : 'error');
+  // Settings panel dot + label
+  document.getElementById('opc-panel-dot').className = 'ws-dot ' + (connected ? 'connected' : 'error');
+  document.getElementById('opc-panel-label').textContent = connected ? 'CONNECTED' : 'DISCONNECTED';
+  // PLC settings values
+  const fmt = (v, unit) => v != null ? `${v} ${unit}`.trim() : '—';
+  document.getElementById('opc-val-amb').textContent    = fmt(ev.ambient_temp,    '°C');
+  document.getElementById('opc-val-fmass').textContent  = fmt(ev.start_freq_mass, 'Hz');
+  document.getElementById('opc-val-ftemp').textContent  = fmt(ev.start_freq_temp, 'Hz');
+  document.getElementById('opc-val-dens').textContent   = fmt(ev.density,         'kg/m³');
+  document.getElementById('opc-val-zratio').textContent = fmt(ev.z_ratio,         '');
 }
 
 // ---- Commands ----
@@ -607,10 +672,16 @@ async function sendCommand(action) {
 }
 
 async function applyOscSettings(osc) {
-  const freq = parseFloat(document.getElementById(`s-osc${osc}-freq`).value);
-  const gain = parseFloat(document.getElementById(`s-osc${osc}-int`).value);
+  const freq    = parseFloat(document.getElementById(`s-osc${osc}-freq`).value);
+  const intGain = parseFloat(document.getElementById(`s-osc${osc}-int`).value);
+  const iqGain  = parseFloat(document.getElementById(`s-osc${osc}-iq`).value);
+  const inv     = document.getElementById(`s-osc${osc}-inv`).value === '1';
+  const mode    = parseInt(document.getElementById(`s-osc${osc}-mode`).value);
   await fetch(`${API_URL}/settings/frequency?oscillator_idx=${osc}&frequency=${freq}`, { method: 'POST' });
-  await fetch(`${API_URL}/settings/integrator_gain?oscillator_idx=${osc}&gain=${gain}`, { method: 'POST' });
+  await fetch(`${API_URL}/settings/integrator_gain?oscillator_idx=${osc}&gain=${intGain}`, { method: 'POST' });
+  await fetch(`${API_URL}/settings/iq_gain?oscillator_idx=${osc}&gain=${iqGain}`, { method: 'POST' });
+  await fetch(`${API_URL}/settings/inverted?oscillator_idx=${osc}&inverted=${inv}`, { method: 'POST' });
+  await fetch(`${API_URL}/settings/output_mode?oscillator_idx=${osc}&mode=${mode}`, { method: 'POST' });
 }
 
 function applySystemSettings() {

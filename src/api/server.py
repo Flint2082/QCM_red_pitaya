@@ -17,6 +17,7 @@ from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from fastapi.staticfiles import StaticFiles
 
 from messaging.api_command import *
+from messaging.defines import OutputMode
 
 
 # ==================================================
@@ -54,6 +55,7 @@ class RestServer:
         self._thread: threading.Thread | None = None
         self._loop: asyncio.AbstractEventLoop | None = None
         self._last_state: str = "IDLE"
+        self._last_opc_status: dict | None = None
         self.app = self._build_app()
         
 
@@ -99,6 +101,8 @@ class RestServer:
                 msg = self._serialise_event(event)
                 if msg.get("type") == "StateEvent":
                     self._last_state = msg.get("state", "IDLE")
+                elif msg.get("type") == "OpcStatusEvent":
+                    self._last_opc_status = msg
                 await self.manager.broadcast(msg)
             except queue.Empty:
                 await asyncio.sleep(0.01)
@@ -133,6 +137,8 @@ class RestServer:
         async def websocket_endpoint(ws: WebSocket):
             await self.manager.connect(ws)
             await ws.send_json({"type": "StateEvent", "state": self._last_state})
+            if self._last_opc_status:
+                await ws.send_json(self._last_opc_status)
             try:
                 while True:
                     await ws.receive_text()   # keep connection alive; we only push, not receive
@@ -166,6 +172,21 @@ class RestServer:
         @app.post("/settings/integrator_gain")
         def set_integrator_gain(oscillator_idx: int, gain: float):
             self.command_queue.put(SetIntegratorGainCommand(oscillator_idx, gain))
+            return {"status": "ok"}
+
+        @app.post("/settings/iq_gain")
+        def set_iq_gain(oscillator_idx: int, gain: float):
+            self.command_queue.put(SetIQGainCommand(oscillator_idx, gain))
+            return {"status": "ok"}
+
+        @app.post("/settings/inverted")
+        def set_inverted(oscillator_idx: int, inverted: bool):
+            self.command_queue.put(SetInvertedCommand(oscillator_idx, inverted))
+            return {"status": "ok"}
+
+        @app.post("/settings/output_mode")
+        def set_output_mode(oscillator_idx: int, mode: int):
+            self.command_queue.put(SetOutputModeCommand(oscillator_idx, OutputMode(mode)))
             return {"status": "ok"}
 
         # ---- Sweep ----

@@ -9,11 +9,11 @@ from domain.qcm_interface import QCMInterface
 from workers.qcm_worker import QCMWorker
 from app.application import Application
 from api.server import RestServer
-# from opcua.client import OPCUAClient
-# from app.state import SystemState
+from opcua.wago_client import WagoClient
+from opcua.opc_worker import OPCUAWorker
 
 
-def build_system():
+def build_system(enable_opcua: bool = True):
     """Instantiate and wire up all system components. Returns a dict of named objects."""
 
     worker_command_queue = queue.Queue()
@@ -35,20 +35,40 @@ def build_system():
         event_queue=worker_event_queue
     )
 
+    # OPC-UA bridge (optional — system works without a PLC)
+    opc_worker = None
+    opc_command_queue = None
+    opc_event_queue = None
+    opc_status_queue = None
+    if enable_opcua:
+        opc_command_queue = queue.Queue()
+        opc_event_queue   = queue.Queue()
+        opc_status_queue  = queue.Queue()
+        wago = WagoClient(auto_connect=True)
+        opc_worker = OPCUAWorker(
+            client=wago,
+            command_queue=opc_command_queue,
+            event_queue=opc_event_queue,
+            status_queue=opc_status_queue,
+        )
+
     application = Application(
         worker_command_queue=worker_command_queue,
         worker_event_queue=worker_event_queue,
         api_command_queue=api_command_queue,
         api_event_queue=api_event_queue,
+        opc_command_queue=opc_command_queue,
+        opc_event_queue=opc_event_queue,
+        opc_status_queue=opc_status_queue,
     )
-    
+
     rest_server = RestServer(
         api_command_queue=api_command_queue,
         api_event_queue=api_event_queue,
     )
     rest_server.start()
 
-    return dict(
+    system = dict(
         fpga=fpga,
         qcm=qcm,
         qcm_worker=qcm_worker,
@@ -58,7 +78,14 @@ def build_system():
         worker_event_queue=worker_event_queue,
         api_command_queue=api_command_queue,
         api_event_queue=api_event_queue,
+        opc_command_queue=opc_command_queue,
+        opc_event_queue=opc_event_queue,
+        opc_status_queue=opc_status_queue,
     )
+    if opc_worker:
+        system["opc_worker"] = opc_worker
+
+    return system
 
 
 def run_dev_shell(system: dict):
@@ -83,10 +110,12 @@ def run_normal(system: dict):
 
     system["qcm_worker"].start()
     system["application"].start()
+    if "opc_worker" in system:
+        system["opc_worker"].start()
 
     shutdown = False
 
-    def handle_shutdown(signum, frame):
+    def handle_shutdown(_signum, _frame):
         nonlocal shutdown
         print("Shutdown requested")
         shutdown = True
@@ -99,9 +128,9 @@ def run_normal(system: dict):
             time.sleep(1)
     finally:
         print("Stopping system")
-        # system["rest_server"].stop()
-        # system["opcua_client"].stop()
-        # system["application"].stop()
+        if "opc_worker" in system:
+            system["opc_worker"].stop()
+            system["opc_worker"].join()
         system["qcm_worker"].stop()
         system["qcm_worker"].join()
         print("Shutdown complete")
@@ -114,10 +143,15 @@ def main():
         action="store_true",
         help="Start an interactive IPython shell instead of the main loop"
     )
+    parser.add_argument(
+        "--no-opcua",
+        action="store_true",
+        help="Disable OPC-UA PLC bridge"
+    )
     args = parser.parse_args()
 
     print("Starting QCM system")
-    system = build_system()
+    system = build_system(enable_opcua=not args.no_opcua)
 
     if args.dev:
         run_dev_shell(system)

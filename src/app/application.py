@@ -30,18 +30,23 @@ class Application(threading.Thread):
         # Queues facing the worker (below)
         worker_command_queue: queue.Queue,
         worker_event_queue: queue.Queue,
-        # Queues facing the API layer (above)
+        # Queues facing the REST API layer (above)
         api_command_queue: queue.Queue,
         api_event_queue: queue.Queue,
-        
+        # Queues facing the OPC-UA bridge (optional)
+        opc_command_queue: queue.Queue | None = None,
+        opc_event_queue:   queue.Queue | None = None,
+        opc_status_queue:  queue.Queue | None = None,
+
         system_state=None,
     ):
         super().__init__(daemon=True, name="application")
 
         self.worker_command_queue = worker_command_queue
         self.worker_event_queue = worker_event_queue
-        self.api_command_queue = api_command_queue
-        self.api_event_queue = api_event_queue
+        self._command_queues: list[queue.Queue] = [q for q in (api_command_queue, opc_command_queue) if q]
+        self._event_queues:   list[queue.Queue] = [q for q in (api_event_queue,   opc_event_queue)   if q]
+        self._opc_status_queue: queue.Queue | None = opc_status_queue
         self.system_state = system_state
         self.running = True
         
@@ -50,6 +55,10 @@ class Application(threading.Thread):
 
     def stop(self):
         self.running = False
+
+    def _emit(self, event):
+        for q in self._event_queues:
+            q.put(event)
 
     # --------------------------------------------------
     # Main loop
@@ -61,20 +70,34 @@ class Application(threading.Thread):
         while self.running:
             self._process_api_commands()
             self._process_worker_events()
+            self._process_opc_status()
 
         print("Application stopped")
+
+    # --------------------------------------------------
+    # Inbound: OPC status events → forward to REST/WS clients
+    # --------------------------------------------------
+
+    def _process_opc_status(self):
+        if self._opc_status_queue is None:
+            return
+        try:
+            while True:
+                self._emit(self._opc_status_queue.get_nowait())
+        except queue.Empty:
+            pass
 
     # --------------------------------------------------
     # Inbound: commands from API → forward to worker
     # --------------------------------------------------
 
     def _process_api_commands(self):
-        try:
-            while True:
-                command = self.api_command_queue.get_nowait()
-                self._handle_api_command(command)
-        except queue.Empty:
-            pass
+        for q in self._command_queues:
+            try:
+                while True:
+                    self._handle_api_command(q.get_nowait())
+            except queue.Empty:
+                pass
 
     def _handle_api_command(self, command):
         """
@@ -123,21 +146,21 @@ class Application(threading.Thread):
         Add any business logic here before forwarding.
         """
         if isinstance(event, we.StateEvent):
-            self.api_event_queue.put(ae.StateEvent(state=_STATE_MAP.get(event.state, "IDLE")))
+            self._emit(ae.StateEvent(state=_STATE_MAP.get(event.state, "IDLE")))
 
         elif isinstance(event, we.SweepPointEvent):
-            self.api_event_queue.put(ae.SweepPointEvent(
+            self._emit(ae.SweepPointEvent(
                 frequency=event.frequency, amplitude=event.amplitude, phase=event.phase))
 
         elif isinstance(event, we.SweepCompleteEvent):
-            self.api_event_queue.put(ae.SweepCompleteEvent())
+            self._emit(ae.SweepCompleteEvent())
 
         elif isinstance(event, we.MeasurementEvent):
             if self.system_state:
                 self.system_state.update(event)
-            self.api_event_queue.put(ae.MeasurementEvent(data=event.data))
+            self._emit(ae.MeasurementEvent(data=event.data))
 
         elif isinstance(event, we.ErrorEvent):
             print(f"[Application] Worker error: {event.message}")
-            self.api_event_queue.put(ae.ErrorEvent(event.message))
+            self._emit(ae.ErrorEvent(event.message))
 

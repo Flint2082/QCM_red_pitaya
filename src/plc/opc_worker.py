@@ -17,7 +17,7 @@ from messaging.api_command import (
     SetFrequencyCommand,
 )
 from messaging.api_event import MeasurementEvent, OpcStatusEvent
-from opcua.wago_client import WagoClient
+from plc.wago_client import WagoClient
 
 # --------------------------------------------------
 # OPC-UA node key definitions

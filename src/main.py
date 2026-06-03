@@ -9,8 +9,8 @@ from domain.qcm_interface import QCMInterface
 from workers.qcm_worker import QCMWorker
 from app.application import Application
 from api.server import RestServer
-from opcua.wago_client import WagoClient
-from opcua.opc_worker import OPCUAWorker
+from plc.wago_client import WagoClient
+from plc.opc_worker import OPCUAWorker
 
 
 def build_system(enable_opcua: bool = True):

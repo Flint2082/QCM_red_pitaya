@@ -49,9 +49,6 @@ class Application(threading.Thread):
         self._opc_status_queue: queue.Queue | None = opc_status_queue
         self.system_state = system_state
         self.running = True
-        
-        self.mass_mode_frequency = 5983000
-        self.temp_mode_frequency = 6570000
 
     def stop(self):
         self.running = False
@@ -109,7 +106,7 @@ class Application(threading.Thread):
         elif isinstance(command, ac.StopMeasurementCommand):
             self.worker_command_queue.put(wc.StopMeasurementCommand())
         elif isinstance(command, ac.StartupPLLCommand):
-            self.worker_command_queue.put(wc.StartupPLLCommand(self.mass_mode_frequency, self.temp_mode_frequency))
+            self.worker_command_queue.put(wc.StartupPLLCommand(command.start_freq_mass, command.start_freq_temp))
         elif isinstance(command, ac.StartSweepCommand):
             self.worker_command_queue.put(wc.StartSweepCommand(command.oscillator_idx, command.start_freq, command.stop_freq, command.step_size, command.settle_time))
         elif isinstance(command, ac.AbortSweepCommand):
@@ -124,6 +121,11 @@ class Application(threading.Thread):
             self.worker_command_queue.put(wc.SetIQGainCommand(command.oscillator_idx, command.gain))
         elif isinstance(command, ac.SetOutputModeCommand):
             self.worker_command_queue.put(wc.SetOutputModeCommand(command.oscillator_idx, command.mode))
+        elif isinstance(command, ac.SetCoefficientsCommand):
+            self.worker_command_queue.put(wc.SetCoefficientsCommand(
+                command.fM_0, command.fM_1, command.fM_2, command.fM_3,
+                command.fT_0, command.fT_1, command.fT_2, command.fT_3,
+            ))
 
         else:
             print(f"[Application] Unknown command type: {type(command)}")

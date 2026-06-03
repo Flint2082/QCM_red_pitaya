@@ -92,6 +92,11 @@ class QCMWorker(threading.Thread):
             self.qcm.setFreq(command.oscillator_idx, command.frequency)
         elif isinstance(command, SetIntegratorGainCommand):
             self.qcm.setInt(command.oscillator_idx, command.gain)
+        elif isinstance(command, SetCoefficientsCommand):
+            self.qcm.setCoefficients(
+                command.fM_0, command.fM_1, command.fM_2, command.fM_3,
+                command.fT_0, command.fT_1, command.fT_2, command.fT_3,
+            )
         else:
             raise ValueError(f"Unknown command type: {type(command)}")
         

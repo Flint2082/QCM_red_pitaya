@@ -25,3 +25,5 @@ QCM.READ.UncompensatedRate				Float
 QCM.READ.CompensatedMassFrequency		Float
 QCM.READ.Timestamp						Integer 
 QCM.READ.ErrorCode						String
+QCM.READ.LockMass                       Bool
+QCM.READ.LockTemp                       Bool

@@ -11,7 +11,19 @@ class ApiCommand:
 
 @dataclass
 class StartupPLLCommand(ApiCommand):
-    pass
+    start_freq_mass: float
+    start_freq_temp: float
+
+@dataclass
+class SetCoefficientsCommand(ApiCommand):
+    fM_0: float
+    fM_1: float
+    fM_2: float
+    fM_3: float
+    fT_0: float
+    fT_1: float
+    fT_2: float
+    fT_3: float
 
 @dataclass
 class StartMeasurementCommand(ApiCommand):

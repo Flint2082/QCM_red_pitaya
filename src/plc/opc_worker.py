@@ -73,6 +73,8 @@ def _build_measurement_payload(data: MeasurementData) -> dict:
         "QCM.READ.CompensatedMassFrequency": float(data.compensated_freq),
         "QCM.READ.Timestamp":                int(data.timestamp),
         "QCM.READ.ErrorCode":                "",
+        "QCM.READ.LockMass":                 bool(data.lock_mass),
+        "QCM.READ.LockTemp":                 bool(data.lock_temp),
     }
 
 

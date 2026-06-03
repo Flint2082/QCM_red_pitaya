@@ -15,6 +15,17 @@ class StartupPLLCommand(WorkerCommand):
     start_freq_temp: float
 
 @dataclass
+class SetCoefficientsCommand(WorkerCommand):
+    fM_0: float
+    fM_1: float
+    fM_2: float
+    fM_3: float
+    fT_0: float
+    fT_1: float
+    fT_2: float
+    fT_3: float
+
+@dataclass
 class StartMeasurementCommand(WorkerCommand):
     ambient_temp: float
 

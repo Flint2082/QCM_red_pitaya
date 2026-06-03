@@ -206,6 +206,32 @@ class QCMInterface:
         self.setInt(1, self.INT_GAIN_POST_LOCK)
         self.setInt(2, self.INT_GAIN_POST_LOCK)
         
+    def getCoefficients(self) -> dict:
+        import csv as _csv
+        try:
+            with open(self.coeff_file) as f:
+                reader = _csv.DictReader(f)
+                return {row['Name']: float(row['value']) for row in reader}
+        except Exception as e:
+            print(f"[QCM] Failed to read coefficients: {e}")
+            return {}
+
+    def setCoefficients(self, fM_0, fM_1, fM_2, fM_3, fT_0, fT_1, fT_2, fT_3):
+        with open(self.coeff_file, 'w') as f:
+            f.write("Name,value\n")
+            for name, val in [('fM_0', fM_0), ('fM_1', fM_1), ('fM_2', fM_2), ('fM_3', fM_3),
+                               ('fT_0', fT_0), ('fT_1', fT_1), ('fT_2', fT_2), ('fT_3', fT_3)]:
+                f.write(f"{name},{val}\n")
+        # Hot-patch the running TempCompAlgorithm if one is active
+        tc = getattr(self, 'temp_comp', None)
+        if tc is not None:
+            tc.fM_1, tc.fM_2, tc.fM_3 = fM_1, fM_2, fM_3
+            tc.fT_1, tc.fT_2, tc.fT_3 = fT_1, fT_2, fT_3
+            tc.a = tc.fM_3 * tc.fT_0 - tc.fT_3 * tc.fM_0
+            tc.b = tc.fM_2 * tc.fT_0 - tc.fT_2 * tc.fM_0
+            tc.c = tc.fM_1 * tc.fT_0 - tc.fT_1 * tc.fM_0
+        print(f"[QCM] Coefficients updated")
+
     def setMeasurementReference(self, T = 23, mat_dens=19320):
         self.fM_start = self.getFreq(1)
         self.fT_start = self.getFreq(2)

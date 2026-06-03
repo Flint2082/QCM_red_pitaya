@@ -6,16 +6,20 @@
 # No business logic — pure transport
 
 import asyncio
+import json
 import os
 import queue
 import threading
+import time
 from contextlib import asynccontextmanager
 
 import app
 import uvicorn
-from fastapi import FastAPI, WebSocket, WebSocketDisconnect
+from fastapi import FastAPI, File, HTTPException, UploadFile, WebSocket, WebSocketDisconnect
+from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 
+from domain.crystal import CrystalManager, CrystalProfile, sanitize_name
 from messaging.api_command import *
 from messaging.defines import OutputMode
 
@@ -56,6 +60,18 @@ class RestServer:
         self._loop: asyncio.AbstractEventLoop | None = None
         self._last_state: str = "IDLE"
         self._last_opc_status: dict | None = None
+        # Lock frequencies used by the GET LOCK command
+        self._lock_freq_mass: float = 5983000.0
+        self._lock_freq_temp: float = 6570000.0
+        # Coefficient cache (lazy-loaded from CSV on first GET)
+        self._coeff_file = os.path.join(os.path.dirname(__file__), "..", "..", "data", "coeffecients.csv")
+        self._coefficients: dict | None = None
+        # Crystal profiles
+        self._crystals = CrystalManager()
+        self._active_crystal: str | None = None
+        # Stats tracking (updated in event broadcaster)
+        self._measurement_start_time: float | None = None
+        self._session_thickness: float = 0.0
         self.app = self._build_app()
         
 
@@ -99,10 +115,34 @@ class RestServer:
             try:
                 event = self.event_queue.get_nowait()
                 msg = self._serialise_event(event)
+
                 if msg.get("type") == "StateEvent":
-                    self._last_state = msg.get("state", "IDLE")
+                    new_state = msg.get("state", "IDLE")
+                    old_state = self._last_state
+                    self._last_state = new_state
+                    # Start tracking when measurement begins
+                    if new_state == "RUNNING" and old_state != "RUNNING":
+                        self._measurement_start_time = time.time()
+                        self._session_thickness = 0.0
+                    # Flush stats when measurement ends
+                    elif old_state == "RUNNING" and new_state != "RUNNING":
+                        if self._measurement_start_time is not None and self._active_crystal:
+                            elapsed_h = (time.time() - self._measurement_start_time) / 3600
+                            profile = self._crystals.load(self._active_crystal)
+                            if profile:
+                                profile.hours_active    += elapsed_h
+                                profile.total_deposited += self._session_thickness
+                                self._crystals.save(profile)
+                        self._measurement_start_time = None
+
+                elif msg.get("type") == "MeasurementEvent":
+                    thickness = msg.get("calculated_thickness")
+                    if thickness is not None:
+                        self._session_thickness = max(self._session_thickness, float(thickness or 0))
+
                 elif msg.get("type") == "OpcStatusEvent":
                     self._last_opc_status = msg
+
                 await self.manager.broadcast(msg)
             except queue.Empty:
                 await asyncio.sleep(0.01)
@@ -154,7 +194,7 @@ class RestServer:
         
         @app.post("/measurement/get_lock")
         def get_lock():
-            self.command_queue.put(StartupPLLCommand())
+            self.command_queue.put(StartupPLLCommand(self._lock_freq_mass, self._lock_freq_temp))
             return {"status": "ok"}
 
         @app.post("/measurement/stop")
@@ -184,10 +224,145 @@ class RestServer:
             self.command_queue.put(SetInvertedCommand(oscillator_idx, inverted))
             return {"status": "ok"}
 
-        @app.post("/settings/output_mode")
-        def set_output_mode(oscillator_idx: int, mode: int):
-            self.command_queue.put(SetOutputModeCommand(oscillator_idx, OutputMode(mode)))
+        @app.get("/settings/lock_frequencies")
+        def get_lock_frequencies():
+            return {"mass": self._lock_freq_mass, "temp": self._lock_freq_temp}
+
+        @app.post("/settings/lock_frequencies")
+        def set_lock_frequencies(mass: float, temp: float):
+            self._lock_freq_mass = mass
+            self._lock_freq_temp = temp
             return {"status": "ok"}
+
+        @app.get("/settings/coefficients")
+        def get_coefficients():
+            if self._coefficients is None:
+                import csv as _csv
+                try:
+                    with open(self._coeff_file) as f:
+                        reader = _csv.DictReader(f)
+                        self._coefficients = {row['Name']: float(row['value']) for row in reader}
+                except Exception:
+                    self._coefficients = {}
+            return self._coefficients
+
+        @app.post("/settings/coefficients")
+        def set_coefficients(
+            fM_0: float, fM_1: float, fM_2: float, fM_3: float,
+            fT_0: float, fT_1: float, fT_2: float, fT_3: float,
+        ):
+            self._coefficients = dict(fM_0=fM_0, fM_1=fM_1, fM_2=fM_2, fM_3=fM_3,
+                                      fT_0=fT_0, fT_1=fT_1, fT_2=fT_2, fT_3=fT_3)
+            self.command_queue.put(SetCoefficientsCommand(fM_0, fM_1, fM_2, fM_3, fT_0, fT_1, fT_2, fT_3))
+            return {"status": "ok"}
+
+        @app.post("/settings/output_mode")
+        def set_output_mode(mode: int):
+            self.command_queue.put(SetOutputModeCommand(1, OutputMode(mode)))
+            return {"status": "ok"}
+
+        # ---- Crystal profiles ----
+
+        def _apply_crystal(profile: CrystalProfile):
+            """Push a crystal's settings into server state and command queue."""
+            self._lock_freq_mass = profile.freq_mass
+            self._lock_freq_temp = profile.freq_temp
+            self._coefficients = {
+                "fM_0": profile.fM_0, "fM_1": profile.fM_1,
+                "fM_2": profile.fM_2, "fM_3": profile.fM_3,
+                "fT_0": profile.fT_0, "fT_1": profile.fT_1,
+                "fT_2": profile.fT_2, "fT_3": profile.fT_3,
+            }
+            self.command_queue.put(SetCoefficientsCommand(
+                profile.fM_0, profile.fM_1, profile.fM_2, profile.fM_3,
+                profile.fT_0, profile.fT_1, profile.fT_2, profile.fT_3,
+            ))
+
+        @app.get("/crystals")
+        def list_crystals():
+            return {"crystals": self._crystals.list_names(), "active": self._active_crystal}
+
+        @app.post("/crystals/upload")
+        async def upload_crystal(file: UploadFile = File(...)):
+            name = sanitize_name(file.filename.removesuffix(".json"))
+            if not name:
+                raise HTTPException(400, "Invalid filename")
+            raw = await file.read()
+            try:
+                data = json.loads(raw)
+            except Exception:
+                raise HTTPException(400, "Invalid JSON")
+            data["name"] = name
+            valid = {k: data[k] for k in CrystalProfile.__dataclass_fields__ if k in data}
+            profile = CrystalProfile(**valid)
+            self._crystals.save(profile)
+            return {"status": "ok", "name": name}
+
+        @app.get("/crystals/{name}")
+        def get_crystal(name: str):
+            profile = self._crystals.load(name)
+            if not profile:
+                raise HTTPException(404, "Crystal not found")
+            from dataclasses import asdict
+            return asdict(profile)
+
+        @app.post("/crystals")
+        def create_crystal(name: str):
+            name = sanitize_name(name)
+            if not name:
+                raise HTTPException(400, "Invalid name")
+            profile = CrystalProfile(
+                name=name,
+                freq_mass=self._lock_freq_mass,
+                freq_temp=self._lock_freq_temp,
+                fM_0=self._coefficients.get("fM_0", 0) if self._coefficients else 0,
+                fM_1=self._coefficients.get("fM_1", 0) if self._coefficients else 0,
+                fM_2=self._coefficients.get("fM_2", 0) if self._coefficients else 0,
+                fM_3=self._coefficients.get("fM_3", 0) if self._coefficients else 0,
+                fT_0=self._coefficients.get("fT_0", 0) if self._coefficients else 0,
+                fT_1=self._coefficients.get("fT_1", 0) if self._coefficients else 0,
+                fT_2=self._coefficients.get("fT_2", 0) if self._coefficients else 0,
+                fT_3=self._coefficients.get("fT_3", 0) if self._coefficients else 0,
+            )
+            self._crystals.save(profile)
+            return {"status": "ok", "name": name}
+
+        @app.post("/crystals/{name}/activate")
+        def activate_crystal(name: str):
+            profile = self._crystals.load(name)
+            if not profile:
+                raise HTTPException(404, "Crystal not found")
+            _apply_crystal(profile)
+            self._active_crystal = name
+            return {"status": "ok"}
+
+        @app.post("/crystals/{name}/save_current")
+        def save_current_to_crystal(name: str):
+            profile = self._crystals.load(name)
+            if not profile:
+                raise HTTPException(404, "Crystal not found")
+            profile.freq_mass = self._lock_freq_mass
+            profile.freq_temp = self._lock_freq_temp
+            if self._coefficients:
+                for k in ("fM_0","fM_1","fM_2","fM_3","fT_0","fT_1","fT_2","fT_3"):
+                    setattr(profile, k, self._coefficients.get(k, 0))
+            self._crystals.save(profile)
+            return {"status": "ok"}
+
+        @app.delete("/crystals/{name}")
+        def delete_crystal(name: str):
+            if not self._crystals.delete(name):
+                raise HTTPException(404, "Crystal not found")
+            if self._active_crystal == name:
+                self._active_crystal = None
+            return {"status": "ok"}
+
+        @app.get("/crystals/{name}/download")
+        def download_crystal(name: str):
+            path = self._crystals._path(name)
+            if not os.path.exists(path):
+                raise HTTPException(404, "Crystal not found")
+            return FileResponse(path, filename=f"{name}.json", media_type="application/json")
 
         # ---- Sweep ----
 

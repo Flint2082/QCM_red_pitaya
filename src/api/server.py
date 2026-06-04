@@ -171,9 +171,61 @@ class RestServer:
         # Stats tracking (updated in event broadcaster)
         self._measurement_start_time: float | None = None
         self._session_thickness: float = 0.0
+        # Persistent settings file
+        self._settings_file = os.path.join(os.path.dirname(__file__), "..", "..", "data", "settings.json")
+        self._load_settings()   # override defaults with last saved values
         self.app = self._build_app()
         
 
+
+    # --------------------------------------------------
+    # Persistent settings
+    # --------------------------------------------------
+
+    def _load_settings(self):
+        try:
+            with open(self._settings_file) as f:
+                d = json.load(f)
+        except FileNotFoundError:
+            return  # first run — keep defaults
+        except Exception as e:
+            print(f"[Settings] Load failed: {e}")
+            return
+
+        if "osc_settings" in d:
+            self._osc_settings = {int(k): v for k, v in d["osc_settings"].items()}
+        if "output_mode" in d:
+            self._output_mode = int(d["output_mode"])
+        if "lock_freq_mass" in d:
+            self._lock_freq_mass = float(d["lock_freq_mass"])
+        if "lock_freq_temp" in d:
+            self._lock_freq_temp = float(d["lock_freq_temp"])
+        if "active_crystal" in d:
+            self._active_crystal = d["active_crystal"]
+        # Restore OPC connection parameters without triggering a reconnect
+        if self._wago_client and "opc_url" in d:
+            self._wago_client.url      = d["opc_url"]
+            self._wago_client.user     = d.get("opc_user", "")
+            self._wago_client.password = d.get("opc_password", "")
+
+    def _save_settings(self):
+        data = {
+            "osc_settings":   {str(k): v for k, v in self._osc_settings.items()},
+            "output_mode":    self._output_mode,
+            "lock_freq_mass": self._lock_freq_mass,
+            "lock_freq_temp": self._lock_freq_temp,
+            "active_crystal": self._active_crystal,
+        }
+        if self._wago_client:
+            data["opc_url"]      = self._wago_client.url
+            data["opc_user"]     = self._wago_client.user
+            data["opc_password"] = self._wago_client.password
+        try:
+            os.makedirs(os.path.dirname(self._settings_file), exist_ok=True)
+            with open(self._settings_file, "w") as f:
+                json.dump(data, f, indent=2)
+        except Exception as e:
+            print(f"[Settings] Save failed: {e}")
 
     # --------------------------------------------------
     # Lifecycle
@@ -324,18 +376,21 @@ class RestServer:
         def set_integrator_gain(oscillator_idx: int, gain: float):
             self._osc_settings.setdefault(oscillator_idx, {})["int_gain"] = gain
             self.command_queue.put(SetIntegratorGainCommand(oscillator_idx, gain))
+            self._save_settings()
             return {"status": "ok"}
 
         @app.post("/settings/iq_gain")
         def set_iq_gain(oscillator_idx: int, gain: float):
             self._osc_settings.setdefault(oscillator_idx, {})["iq_gain"] = gain
             self.command_queue.put(SetIQGainCommand(oscillator_idx, gain))
+            self._save_settings()
             return {"status": "ok"}
 
         @app.post("/settings/inverted")
         def set_inverted(oscillator_idx: int, inverted: bool):
             self._osc_settings.setdefault(oscillator_idx, {})["inverted"] = inverted
             self.command_queue.put(SetInvertedCommand(oscillator_idx, inverted))
+            self._save_settings()
             return {"status": "ok"}
 
         @app.get("/settings/lock_frequencies")
@@ -346,6 +401,7 @@ class RestServer:
         def set_lock_frequencies(mass: float, temp: float):
             self._lock_freq_mass = mass
             self._lock_freq_temp = temp
+            self._save_settings()
             return {"status": "ok"}
 
         @app.get("/settings/coefficients")
@@ -374,6 +430,7 @@ class RestServer:
         def set_output_mode(mode: int):
             self._output_mode = mode
             self.command_queue.put(SetOutputModeCommand(1, OutputMode(mode)))
+            self._save_settings()
             return {"status": "ok"}
 
         @app.get("/settings")
@@ -467,6 +524,7 @@ class RestServer:
             self._crystals.save(profile)
             _apply_crystal(profile)
             self._active_crystal = name
+            self._save_settings()
             return {"status": "ok"}
 
         @app.post("/crystals/{name}/activate")
@@ -476,6 +534,7 @@ class RestServer:
                 raise HTTPException(404, "Crystal not found")
             _apply_crystal(profile)
             self._active_crystal = name
+            self._save_settings()
             return {"status": "ok"}
 
         @app.post("/crystals/{name}/save_current")
@@ -497,6 +556,7 @@ class RestServer:
                 raise HTTPException(404, "Crystal not found")
             if self._active_crystal == name:
                 self._active_crystal = None
+                self._save_settings()
             return {"status": "ok"}
 
         @app.get("/crystals/{name}/download")
@@ -538,6 +598,7 @@ class RestServer:
             if not self._wago_client:
                 raise HTTPException(503, "OPC-UA bridge not enabled")
             self._wago_client.set_connection(url, user, password)
+            self._save_settings()
             return {"status": "ok", "url": url}
 
         # ---- Health ----

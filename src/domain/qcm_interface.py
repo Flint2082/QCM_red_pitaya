@@ -193,13 +193,14 @@ class QCMInterface:
             
             self.setFreq(2,start_freq_temp-self.WINDOW_SIZE/2)
             self.setInt(2,self.INT_GAIN_PRE_LOCK)
+            
+            time.sleep(0.1)  # wait a bit for PLL to respond
         
             bothLocked = self.getLockDetect(1) and self.getLockDetect(2)
             if bothLocked:
                 break
 
             print(f"Trying to lock... ( {t} / {self.MAX_STARTUP_TRIES} )", end='\r')
-            time.sleep(0.1)
         
         if not bothLocked:
             print("Warning: PLLs did not lock within expected time. Check starting frequencies.")

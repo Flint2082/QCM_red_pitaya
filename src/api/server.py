@@ -37,7 +37,10 @@ class ConnectionManager:
         self.active.append(ws)
 
     def disconnect(self, ws: WebSocket):
-        self.active.remove(ws)
+        try:
+            self.active.remove(ws)
+        except ValueError:
+            pass  # already removed by a concurrent disconnect path
 
     async def broadcast(self, message: dict):
         for ws in list(self.active):

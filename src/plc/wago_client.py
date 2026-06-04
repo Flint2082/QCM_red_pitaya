@@ -202,7 +202,9 @@ class WagoClient:
             return False
 
         try:
-            self.client.uaclient.write(write_values)
+            params = ua.WriteParameters()
+            params.NodesToWrite = write_values
+            self.client.uaclient.write(params)
             return True
         except Exception as e:
             print(f"[WAGO] Batch write failed: {e}")
@@ -244,7 +246,9 @@ class WagoClient:
             wv.Value = ua.DataValue(self._to_variant(value))
             write_values.append(wv)
         try:
-            self.client.uaclient.write(write_values)
+            params = ua.WriteParameters()
+            params.NodesToWrite = write_values
+            self.client.uaclient.write(params)
         except Exception as e:
             print(f"[WAGO] Batch write failed: {e}")
 

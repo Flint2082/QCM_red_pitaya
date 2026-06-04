@@ -8,6 +8,7 @@ Start with:  python tools/test_server.py [host] [port]
 Then use the IPython shell to read/write node values and trigger QCM commands.
 """
 
+import socket
 import sys
 import time
 
@@ -17,12 +18,13 @@ from opcua import Server, ua
 # Server setup
 # -----------------------------------------------------------------------
 
-HOST = sys.argv[1] if len(sys.argv) > 1 else "localhost"
+# Default to 0.0.0.0 so the server accepts connections on ALL network interfaces,
+# including the NIC connected directly to the Red Pitaya.
+# Pass a specific IP as the first argument if you want to bind to one interface only.
+HOST = sys.argv[1] if len(sys.argv) > 1 else "0.0.0.0"
 PORT = int(sys.argv[2]) if len(sys.argv) > 2 else 4840
 
 server = Server()
-# Use the real host in the endpoint URL — clients use this address to connect.
-# '0.0.0.0' would be advertised verbatim and is not a valid client destination.
 server.set_endpoint(f"opc.tcp://{HOST}:{PORT}")
 server.set_server_name("QCM OPCUA Test Server")
 
@@ -187,8 +189,29 @@ To set a node value directly:
   mass_freq_node.set_value(ua.DataValue(ua.Variant(5983000.0, ua.VariantType.Float)))
 """
 
+def _local_ips():
+    """Return non-loopback IPv4 addresses for this machine."""
+    try:
+        info = socket.getaddrinfo(socket.gethostname(), None, socket.AF_INET)
+        return sorted({addr[4][0] for addr in info if not addr[4][0].startswith("127.")})
+    except Exception:
+        return []
+
 server.start()
-print(f"[TEST] OPC-UA server started at opc.tcp://{HOST}:{PORT} (ns={idx})")
+_ips = _local_ips()
+_ip_list = "\n".join(f"    opc.tcp://{ip}:{PORT}" for ip in _ips) or "    (could not detect IPs — run ipconfig)"
+print(f"""
+[TEST] OPC-UA server started — listening on 0.0.0.0:{PORT}
+
+  Connect from the Red Pitaya using one of these URLs:
+{_ip_list}
+
+  Windows Firewall — run this once in an elevated PowerShell if connections are refused:
+    New-NetFirewallRule -DisplayName "OPC-UA Test" -Direction Inbound -Protocol TCP -LocalPort {PORT} -Action Allow
+
+  Check RP → PC reachability:   ping <one of the IPs above>  (from RP shell)
+  Check PC NIC has an IP:        ipconfig  (in Windows CMD/PowerShell)
+""")
 
 try:
     import IPython

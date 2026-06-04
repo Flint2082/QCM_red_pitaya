@@ -74,6 +74,7 @@ qcm_ctrl = qcm.add_object(ua.NodeId(node_id_base + "GVL_QCM.CTRL", idx), "CTRL")
 
 start_meas_node = _var(qcm_ctrl, "GVL_QCM.CTRL.StartMeasurement", False, ua.VariantType.Boolean)
 stop_meas_node  = _var(qcm_ctrl, "GVL_QCM.CTRL.StopMeasurement",  False, ua.VariantType.Boolean)
+get_lock_node   = _var(qcm_ctrl, "GVL_QCM.CTRL.GetLock",          False, ua.VariantType.Boolean)
 set_zero_node   = _var(qcm_ctrl, "GVL_QCM.CTRL.SetZero",          False, ua.VariantType.Boolean)
 sweep_node      = _var(qcm_ctrl, "GVL_QCM.CTRL.Sweep",            False, ua.VariantType.Boolean)
 
@@ -92,8 +93,11 @@ uncomp_thick_node     = _var(qcm_read, "GVL_QCM.READ.UncompensatedThickness",  0
 comp_rate_node        = _var(qcm_read, "GVL_QCM.READ.CompensatedRate",         0.0, ua.VariantType.Float,  writable=False)
 uncomp_rate_node      = _var(qcm_read, "GVL_QCM.READ.UncompensatedRate",       0.0, ua.VariantType.Float,  writable=False)
 comp_mass_freq_node   = _var(qcm_read, "GVL_QCM.READ.CompensatedMassFrequency",0.0, ua.VariantType.Float,  writable=False)
-timestamp_node        = _var(qcm_read, "GVL_QCM.READ.Timestamp",               0,   ua.VariantType.Int64,  writable=False)
-error_code_node       = _var(qcm_read, "GVL_QCM.READ.ErrorCode",               "",  ua.VariantType.String, writable=False)
+timestamp_node        = _var(qcm_read, "GVL_QCM.READ.Timestamp",               0,   ua.VariantType.Int64,   writable=False)
+error_code_node       = _var(qcm_read, "GVL_QCM.READ.ErrorCode",               "",  ua.VariantType.String,  writable=False)
+status_node           = _var(qcm_read, "GVL_QCM.READ.Status",                  "",  ua.VariantType.String,  writable=False)
+lock_mass_node        = _var(qcm_read, "GVL_QCM.READ.LockMass",                False, ua.VariantType.Boolean, writable=False)
+lock_temp_node        = _var(qcm_read, "GVL_QCM.READ.LockTemp",                False, ua.VariantType.Boolean, writable=False)
 
 # -----------------------------------------------------------------------
 # Helper functions available in the shell
@@ -102,6 +106,9 @@ error_code_node       = _var(qcm_read, "GVL_QCM.READ.ErrorCode",               "
 def read_all():
     """Print the current values of all READ nodes."""
     print(
+        f"  Status:           {status_node.get_value()!r}\n"
+        f"  LockMass:         {lock_mass_node.get_value()}\n"
+        f"  LockTemp:         {lock_temp_node.get_value()}\n"
         f"  Timestamp:        {timestamp_node.get_value()}\n"
         f"  MassFrequency:    {mass_freq_node.get_value():.3f} Hz\n"
         f"  TempFrequency:    {temp_freq_node.get_value():.3f} Hz\n"
@@ -138,6 +145,13 @@ def stop_measurement():
     stop_meas_node.set_value(ua.DataValue(ua.Variant(False, ua.VariantType.Boolean)))
     print("[TEST] StopMeasurement pulse sent")
 
+def get_lock():
+    """Send a rising edge on GetLock to trigger PLL acquisition."""
+    get_lock_node.set_value(ua.DataValue(ua.Variant(True, ua.VariantType.Boolean)))
+    time.sleep(0.1)
+    get_lock_node.set_value(ua.DataValue(ua.Variant(False, ua.VariantType.Boolean)))
+    print("[TEST] GetLock pulse sent")
+
 def set_freqs(mass_hz: float, temp_hz: float):
     """Set PLL start frequencies (Hz)."""
     start_freq_mass_node.set_value(ua.DataValue(ua.Variant(float(mass_hz), ua.VariantType.Float)))
@@ -171,16 +185,18 @@ Endpoint      : opc.tcp://{HOST}:{PORT}
 Node variables (all writable unless noted):
   SET  : density_node, start_freq_mass_node, start_freq_temp_node,
          ambient_temp_node, coeff_node
-  CTRL : start_meas_node, stop_meas_node, set_zero_node, sweep_node
+  CTRL : start_meas_node, stop_meas_node, get_lock_node, set_zero_node, sweep_node
   READ : mass_freq_node, temp_freq_node, mass_amp_node, temp_amp_node,
          temperature_node, comp_thick_node, uncomp_thick_node,
-         comp_rate_node, uncomp_rate_node, timestamp_node, error_code_node
+         comp_rate_node, uncomp_rate_node, timestamp_node, error_code_node,
+         status_node, lock_mass_node, lock_temp_node
 
 Helper functions:
-  read_all()               — print current READ values
+  read_all()               — print current READ values (incl. status + lock)
   read_set()               — print current SET values
   start_measurement()      — pulse StartMeasurement (rising edge)
   stop_measurement()       — pulse StopMeasurement
+  get_lock()               — pulse GetLock (trigger PLL acquisition)
   set_freqs(mass, temp)    — update start frequencies
   set_amb_temp(t)          — update ambient temperature
   watch(interval, count)   — poll read_all() N times
@@ -226,6 +242,7 @@ try:
         # CTRL nodes
         start_meas_node=start_meas_node,
         stop_meas_node=stop_meas_node,
+        get_lock_node=get_lock_node,
         set_zero_node=set_zero_node,
         sweep_node=sweep_node,
         # READ nodes
@@ -241,11 +258,15 @@ try:
         comp_mass_freq_node=comp_mass_freq_node,
         timestamp_node=timestamp_node,
         error_code_node=error_code_node,
+        status_node=status_node,
+        lock_mass_node=lock_mass_node,
+        lock_temp_node=lock_temp_node,
         # Helpers
         read_all=read_all,
         read_set=read_set,
         start_measurement=start_measurement,
         stop_measurement=stop_measurement,
+        get_lock=get_lock,
         set_freqs=set_freqs,
         set_amb_temp=set_amb_temp,
         watch=watch,

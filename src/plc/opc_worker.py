@@ -2,7 +2,7 @@
 #
 # Bridging the QCM system to the WAGO PLC over OPC-UA
 # Writing measurement results to PLC READ nodes after each measurement
-# Polling PLC CTRL nodes and emitting API commands on rising edges
+# Subscribing to PLC CTRL nodes for reliable edge detection (push, not poll)
 # Polling PLC SET nodes and caching configuration values
 # Emitting OpcStatusEvent to the status_queue on connect/disconnect and settings changes
 
@@ -14,9 +14,10 @@ from domain.measurement import MeasurementData
 from messaging.api_command import (
     StartMeasurementCommand,
     StopMeasurementCommand,
+    StartupPLLCommand,
     SetFrequencyCommand,
 )
-from messaging.api_event import MeasurementEvent, OpcStatusEvent
+from messaging.api_event import MeasurementEvent, OpcStatusEvent, StateEvent
 from plc.wago_client import WagoClient
 
 # --------------------------------------------------
@@ -39,15 +40,18 @@ _READ_KEYS = [
     "GVL_QCM.READ.ErrorCode",
 ]
 
-# Keys written by PLC → this system reads them as control signals
+# Keys subscribed by this system — PLC writes them as control signals.
+# Subscription means the server pushes a notification on every set_value(),
+# so even a very short pulse is guaranteed to be delivered.
 _CTRL_KEYS = [
     "GVL_QCM.CTRL.StartMeasurement",
     "GVL_QCM.CTRL.StopMeasurement",
+    "GVL_QCM.CTRL.GetLock",
     "GVL_QCM.CTRL.SetZero",   # stub – not yet handled
     "GVL_QCM.CTRL.Sweep",     # stub – not yet handled
 ]
 
-# Keys written by PLC → this system reads them as configuration
+# Keys written by PLC → this system reads them as configuration (still polled)
 _SET_KEYS = [
     "GVL_QCM.SET.AmbientTemp",
     "GVL_QCM.SET.StartFreqMass",
@@ -58,7 +62,8 @@ _SET_KEYS = [
 ]
 
 _RECONNECT_INTERVAL = 10.0   # seconds between reconnect attempts
-_POLL_INTERVAL      =  0.5   # seconds between PLC polls
+_POLL_INTERVAL      =  0.5   # seconds between SET-node polls
+_SUBSCRIPTION_MS    =  100   # OPC-UA subscription publishing interval (ms)
 
 
 def _build_measurement_payload(data: MeasurementData) -> dict:
@@ -77,9 +82,56 @@ def _build_measurement_payload(data: MeasurementData) -> dict:
         "GVL_QCM.READ.ErrorCode":                "",
         "GVL_QCM.READ.LockMass":                 bool(data.lock_mass),
         "GVL_QCM.READ.LockTemp":                 bool(data.lock_temp),
-
     }
 
+
+# --------------------------------------------------
+# OPC-UA subscription handler (runs in library's internal thread)
+# --------------------------------------------------
+
+class _CtrlSubscriptionHandler:
+    """
+    Receives push notifications from the OPC-UA server whenever a CTRL node
+    changes.  This runs in python-opcua's internal event thread, so only
+    thread-safe operations are performed here (queue.put is safe).
+    """
+
+    def __init__(self, worker: "OPCUAWorker"):
+        self._worker = worker
+
+    def datachange_notification(self, node, val, data):
+        if not val:
+            return  # only act on rising edge (False → True)
+        try:
+            # node.nodeid.Identifier is the full string path for string NodeIds
+            nid: str = node.nodeid.Identifier
+        except Exception:
+            nid = str(node.nodeid)
+
+        if "StartMeasurement" in nid:
+            ambient = float(self._worker._settings.get("GVL_QCM.SET.AmbientTemp", 20.0))
+            self._worker.command_queue.put(StartMeasurementCommand(ambient_temp=ambient))
+            print(f"[OPCUA] StartMeasurement (subscription, ambient={ambient}°C)")
+
+        elif "StopMeasurement" in nid:
+            self._worker.command_queue.put(StopMeasurementCommand())
+            print("[OPCUA] StopMeasurement (subscription)")
+
+        elif "GetLock" in nid:
+            mass = float(self._worker._settings.get("GVL_QCM.SET.StartFreqMass", 5983000.0))
+            temp = float(self._worker._settings.get("GVL_QCM.SET.StartFreqTemp", 6570000.0))
+            self._worker.command_queue.put(StartupPLLCommand(start_freq_mass=mass, start_freq_temp=temp))
+            print(f"[OPCUA] GetLock (subscription, mass={mass:.0f} Hz, temp={temp:.0f} Hz)")
+
+        # SetZero / Sweep: stubs — add handling here when implemented
+
+    def status_change_notification(self, status):
+        print(f"[OPCUA] Subscription status changed: {status}")
+
+
+# --------------------------------------------------
+# Worker thread
+# --------------------------------------------------
 
 class OPCUAWorker(threading.Thread):
     def __init__(
@@ -96,11 +148,11 @@ class OPCUAWorker(threading.Thread):
         self.status_queue = status_queue
         self.running = True
 
-        self._prev_ctrl: dict[str, bool] = {}
         self._settings: dict[str, object] = {}
         self._last_poll = 0.0
         self._last_reconnect = 0.0
         self._was_connected: bool | None = None  # None = not yet emitted
+        self._subscription = None   # active OPC-UA subscription object
 
     # --------------------------------------------------
     # Thread lifecycle
@@ -111,19 +163,22 @@ class OPCUAWorker(threading.Thread):
 
     def run(self):
         print("[OPCUA] Worker started")
-
-        # Emit initial disconnected status immediately
         self._emit_status()
+
+        if self.client.is_connected:
+            self._setup_ctrl_subscription()
 
         while self.running:
             self._process_events()
 
             now = time.time()
             if not self.client.is_connected:
+                self._teardown_ctrl_subscription()
                 if now - self._last_reconnect >= _RECONNECT_INTERVAL:
                     self._last_reconnect = now
                     connected = self.client.reconnect()
                     if connected:
+                        self._setup_ctrl_subscription()
                         self._emit_status()
                     elif self._was_connected is not False:
                         self._was_connected = False
@@ -134,9 +189,43 @@ class OPCUAWorker(threading.Thread):
 
             time.sleep(0.02)
 
+        self._teardown_ctrl_subscription()
         self.client.disconnect()
         self._emit_status()
         print("[OPCUA] Worker stopped")
+
+    # --------------------------------------------------
+    # CTRL subscription management
+    # --------------------------------------------------
+
+    def _setup_ctrl_subscription(self):
+        """Subscribe to all CTRL nodes so the server pushes changes immediately."""
+        self._teardown_ctrl_subscription()
+        try:
+            handler = _CtrlSubscriptionHandler(self)
+            sub = self.client.client.create_subscription(_SUBSCRIPTION_MS, handler)
+            nodes = []
+            for key in _CTRL_KEYS:
+                node_id = self.client.build_node_id(key)
+                if node_id:
+                    nodes.append(self.client.client.get_node(node_id))
+            if nodes:
+                sub.subscribe_data_change(nodes)
+                self._subscription = sub
+                print(f"[OPCUA] Subscribed to {len(nodes)} CTRL nodes")
+            else:
+                print("[OPCUA] No CTRL nodes found to subscribe to")
+        except Exception as e:
+            print(f"[OPCUA] Subscription setup failed (falling back to polling): {e}")
+            self._subscription = None
+
+    def _teardown_ctrl_subscription(self):
+        if self._subscription is not None:
+            try:
+                self._subscription.delete()
+            except Exception:
+                pass
+            self._subscription = None
 
     # --------------------------------------------------
     # Status events → status_queue
@@ -163,8 +252,15 @@ class OPCUAWorker(threading.Thread):
                 event = self.event_queue.get_nowait()
                 if isinstance(event, MeasurementEvent):
                     self._write_measurement(event.data)
+                elif isinstance(event, StateEvent):
+                    self._write_status(event.state)
             except queue.Empty:
                 break
+
+    def _write_status(self, state: str):
+        if not self.client.is_connected:
+            return
+        self.client.write_by_key("GVL_QCM.READ.Status", state)
 
     def _write_measurement(self, data: MeasurementData):
         if not self.client.is_connected:
@@ -179,7 +275,9 @@ class OPCUAWorker(threading.Thread):
 
     def _poll(self):
         self._poll_settings()
-        self._poll_ctrl()
+        # CTRL nodes are handled by subscription; poll only as fallback
+        if self._subscription is None:
+            self._poll_ctrl_fallback()
 
     def _poll_settings(self):
         result = self.client.batch_read_by_keys(_SET_KEYS)
@@ -188,11 +286,10 @@ class OPCUAWorker(threading.Thread):
 
         prev_mass = self._settings.get("GVL_QCM.SET.StartFreqMass")
         prev_temp = self._settings.get("GVL_QCM.SET.StartFreqTemp")
-        prev_settings_snapshot = dict(self._settings)
+        prev_snapshot = dict(self._settings)
 
         self._settings.update({k: v for k, v in result.items() if v is not None})
 
-        # Apply frequency changes immediately when the PLC updates them
         new_mass = self._settings.get("GVL_QCM.SET.StartFreqMass")
         new_temp = self._settings.get("GVL_QCM.SET.StartFreqTemp")
         if new_mass is not None and new_mass != prev_mass:
@@ -200,11 +297,11 @@ class OPCUAWorker(threading.Thread):
         if new_temp is not None and new_temp != prev_temp:
             self.command_queue.put(SetFrequencyCommand(oscillator_idx=2, frequency=float(new_temp)))
 
-        # Emit a status update whenever any setting value changes
-        if self._settings != prev_settings_snapshot:
+        if self._settings != prev_snapshot:
             self._emit_status()
 
-    def _poll_ctrl(self):
+    def _poll_ctrl_fallback(self):
+        """Edge-detection polling used only when subscription setup failed."""
         result = self.client.batch_read_by_keys(_CTRL_KEYS)
         if result is None:
             return
@@ -212,14 +309,25 @@ class OPCUAWorker(threading.Thread):
         start = bool(result.get("GVL_QCM.CTRL.StartMeasurement", False))
         stop  = bool(result.get("GVL_QCM.CTRL.StopMeasurement", False))
 
-        # Rising-edge detection: only emit command on 0→1 transition
-        if start and not self._prev_ctrl.get("start", False):
-            ambient_temp = float(self._settings.get("GVL_QCM.SET.AmbientTemp", 20.0))
-            self.command_queue.put(StartMeasurementCommand(ambient_temp=ambient_temp))
-            print(f"[OPCUA] StartMeasurement received (ambient={ambient_temp}°C)")
+        prev_start = bool(self._settings.get("_ctrl_start", False))
+        prev_stop  = bool(self._settings.get("_ctrl_stop",  False))
 
-        if stop and not self._prev_ctrl.get("stop", False):
+        lock = bool(result.get("GVL_QCM.CTRL.GetLock", False))
+        prev_lock = bool(self._settings.get("_ctrl_lock", False))
+
+        if start and not prev_start:
+            ambient = float(self._settings.get("GVL_QCM.SET.AmbientTemp", 20.0))
+            self.command_queue.put(StartMeasurementCommand(ambient_temp=ambient))
+            print("[OPCUA] StartMeasurement (poll fallback)")
+        if stop and not prev_stop:
             self.command_queue.put(StopMeasurementCommand())
-            print("[OPCUA] StopMeasurement received")
+            print("[OPCUA] StopMeasurement (poll fallback)")
+        if lock and not prev_lock:
+            mass = float(self._settings.get("GVL_QCM.SET.StartFreqMass", 5983000.0))
+            temp = float(self._settings.get("GVL_QCM.SET.StartFreqTemp", 6570000.0))
+            self.command_queue.put(StartupPLLCommand(start_freq_mass=mass, start_freq_temp=temp))
+            print("[OPCUA] GetLock (poll fallback)")
 
-        self._prev_ctrl = {"start": start, "stop": stop}
+        self._settings["_ctrl_start"] = start
+        self._settings["_ctrl_stop"]  = stop
+        self._settings["_ctrl_lock"]  = lock

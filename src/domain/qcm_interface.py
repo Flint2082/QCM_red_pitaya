@@ -125,8 +125,8 @@ class QCMInterface:
     def getLockDetect(self, osc_index, amp=None, phase=None):
         if amp is None or phase is None:
             amp, phase = self.getAmpAndPhase(osc_index)
-        # Amplitude above threshold and phase ~π (expected for a locked loop)
-        return amp > 0.2 and abs(round(phase)) == 3
+        # Amplitude above threshold and phase close to 0 indicates lock. The phase is the most important factor, but the amplitude check helps avoid false positives when the signal is very weak.
+        return amp > 0.1 and abs(round(phase*10)) == 0
     
     # ===========================
     # Control methods
@@ -175,30 +175,30 @@ class QCMInterface:
              
     def startupPLL(self, start_freq_mass: float, start_freq_temp: float):
         self.bothLocked = False
-        self.MAX_STARTUP_TIME = 10  # seconds
-        
-        self.reset()
+        self.MAX_STARTUP_TRIES = 10  # seconds
         
         print(f"Starting up PLLs around frequencies {start_freq_mass} and {start_freq_temp}")
         
         ## 6MHz crystal
-        self.setInv(1,1)                          
-        self.setFreq(1,start_freq_mass-self.WINDOW_SIZE/2)
-        self.setIQGain(1, self.IQ_GAIN)
-        self.setInt(1,self.INT_GAIN_PRE_LOCK)
+        self.setInv(1,1)      
+        self.setIQGain(1, self.IQ_GAIN)                    
         
         self.setInv(2,1)
-        self.setFreq(2,start_freq_temp-self.WINDOW_SIZE/2)
         self.setIQGain(2, self.IQ_GAIN)
-        self.setInt(2,self.INT_GAIN_PRE_LOCK)
         
-        # wait for the loops to stabilize before starting measurement
-        for t in range(self.MAX_STARTUP_TIME * 10):  # Wait for up to MAX_STARTUP_TIME seconds
+        for t in range(self.MAX_STARTUP_TRIES * 10): # try to lock for up to MAX_STARTUP_TRIES
+            self.reset()  # Ensure we're starting from a known state each time
+            self.setFreq(1,start_freq_mass-self.WINDOW_SIZE/2)
+            self.setInt(1,self.INT_GAIN_PRE_LOCK)
+            
+            self.setFreq(2,start_freq_temp-self.WINDOW_SIZE/2)
+            self.setInt(2,self.INT_GAIN_PRE_LOCK)
+        
             bothLocked = self.getLockDetect(1) and self.getLockDetect(2)
             if bothLocked:
                 break
-            # self.moveWindow(start_freq_mass, start_freq_temp) 
-            print(f"Waiting for PLLs to lock... (Time: {t * 0.1:.1f}s / {self.MAX_STARTUP_TIME}s)")
+
+            print(f"Trying to lock... ( {t} / {self.MAX_STARTUP_TRIES} )", end='\r')
             time.sleep(0.1)
         
         if not bothLocked:

@@ -75,6 +75,26 @@ class _StdoutForwarder:
         return getattr(self._original, "isatty", lambda: False)()
 
 
+class _StderrForwarder(_StdoutForwarder):
+    """Like _StdoutForwarder but emits ERROR-level LogEvents.
+    Captures thread tracebacks and other error output."""
+
+    def write(self, text: str):
+        if not text:
+            return
+        self._original.write(text)
+        self._buf += text
+        while "\n" in self._buf:
+            line, self._buf = self._buf.split("\n", 1)
+            if line.strip():
+                try:
+                    self._queue.put_nowait(
+                        LogEvent(level="ERROR", message=_clean(line), timestamp=time.time())
+                    )
+                except Exception:
+                    pass
+
+
 class _LoggingForwarder(logging.Handler):
     """Forwards Python logging records to the event queue as LogEvents."""
 
@@ -165,8 +185,10 @@ class RestServer:
         self._thread.start()
 
     def _setup_log_capture(self):
-        """Forward print() and Python logging to WebSocket clients as LogEvents."""
+        """Forward print() and Python logging (including stderr) to WebSocket clients."""
         sys.stdout = _StdoutForwarder(sys.stdout, self.event_queue)
+        # Capture stderr so thread crashes / tracebacks appear in the GUI log tab
+        sys.stderr = _StderrForwarder(sys.stderr, self.event_queue)
 
         handler = _LoggingForwarder(self.event_queue)
         handler.setLevel(logging.INFO)

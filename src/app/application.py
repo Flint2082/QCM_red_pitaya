@@ -62,12 +62,16 @@ class Application(threading.Thread):
     # --------------------------------------------------
 
     def run(self):
+        import traceback
         print("Application started")
 
         while self.running:
-            self._process_api_commands()
-            self._process_worker_events()
-            self._process_opc_status()
+            try:
+                self._process_api_commands()
+                self._process_worker_events()
+                self._process_opc_status()
+            except Exception:
+                print(f"[Application] Unhandled exception:\n{traceback.format_exc()}")
 
         print("Application stopped")
 

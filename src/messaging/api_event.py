@@ -36,6 +36,12 @@ class LockFailedEvent(ApiEvent):
     pass
 
 @dataclass
+class LogEvent(ApiEvent):
+    level:     str    # INFO / WARNING / ERROR / DEBUG
+    message:   str
+    timestamp: float
+
+@dataclass
 class LockStatusEvent(ApiEvent):
     lock_mass: bool
     lock_temp: bool

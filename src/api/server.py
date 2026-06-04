@@ -7,8 +7,10 @@
 
 import asyncio
 import json
+import logging
 import os
 import queue
+import sys
 import threading
 import time
 from contextlib import asynccontextmanager
@@ -21,7 +23,65 @@ from fastapi.staticfiles import StaticFiles
 
 from domain.crystal import CrystalManager, CrystalProfile, sanitize_name
 from messaging.api_command import *
+from messaging.api_event import LogEvent
 from messaging.defines import OutputMode
+
+
+# ==================================================
+# Log capture — forwards print() and logging to WS clients
+# ==================================================
+
+class _StdoutForwarder:
+    """Wraps sys.stdout so that print() lines are also pushed as LogEvents."""
+
+    def __init__(self, original, event_queue: queue.Queue):
+        self._original = original
+        self._queue = event_queue
+        self._buf = ""
+
+    def write(self, text: str):
+        if not text:
+            return
+        self._original.write(text)
+        self._buf += text
+        while "\n" in self._buf:
+            line, self._buf = self._buf.split("\n", 1)
+            if line.strip():
+                try:
+                    self._queue.put_nowait(
+                        LogEvent(level="INFO", message=line, timestamp=time.time())
+                    )
+                except Exception:
+                    pass
+
+    def flush(self):
+        self._original.flush()
+
+    def fileno(self):
+        try:
+            return self._original.fileno()
+        except Exception:
+            return -1
+
+    def isatty(self):
+        return getattr(self._original, "isatty", lambda: False)()
+
+
+class _LoggingForwarder(logging.Handler):
+    """Forwards Python logging records to the event queue as LogEvents."""
+
+    def __init__(self, event_queue: queue.Queue):
+        super().__init__()
+        self._queue = event_queue
+
+    def emit(self, record: logging.LogRecord):
+        try:
+            self._queue.put_nowait(
+                LogEvent(level=record.levelname, message=self.format(record),
+                         timestamp=record.created)
+            )
+        except Exception:
+            pass
 
 
 # ==================================================
@@ -92,8 +152,18 @@ class RestServer:
     # --------------------------------------------------
 
     def start(self):
+        self._setup_log_capture()
         self._thread = threading.Thread(target=self._run, daemon=True, name="api-server")
         self._thread.start()
+
+    def _setup_log_capture(self):
+        """Forward print() and Python logging to WebSocket clients as LogEvents."""
+        sys.stdout = _StdoutForwarder(sys.stdout, self.event_queue)
+
+        handler = _LoggingForwarder(self.event_queue)
+        handler.setLevel(logging.INFO)
+        handler.setFormatter(logging.Formatter("%(name)s — %(message)s"))
+        logging.getLogger().addHandler(handler)
 
     def stop(self):
         if self._loop:

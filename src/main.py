@@ -129,9 +129,13 @@ def run_normal(system: dict):
             time.sleep(1)
     finally:
         print("Stopping system")
+        # Stop the REST server first — prevents new WebSocket/HTTP connections
+        # while the rest of the system is shutting down
+        system["rest_server"].stop()
         if "opc_worker" in system:
             system["opc_worker"].stop()
             system["opc_worker"].join()
+        system["application"].stop()
         system["qcm_worker"].stop()
         system["qcm_worker"].join()
         print("Shutdown complete")

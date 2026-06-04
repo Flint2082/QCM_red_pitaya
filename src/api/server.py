@@ -68,6 +68,12 @@ class RestServer:
         # Lock frequencies used by the GET LOCK command
         self._lock_freq_mass: float = 5983000.0
         self._lock_freq_temp: float = 6570000.0
+        # Oscillator settings cache — defaults match QCMInterface post-lock state
+        self._osc_settings: dict = {
+            1: {"int_gain": 0.00001, "iq_gain": 0.00001, "inverted": True},
+            2: {"int_gain": 0.00001, "iq_gain": 0.00001, "inverted": True},
+        }
+        self._output_mode: int = 0
         # Coefficient cache (lazy-loaded from CSV on first GET)
         self._coeff_file = os.path.join(os.path.dirname(__file__), "..", "..", "data", "coeffecients.csv")
         self._coefficients: dict | None = None
@@ -216,16 +222,19 @@ class RestServer:
 
         @app.post("/settings/integrator_gain")
         def set_integrator_gain(oscillator_idx: int, gain: float):
+            self._osc_settings.setdefault(oscillator_idx, {})["int_gain"] = gain
             self.command_queue.put(SetIntegratorGainCommand(oscillator_idx, gain))
             return {"status": "ok"}
 
         @app.post("/settings/iq_gain")
         def set_iq_gain(oscillator_idx: int, gain: float):
+            self._osc_settings.setdefault(oscillator_idx, {})["iq_gain"] = gain
             self.command_queue.put(SetIQGainCommand(oscillator_idx, gain))
             return {"status": "ok"}
 
         @app.post("/settings/inverted")
         def set_inverted(oscillator_idx: int, inverted: bool):
+            self._osc_settings.setdefault(oscillator_idx, {})["inverted"] = inverted
             self.command_queue.put(SetInvertedCommand(oscillator_idx, inverted))
             return {"status": "ok"}
 
@@ -263,8 +272,18 @@ class RestServer:
 
         @app.post("/settings/output_mode")
         def set_output_mode(mode: int):
+            self._output_mode = mode
             self.command_queue.put(SetOutputModeCommand(1, OutputMode(mode)))
             return {"status": "ok"}
+
+        @app.get("/settings")
+        def get_settings():
+            return {
+                "oscillators":      self._osc_settings,
+                "output_mode":      self._output_mode,
+                "lock_frequencies": {"mass": self._lock_freq_mass, "temp": self._lock_freq_temp},
+                "coefficients":     self._coefficients or {},
+            }
 
         # ---- Crystal profiles ----
 

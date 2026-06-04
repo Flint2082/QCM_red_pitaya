@@ -726,23 +726,43 @@ async function loadCrystalForm(name) {
 }
 
 async function loadInitialSettings() {
+  // Single round-trip for all settings
   try {
+    const s = await fetch(`${API_URL}/settings`).then(r => r.json());
+
+    // Oscillator settings
+    for (const osc of [1, 2]) {
+      const os = s.oscillators?.[osc];
+      if (!os) continue;
+      document.getElementById(`s-osc${osc}-int`).value = os.int_gain ?? '';
+      document.getElementById(`s-osc${osc}-iq`).value  = os.iq_gain  ?? '';
+      document.getElementById(`s-osc${osc}-inv`).value = os.inverted ? '1' : '0';
+    }
+
+    // Output mode
+    if (s.output_mode != null) document.getElementById('s-output-mode').value = s.output_mode;
+
+    // Crystal / lock frequencies + coefficients
     const cl = await fetch(`${API_URL}/crystals`).then(r => r.json());
     if (cl.active) {
       await loadCrystalForm(cl.active);
     } else {
-      // No active crystal — fall back to individual settings endpoints
-      const lf = await fetch(`${API_URL}/settings/lock_frequencies`).then(r => r.json());
-      document.getElementById('s-crystal-freq-mass').value = lf.mass;
-      document.getElementById('s-crystal-freq-temp').value = lf.temp;
-      const c = await fetch(`${API_URL}/settings/coefficients`).then(r => r.json());
-      const map = { fM0:'fM_0', fM1:'fM_1', fM2:'fM_2', fM3:'fM_3',
-                    fT0:'fT_0', fT1:'fT_1', fT2:'fT_2', fT3:'fT_3' };
-      for (const [id, key] of Object.entries(map)) {
+      // No active crystal — use values from the settings response
+      const lf = s.lock_frequencies;
+      if (lf) {
+        document.getElementById('s-crystal-freq-mass').value = lf.mass;
+        document.getElementById('s-crystal-freq-temp').value = lf.temp;
+      }
+      const c = s.coefficients ?? {};
+      const coeffMap = { fM0:'fM_0', fM1:'fM_1', fM2:'fM_2', fM3:'fM_3',
+                         fT0:'fT_0', fT1:'fT_1', fT2:'fT_2', fT3:'fT_3' };
+      for (const [id, key] of Object.entries(coeffMap)) {
         if (c[key] != null) document.getElementById(`s-coeff-${id}`).value = c[key];
       }
     }
-  } catch(e) { /* backend not reachable yet */ }
+  } catch(e) { /* backend not yet reachable */ }
+
+  // OPC connection
   try {
     const opc = await fetch(`${API_URL}/opc/settings`).then(r => r.json());
     if (opc.url)  document.getElementById('s-opc-url').value  = opc.url;
@@ -845,9 +865,17 @@ async function applyCrystal() {
   } catch(e) { showToast('Apply failed', true); }
 }
 
-function downloadCrystal() {
+async function downloadCrystal() {
   const name = document.getElementById('s-crystal-name').value.trim();
   if (!name) { showToast('Enter a crystal name first', true); return; }
+  // Auto-save if the file doesn't exist yet so the download always works
+  const exists = await fetch(`${API_URL}/crystals/${encodeURIComponent(name)}`).then(r => r.ok);
+  if (!exists) {
+    await applyCrystal();
+    // applyCrystal shows a toast on error and returns early — re-check before redirecting
+    const saved = await fetch(`${API_URL}/crystals/${encodeURIComponent(name)}`).then(r => r.ok);
+    if (!saved) return;
+  }
   window.location.href = `${API_URL}/crystals/${encodeURIComponent(name)}/download`;
 }
 

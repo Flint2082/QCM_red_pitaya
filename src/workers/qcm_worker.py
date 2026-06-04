@@ -101,6 +101,12 @@ class QCMWorker(threading.Thread):
             self.qcm.setFreq(command.oscillator_idx, command.frequency)
         elif isinstance(command, SetIntegratorGainCommand):
             self.qcm.setInt(command.oscillator_idx, command.gain)
+        elif isinstance(command, SetIQGainCommand):
+            self.qcm.setIQGain(command.oscillator_idx, command.gain)
+        elif isinstance(command, SetInvertedCommand):
+            self.qcm.setInv(command.oscillator_idx, command.inverted)
+        elif isinstance(command, SetOutputModeCommand):
+            self.qcm.setOutputMode(command.mode.value)
         elif isinstance(command, SetCoefficientsCommand):
             self.qcm.setCoefficients(
                 command.fM_0, command.fM_1, command.fM_2, command.fM_3,

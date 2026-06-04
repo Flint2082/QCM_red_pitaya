@@ -29,12 +29,13 @@ class QCMInterface:
         self.INT_GAIN_POST_LOCK = 0.00001
         self.IQ_GAIN = 0.00001
         
-        # variables 
+        # variables
         self.coeff_file = os.path.join(base_dir, "..", "..", "data", "coeffecients.csv")
-        
+
         self.T_start = 0
         self.fT_start = 0
         self.fM_start = 0
+        self._inv = {1: False, 2: False}  # cached INV state, updated by setInv
 
 
         self.fpga = fpga
@@ -68,7 +69,8 @@ class QCMInterface:
         self.fpga.write_register(register_name='IQ_gain_'+str(osc_index),value=int(gain*2**32)) # multiplication to account for fixed-point (32F32) representation in FPGA
 
     def setInv(self, osc_index, inv: bool):
-        self.fpga.write_register(register_name='inv_fb_'+str(osc_index),value=inv)
+        self.fpga.write_register(register_name='inv_fb_'+str(osc_index), value=inv)
+        self._inv[osc_index] = bool(inv)
         
     def setOutputMode(self, mode = -1):
         if mode == -1:
@@ -115,13 +117,16 @@ class QCMInterface:
     def getAmpAndPhase(self, osc_index):
         I = self.getI(osc_index)
         Q = self.getQ(osc_index)
-        return (I**2 + Q**2)**0.5, np.arctan2(Q, I)
+        amp = (I**2 + Q**2)**0.5
+        # arctan2(-Q, -I) rotates by exactly π and stays within [-π, π]
+        phase = np.arctan2(-Q, -I) if self._inv.get(osc_index, False) else np.arctan2(Q, I)
+        return amp, phase
     
     def getLockDetect(self, osc_index, amp=None, phase=None):
         if amp is None or phase is None:
             amp, phase = self.getAmpAndPhase(osc_index)
         # Amplitude above threshold and phase ~π (expected for a locked loop)
-        return amp > 0.1 and abs(round(phase)) == 3
+        return amp > 0.2 and abs(round(phase)) == 3
     
     # ===========================
     # Control methods

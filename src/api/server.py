@@ -332,6 +332,24 @@ class RestServer:
             self._crystals.save(profile)
             return {"status": "ok", "name": name}
 
+        @app.post("/crystals/{name}/apply")
+        def apply_crystal_form(
+            name: str,
+            freq_mass: float, freq_temp: float,
+            fM_0: float, fM_1: float, fM_2: float, fM_3: float,
+            fT_0: float, fT_1: float, fT_2: float, fT_3: float,
+        ):
+            """Save explicit crystal data from the settings form and apply it immediately."""
+            profile = self._crystals.load(name) or CrystalProfile(name=name)
+            profile.freq_mass = freq_mass
+            profile.freq_temp = freq_temp
+            profile.fM_0, profile.fM_1, profile.fM_2, profile.fM_3 = fM_0, fM_1, fM_2, fM_3
+            profile.fT_0, profile.fT_1, profile.fT_2, profile.fT_3 = fT_0, fT_1, fT_2, fT_3
+            self._crystals.save(profile)
+            _apply_crystal(profile)
+            self._active_crystal = name
+            return {"status": "ok"}
+
         @app.post("/crystals/{name}/activate")
         def activate_crystal(name: str):
             profile = self._crystals.load(name)

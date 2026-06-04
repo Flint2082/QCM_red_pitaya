@@ -66,7 +66,9 @@ class QCMWorker(threading.Thread):
 
         if isinstance(command, StartupPLLCommand):
             self._set_state(WorkerState.LOCKING)
-            self.qcm.startupPLL(command.start_freq_mass, command.start_freq_temp)
+            locked = self.qcm.startupPLL(command.start_freq_mass, command.start_freq_temp)
+            if not locked:
+                self.event_queue.put(LockFailedEvent())
             self._set_state(WorkerState.IDLE)
 
         # Start measurement
@@ -76,6 +78,13 @@ class QCMWorker(threading.Thread):
 
         # Stop measurement
         elif isinstance(command, StopMeasurementCommand) and self.state == WorkerState.MEASURING:
+            # Auto-update start frequencies to current locked frequencies (rounded to 1 kHz)
+            lock_mass = self.qcm.getLockDetect(1)
+            lock_temp = self.qcm.getLockDetect(2)
+            if lock_mass and lock_temp:
+                freq_mass = round(self.qcm.getFreq(1) / 1000) * 1000
+                freq_temp = round(self.qcm.getFreq(2) / 1000) * 1000
+                self.event_queue.put(StartFreqAutoUpdatedEvent(freq_mass=freq_mass, freq_temp=freq_temp))
             self._set_state(WorkerState.IDLE)
 
         # Sweep
@@ -127,7 +136,11 @@ class QCMWorker(threading.Thread):
         self.event_queue.put(SweepCompleteEvent())
 
     def update(self):
-        
+        # Always emit lock status so the UI reflects it immediately, independent of measurement rate
+        lock_mass = self.qcm.getLockDetect(1)
+        lock_temp = self.qcm.getLockDetect(2)
+        self.event_queue.put(LockStatusEvent(lock_mass=lock_mass, lock_temp=lock_temp))
+
         # Perform measurement acquisition if in measuring state
         if self.state == WorkerState.MEASURING:
             self.event_queue.put(MeasurementEvent(data=self.qcm.getMeasurement()))

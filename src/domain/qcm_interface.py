@@ -175,7 +175,7 @@ class QCMInterface:
              
     def startupPLL(self, start_freq_mass: float, start_freq_temp: float):
         self.bothLocked = False
-        self.MAX_STARTUP_TRIES = 10  # seconds
+        self.MAX_STARTUP_TRIES = 100  # seconds
         
         print(f"Starting up PLLs around frequencies {start_freq_mass} and {start_freq_temp}")
         
@@ -186,7 +186,7 @@ class QCMInterface:
         self.setInv(2,1)
         self.setIQGain(2, self.IQ_GAIN)
         
-        for t in range(self.MAX_STARTUP_TRIES * 10): # try to lock for up to MAX_STARTUP_TRIES
+        for t in range(self.MAX_STARTUP_TRIES): # try to lock for up to MAX_STARTUP_TRIES
             self.reset()  # Ensure we're starting from a known state each time
             self.setFreq(1,start_freq_mass-self.WINDOW_SIZE/2)
             self.setInt(1,self.INT_GAIN_PRE_LOCK)
@@ -211,6 +211,7 @@ class QCMInterface:
 
         self.setInt(1, self.INT_GAIN_POST_LOCK)
         self.setInt(2, self.INT_GAIN_POST_LOCK)
+        return bothLocked
         
     def getCoefficients(self) -> dict:
         import csv as _csv

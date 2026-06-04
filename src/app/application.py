@@ -162,6 +162,17 @@ class Application(threading.Thread):
                 self.system_state.update(event)
             self._emit(ae.MeasurementEvent(data=event.data))
 
+        elif isinstance(event, we.LockFailedEvent):
+            print("[Application] PLL lock failed")
+            self._emit(ae.LockFailedEvent())
+
+        elif isinstance(event, we.LockStatusEvent):
+            self._emit(ae.LockStatusEvent(lock_mass=event.lock_mass, lock_temp=event.lock_temp))
+
+        elif isinstance(event, we.StartFreqAutoUpdatedEvent):
+            print(f"[Application] Auto-updated start freqs: mass={event.freq_mass:.0f} Hz, temp={event.freq_temp:.0f} Hz")
+            self._emit(ae.StartFreqAutoUpdatedEvent(freq_mass=event.freq_mass, freq_temp=event.freq_temp))
+
         elif isinstance(event, we.ErrorEvent):
             print(f"[Application] Worker error: {event.message}")
             self._emit(ae.ErrorEvent(event.message))

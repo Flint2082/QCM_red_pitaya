@@ -125,6 +125,11 @@ footer { height: 24px; background: var(--surface); border-top: 1px solid var(--b
 .footer-text { font-family: 'DM Mono', monospace; font-size: 10px; color: var(--text-dim); letter-spacing: 0.04em; }
 .toast { position: fixed; bottom: 24px; right: 24px; background: var(--surface-2); border: 1px solid var(--green); border-radius: var(--radius); padding: 10px 18px; font-family: 'DM Mono', monospace; font-size: 11px; letter-spacing: 0.06em; color: var(--green); opacity: 0; transition: opacity 0.25s; pointer-events: none; z-index: 9999; }
 .toast.error { border-color: var(--red); color: var(--red); }
+.modal-overlay { position:fixed; inset:0; background:rgba(0,0,0,0.75); display:flex; align-items:center; justify-content:center; z-index:9000; }
+.modal { background:var(--surface); border:1px solid var(--border-2); border-radius:4px; padding:28px; max-width:440px; width:90%; box-shadow:0 8px 32px rgba(0,0,0,0.5); }
+.modal-title { font-family:'DM Mono',monospace; font-size:13px; letter-spacing:0.08em; color:var(--orange); margin-bottom:12px; }
+.modal-body { font-size:12px; color:var(--text-mid); line-height:1.7; margin-bottom:22px; }
+.modal-footer { display:flex; gap:8px; justify-content:flex-end; }
 .crystal-list { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); overflow-y: auto; max-height: 200px; margin-bottom: 16px; }
 .crystal-item { padding: 8px 12px; border-bottom: 1px solid var(--border); cursor: pointer; font-family: 'DM Mono', monospace; font-size: 11px; color: var(--text-dim); display: flex; justify-content: space-between; align-items: center; transition: background 0.12s, color 0.12s; user-select: none; }
 .crystal-item:last-child { border-bottom: none; }
@@ -309,8 +314,8 @@ footer { height: 24px; background: var(--surface); border-top: 1px solid var(--b
         <div class="settings-nav-item active" onclick="switchSettings('osc',this)">OSC 1 &amp; 2</div>
         <div class="settings-nav-section">MEASUREMENT</div>
         <div class="settings-nav-item" onclick="switchSettings('meas',this)">Measurement</div>
-        <div class="settings-nav-section">DATA</div>
-        <div class="settings-nav-item" onclick="switchSettings('crystals',this);loadCrystalList()">Crystals</div>
+        <div class="settings-nav-section">CRYSTAL</div>
+        <div class="settings-nav-item" onclick="switchSettings('crystals',this)">Crystal Settings</div>
         <div class="settings-nav-section">SYSTEM</div>
         <div class="settings-nav-item" onclick="switchSettings('system',this)">System</div>
         <div class="settings-nav-item" onclick="switchSettings('opc',this)">OPC-UA</div>
@@ -320,7 +325,6 @@ footer { height: 24px; background: var(--surface); border-top: 1px solid var(--b
         <div class="settings-panel active" id="spanel-osc">
           <div class="settings-section-title">OSCILLATOR 1 — MASS MODE</div>
           <div class="settings-group">
-            <div class="settings-row"><div><div class="settings-row-label">Start Frequency</div><div class="settings-row-desc">Initial PLL lock frequency</div></div><div></div><div style="display:flex;align-items:center;gap:6px"><input class="settings-input" type="number" id="s-osc1-freq" value="6000000" step="100"><span class="settings-unit">Hz</span></div></div>
             <div class="settings-row"><div><div class="settings-row-label">Integrator Gain</div><div class="settings-row-desc">PLL loop integrator coefficient</div></div><div></div><div style="display:flex;align-items:center;gap:6px"><input class="settings-input" type="number" id="s-osc1-int" value="0.00001" step="0.000001"><span class="settings-unit"></span></div></div>
             <div class="settings-row"><div><div class="settings-row-label">IQ Gain</div><div class="settings-row-desc">Demodulator gain factor</div></div><div></div><div style="display:flex;align-items:center;gap:6px"><input class="settings-input" type="number" id="s-osc1-iq" value="0.00001" step="0.000001"><span class="settings-unit"></span></div></div>
             <div class="settings-row"><div><div class="settings-row-label">Invert Feedback</div><div class="settings-row-desc">Invert the feedback signal</div></div><div></div><div style="display:flex;align-items:center;gap:6px"><select class="settings-input" id="s-osc1-inv" style="width:150px;text-align:left"><option value="0">Disabled</option><option value="1">Enabled</option></select></div></div>
@@ -329,7 +333,6 @@ footer { height: 24px; background: var(--surface); border-top: 1px solid var(--b
 
           <div class="settings-section-title">OSCILLATOR 2 — TEMP MODE</div>
           <div class="settings-group">
-            <div class="settings-row"><div><div class="settings-row-label">Start Frequency</div><div class="settings-row-desc">Initial PLL lock frequency</div></div><div></div><div style="display:flex;align-items:center;gap:6px"><input class="settings-input" type="number" id="s-osc2-freq" value="6002000" step="100"><span class="settings-unit">Hz</span></div></div>
             <div class="settings-row"><div><div class="settings-row-label">Integrator Gain</div><div class="settings-row-desc">PLL loop integrator coefficient</div></div><div></div><div style="display:flex;align-items:center;gap:6px"><input class="settings-input" type="number" id="s-osc2-int" value="0.00001" step="0.000001"><span class="settings-unit"></span></div></div>
             <div class="settings-row"><div><div class="settings-row-label">IQ Gain</div><div class="settings-row-desc">Demodulator gain factor</div></div><div></div><div style="display:flex;align-items:center;gap:6px"><input class="settings-input" type="number" id="s-osc2-iq" value="0.00001" step="0.000001"><span class="settings-unit"></span></div></div>
             <div class="settings-row"><div><div class="settings-row-label">Invert Feedback</div><div class="settings-row-desc">Invert the feedback signal</div></div><div></div><div style="display:flex;align-items:center;gap:6px"><select class="settings-input" id="s-osc2-inv" style="width:150px;text-align:left"><option value="0">Disabled</option><option value="1">Enabled</option></select></div></div>
@@ -343,18 +346,6 @@ footer { height: 24px; background: var(--surface); border-top: 1px solid var(--b
             <div class="settings-row"><div><div class="settings-row-label">Ambient Temperature</div><div class="settings-row-desc">Starting reference temperature</div></div><div></div><div style="display:flex;align-items:center;gap:6px"><input class="settings-input" type="number" id="s-amb-temp" value="23" step="0.5"><span class="settings-unit">°C</span></div></div>
             <div class="settings-row"><div><div class="settings-row-label">Material Density</div><div class="settings-row-desc">Deposited film material density</div></div><div></div><div style="display:flex;align-items:center;gap:6px"><input class="settings-input" type="number" id="s-mat-dens" value="19320" step="10"><span class="settings-unit">kg/m³</span></div></div>
           </div>
-          <div class="settings-section-title">CALIBRATION COEFFICIENTS</div>
-          <div class="settings-group">
-            <div class="settings-row"><div><div class="settings-row-label">fM_3</div><div class="settings-row-desc">Mass mode cubic term</div></div><div></div><div style="display:flex;align-items:center;gap:6px"><input class="settings-input" type="number" id="s-coeff-fM3" step="any" style="width:180px"></div></div>
-            <div class="settings-row"><div><div class="settings-row-label">fM_2</div><div class="settings-row-desc">Mass mode quadratic term</div></div><div></div><div style="display:flex;align-items:center;gap:6px"><input class="settings-input" type="number" id="s-coeff-fM2" step="any" style="width:180px"></div></div>
-            <div class="settings-row"><div><div class="settings-row-label">fM_1</div><div class="settings-row-desc">Mass mode linear term</div></div><div></div><div style="display:flex;align-items:center;gap:6px"><input class="settings-input" type="number" id="s-coeff-fM1" step="any" style="width:180px"></div></div>
-            <div class="settings-row"><div><div class="settings-row-label">fM_0</div><div class="settings-row-desc">Mass mode constant term</div></div><div></div><div style="display:flex;align-items:center;gap:6px"><input class="settings-input" type="number" id="s-coeff-fM0" step="any" style="width:180px"></div></div>
-            <div class="settings-row"><div><div class="settings-row-label">fT_3</div><div class="settings-row-desc">Temp mode cubic term</div></div><div></div><div style="display:flex;align-items:center;gap:6px"><input class="settings-input" type="number" id="s-coeff-fT3" step="any" style="width:180px"></div></div>
-            <div class="settings-row"><div><div class="settings-row-label">fT_2</div><div class="settings-row-desc">Temp mode quadratic term</div></div><div></div><div style="display:flex;align-items:center;gap:6px"><input class="settings-input" type="number" id="s-coeff-fT2" step="any" style="width:180px"></div></div>
-            <div class="settings-row"><div><div class="settings-row-label">fT_1</div><div class="settings-row-desc">Temp mode linear term</div></div><div></div><div style="display:flex;align-items:center;gap:6px"><input class="settings-input" type="number" id="s-coeff-fT1" step="any" style="width:180px"></div></div>
-            <div class="settings-row"><div><div class="settings-row-label">fT_0</div><div class="settings-row-desc">Temp mode constant term</div></div><div></div><div style="display:flex;align-items:center;gap:6px"><input class="settings-input" type="number" id="s-coeff-fT0" step="any" style="width:180px"></div></div>
-          </div>
-          <button class="btn btn-blue" onclick="applyCoefficients()">APPLY COEFFICIENTS</button>
         </div>
 
         <div class="settings-panel" id="spanel-system">
@@ -411,64 +402,48 @@ footer { height: 24px; background: var(--surface); border-top: 1px solid var(--b
 
         <!-- CRYSTALS -->
         <div class="settings-panel" id="spanel-crystals">
-          <div class="settings-section-title">CRYSTAL PROFILES</div>
-
-          <!-- Create + Upload row -->
-          <div style="display:flex;gap:8px;margin-bottom:12px;align-items:center">
-            <div class="num-input-wrap" style="flex:1;height:26px">
-              <input type="text" id="crystal-new-name" placeholder="new crystal name…"
-                     style="width:100%;background:transparent;border:none;outline:none;color:var(--text);font-family:'DM Mono',monospace;font-size:12px">
-            </div>
-            <button class="btn btn-green" onclick="createCrystal()">+ NEW</button>
-            <button class="btn" onclick="document.getElementById('crystal-upload-input').click()">↑ UPLOAD</button>
-            <input type="file" id="crystal-upload-input" accept=".json" style="display:none"
-                   onchange="uploadCrystal(this)">
-          </div>
-
-          <!-- Crystal list -->
-          <div class="crystal-list" id="crystal-list">
-            <div style="padding:12px;font-family:'DM Mono',monospace;font-size:10px;color:var(--text-dim)">No crystals found</div>
-          </div>
-
-          <!-- Detail panel (shown when a crystal is selected) -->
-          <div id="crystal-detail" style="display:none">
-            <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:20px">
-              <button class="btn btn-green"  onclick="activateCrystal()">LOAD</button>
-              <button class="btn btn-blue"   onclick="saveCurrentToCrystal()">SAVE CURRENT</button>
-              <button class="btn"            onclick="downloadCrystal()">↓ DOWNLOAD</button>
-              <button class="btn btn-red"    onclick="deleteCrystal()">DELETE</button>
-            </div>
-
-            <div class="settings-section-title" id="crystal-detail-title">—</div>
-            <div class="crystal-stat-grid">
-              <div class="crystal-stat-cell">
-                <div class="crystal-stat-label">Hours Active</div>
-                <div class="crystal-stat-value"><span id="cd-hours">—</span> <span style="font-size:10px;color:var(--text-dim)">h</span></div>
-              </div>
-              <div class="crystal-stat-cell">
-                <div class="crystal-stat-label">Total Deposited</div>
-                <div class="crystal-stat-value"><span id="cd-deposited">—</span> <span style="font-size:10px;color:var(--text-dim)">nm</span></div>
+          <div class="settings-section-title">CRYSTAL PROFILE</div>
+          <div class="settings-group">
+            <div class="settings-row">
+              <div><div class="settings-row-label">Name</div><div class="settings-row-desc">Filename saved to data/crystals/</div></div>
+              <div></div>
+              <div style="display:flex;align-items:center;gap:6px">
+                <input class="settings-input" type="text" id="s-crystal-name" style="width:150px;text-align:left" placeholder="my_crystal">
+                <button class="btn" onclick="downloadCrystal()" title="Download JSON">↓</button>
+                <button class="btn" onclick="document.getElementById('crystal-upload-input').click()" title="Upload JSON">↑</button>
+                <input type="file" id="crystal-upload-input" accept=".json" style="display:none" onchange="uploadCrystal(this)">
               </div>
             </div>
-
-            <div class="settings-section-title">FREQUENCIES</div>
-            <div class="settings-group" style="margin-bottom:20px">
-              <div class="settings-row"><div><div class="settings-row-label">Mass Lock Freq</div></div><div></div><span id="cd-fmass" style="font-family:'DM Mono',monospace;font-size:12px;color:var(--text-mid)">—</span></div>
-              <div class="settings-row"><div><div class="settings-row-label">Temp Lock Freq</div></div><div></div><span id="cd-ftemp" style="font-family:'DM Mono',monospace;font-size:12px;color:var(--text-mid)">—</span></div>
+          </div>
+          <div class="crystal-stat-grid">
+            <div class="crystal-stat-cell">
+              <div class="crystal-stat-label">Hours Active</div>
+              <div class="crystal-stat-value"><span id="s-crystal-hours">—</span> <span style="font-size:10px;color:var(--text-dim)">h</span></div>
             </div>
-
-            <div class="settings-section-title">COEFFICIENTS</div>
-            <div class="settings-group">
-              <div class="settings-row"><div><div class="settings-row-label">fM_3</div></div><div></div><span id="cd-fM3" style="font-family:'DM Mono',monospace;font-size:12px;color:var(--text-mid)">—</span></div>
-              <div class="settings-row"><div><div class="settings-row-label">fM_2</div></div><div></div><span id="cd-fM2" style="font-family:'DM Mono',monospace;font-size:12px;color:var(--text-mid)">—</span></div>
-              <div class="settings-row"><div><div class="settings-row-label">fM_1</div></div><div></div><span id="cd-fM1" style="font-family:'DM Mono',monospace;font-size:12px;color:var(--text-mid)">—</span></div>
-              <div class="settings-row"><div><div class="settings-row-label">fM_0</div></div><div></div><span id="cd-fM0" style="font-family:'DM Mono',monospace;font-size:12px;color:var(--text-mid)">—</span></div>
-              <div class="settings-row"><div><div class="settings-row-label">fT_3</div></div><div></div><span id="cd-fT3" style="font-family:'DM Mono',monospace;font-size:12px;color:var(--text-mid)">—</span></div>
-              <div class="settings-row"><div><div class="settings-row-label">fT_2</div></div><div></div><span id="cd-fT2" style="font-family:'DM Mono',monospace;font-size:12px;color:var(--text-mid)">—</span></div>
-              <div class="settings-row"><div><div class="settings-row-label">fT_1</div></div><div></div><span id="cd-fT1" style="font-family:'DM Mono',monospace;font-size:12px;color:var(--text-mid)">—</span></div>
-              <div class="settings-row"><div><div class="settings-row-label">fT_0</div></div><div></div><span id="cd-fT0" style="font-family:'DM Mono',monospace;font-size:12px;color:var(--text-mid)">—</span></div>
+            <div class="crystal-stat-cell">
+              <div class="crystal-stat-label">Total Deposited</div>
+              <div class="crystal-stat-value"><span id="s-crystal-deposited">—</span> <span style="font-size:10px;color:var(--text-dim)">nm</span></div>
             </div>
           </div>
+
+          <div class="settings-section-title">START FREQUENCIES</div>
+          <div class="settings-group">
+            <div class="settings-row"><div><div class="settings-row-label">Mass Lock Freq</div><div class="settings-row-desc">PLL start frequency — OSC 1</div></div><div></div><div style="display:flex;align-items:center;gap:6px"><input class="settings-input" type="number" id="s-crystal-freq-mass" value="5983000" step="1000"><span class="settings-unit">Hz</span></div></div>
+            <div class="settings-row"><div><div class="settings-row-label">Temp Lock Freq</div><div class="settings-row-desc">PLL start frequency — OSC 2</div></div><div></div><div style="display:flex;align-items:center;gap:6px"><input class="settings-input" type="number" id="s-crystal-freq-temp" value="6570000" step="1000"><span class="settings-unit">Hz</span></div></div>
+          </div>
+
+          <div class="settings-section-title">CALIBRATION COEFFICIENTS</div>
+          <div class="settings-group">
+            <div class="settings-row"><div><div class="settings-row-label">fM_3</div><div class="settings-row-desc">Mass mode cubic term</div></div><div></div><div style="display:flex;align-items:center;gap:6px"><input class="settings-input" type="number" id="s-coeff-fM3" step="any" style="width:180px"></div></div>
+            <div class="settings-row"><div><div class="settings-row-label">fM_2</div><div class="settings-row-desc">Mass mode quadratic term</div></div><div></div><div style="display:flex;align-items:center;gap:6px"><input class="settings-input" type="number" id="s-coeff-fM2" step="any" style="width:180px"></div></div>
+            <div class="settings-row"><div><div class="settings-row-label">fM_1</div><div class="settings-row-desc">Mass mode linear term</div></div><div></div><div style="display:flex;align-items:center;gap:6px"><input class="settings-input" type="number" id="s-coeff-fM1" step="any" style="width:180px"></div></div>
+            <div class="settings-row"><div><div class="settings-row-label">fM_0</div><div class="settings-row-desc">Mass mode constant term</div></div><div></div><div style="display:flex;align-items:center;gap:6px"><input class="settings-input" type="number" id="s-coeff-fM0" step="any" style="width:180px"></div></div>
+            <div class="settings-row"><div><div class="settings-row-label">fT_3</div><div class="settings-row-desc">Temp mode cubic term</div></div><div></div><div style="display:flex;align-items:center;gap:6px"><input class="settings-input" type="number" id="s-coeff-fT3" step="any" style="width:180px"></div></div>
+            <div class="settings-row"><div><div class="settings-row-label">fT_2</div><div class="settings-row-desc">Temp mode quadratic term</div></div><div></div><div style="display:flex;align-items:center;gap:6px"><input class="settings-input" type="number" id="s-coeff-fT2" step="any" style="width:180px"></div></div>
+            <div class="settings-row"><div><div class="settings-row-label">fT_1</div><div class="settings-row-desc">Temp mode linear term</div></div><div></div><div style="display:flex;align-items:center;gap:6px"><input class="settings-input" type="number" id="s-coeff-fT1" step="any" style="width:180px"></div></div>
+            <div class="settings-row"><div><div class="settings-row-label">fT_0</div><div class="settings-row-desc">Temp mode constant term</div></div><div></div><div style="display:flex;align-items:center;gap:6px"><input class="settings-input" type="number" id="s-coeff-fT0" step="any" style="width:180px"></div></div>
+          </div>
+          <button class="btn btn-blue" onclick="applyCrystal()">APPLY CRYSTAL</button>
         </div>
 
       </div>
@@ -714,6 +689,9 @@ function connect() {
       if (ev.type === 'SweepPointEvent')    onSweepPoint(ev);
       if (ev.type === 'SweepCompleteEvent') onSweepComplete();
       if (ev.type === 'OpcStatusEvent')     onOpcStatus(ev);
+      if (ev.type === 'LockFailedEvent')           document.getElementById('modal-lock-failed').style.display = 'flex';
+      if (ev.type === 'LockStatusEvent')           onLockStatus(ev);
+      if (ev.type === 'StartFreqAutoUpdatedEvent') onStartFreqAutoUpdated(ev);
     } catch(e) { console.warn('Bad WS msg', e); }
   };
 }
@@ -730,26 +708,46 @@ function showToast(msg, isError = false) {
 }
 
 // ---- Initial settings load from backend ----
+async function loadCrystalForm(name) {
+  try {
+    const p = await fetch(`${API_URL}/crystals/${name}`).then(r => r.json());
+    document.getElementById('s-crystal-name').value         = p.name || '';
+    document.getElementById('s-crystal-freq-mass').value    = p.freq_mass ?? '';
+    document.getElementById('s-crystal-freq-temp').value    = p.freq_temp ?? '';
+    document.getElementById('s-crystal-hours').textContent  = (p.hours_active ?? 0).toFixed(2);
+    document.getElementById('s-crystal-deposited').textContent = (p.total_deposited ?? 0).toFixed(2);
+    const coeffMap = { fM0:'fM_0', fM1:'fM_1', fM2:'fM_2', fM3:'fM_3',
+                       fT0:'fT_0', fT1:'fT_1', fT2:'fT_2', fT3:'fT_3' };
+    for (const [id, key] of Object.entries(coeffMap)) {
+      const el = document.getElementById(`s-coeff-${id}`);
+      if (el && p[key] != null) el.value = p[key];
+    }
+  } catch(e) { console.warn('Could not load crystal form', e); }
+}
+
 async function loadInitialSettings() {
   try {
-    const lf = await fetch(`${API_URL}/settings/lock_frequencies`).then(r => r.json());
-    document.getElementById('s-osc1-freq').value = lf.mass;
-    document.getElementById('s-osc2-freq').value = lf.temp;
-  } catch(e) { /* backend not yet reachable on first load */ }
-  try {
-    const c = await fetch(`${API_URL}/settings/coefficients`).then(r => r.json());
-    const map = { fM0: 'fM_0', fM1: 'fM_1', fM2: 'fM_2', fM3: 'fM_3',
-                  fT0: 'fT_0', fT1: 'fT_1', fT2: 'fT_2', fT3: 'fT_3' };
-    for (const [id, key] of Object.entries(map)) {
-      if (c[key] != null) document.getElementById(`s-coeff-${id}`).value = c[key];
+    const cl = await fetch(`${API_URL}/crystals`).then(r => r.json());
+    if (cl.active) {
+      await loadCrystalForm(cl.active);
+    } else {
+      // No active crystal — fall back to individual settings endpoints
+      const lf = await fetch(`${API_URL}/settings/lock_frequencies`).then(r => r.json());
+      document.getElementById('s-crystal-freq-mass').value = lf.mass;
+      document.getElementById('s-crystal-freq-temp').value = lf.temp;
+      const c = await fetch(`${API_URL}/settings/coefficients`).then(r => r.json());
+      const map = { fM0:'fM_0', fM1:'fM_1', fM2:'fM_2', fM3:'fM_3',
+                    fT0:'fT_0', fT1:'fT_1', fT2:'fT_2', fT3:'fT_3' };
+      for (const [id, key] of Object.entries(map)) {
+        if (c[key] != null) document.getElementById(`s-coeff-${id}`).value = c[key];
+      }
     }
-  } catch(e) { /* coefficients file may not exist yet */ }
+  } catch(e) { /* backend not reachable yet */ }
   try {
     const opc = await fetch(`${API_URL}/opc/settings`).then(r => r.json());
-    if (opc.url) document.getElementById('s-opc-url').value = opc.url;
+    if (opc.url)  document.getElementById('s-opc-url').value  = opc.url;
     if (opc.user) document.getElementById('s-opc-user').value = opc.user;
   } catch(e) { /* OPC bridge may not be enabled */ }
-  loadCrystalList();
 }
 loadInitialSettings();
 
@@ -770,6 +768,17 @@ function onStateChange(state) {
   const pill = document.getElementById('status-pill');
   pill.className = 'status-pill ' + state.toLowerCase();
   document.getElementById('state-label').textContent = state.toUpperCase();
+}
+
+function onLockStatus(ev) {
+  setLock('mass', ev.lock_mass);
+  setLock('temp', ev.lock_temp);
+}
+
+function onStartFreqAutoUpdated(ev) {
+  document.getElementById('s-crystal-freq-mass').value = ev.freq_mass;
+  document.getElementById('s-crystal-freq-temp').value = ev.freq_temp;
+  showToast(`Start freqs updated: ${(ev.freq_mass/1e6).toFixed(3)} / ${(ev.freq_temp/1e6).toFixed(3)} MHz`);
 }
 
 function onOpcStatus(ev) {
@@ -798,8 +807,8 @@ async function sendCommand(action) {
   } else if (action === 'stop') {
     url = `${API_URL}/measurement/stop`;
   } else if (action === 'lock') {
-    const mass = parseFloat(document.getElementById('s-osc1-freq').value);
-    const temp = parseFloat(document.getElementById('s-osc2-freq').value);
+    const mass = parseFloat(document.getElementById('s-crystal-freq-mass').value);
+    const temp = parseFloat(document.getElementById('s-crystal-freq-temp').value);
     try {
       await fetch(`${API_URL}/settings/lock_frequencies?mass=${mass}&temp=${temp}`, { method: 'POST' });
       await fetch(`${API_URL}/measurement/get_lock`, { method: 'POST' });
@@ -810,29 +819,64 @@ async function sendCommand(action) {
 }
 
 async function applyOscSettings(osc) {
-  const freq    = parseFloat(document.getElementById(`s-osc${osc}-freq`).value);
   const intGain = parseFloat(document.getElementById(`s-osc${osc}-int`).value);
   const iqGain  = parseFloat(document.getElementById(`s-osc${osc}-iq`).value);
   const inv     = document.getElementById(`s-osc${osc}-inv`).value === '1';
-  await fetch(`${API_URL}/settings/frequency?oscillator_idx=${osc}&frequency=${freq}`, { method: 'POST' });
   await fetch(`${API_URL}/settings/integrator_gain?oscillator_idx=${osc}&gain=${intGain}`, { method: 'POST' });
   await fetch(`${API_URL}/settings/iq_gain?oscillator_idx=${osc}&gain=${iqGain}`, { method: 'POST' });
   await fetch(`${API_URL}/settings/inverted?oscillator_idx=${osc}&inverted=${inv}`, { method: 'POST' });
 }
 
-async function applyCoefficients() {
+async function applyCrystal() {
+  const name = document.getElementById('s-crystal-name').value.trim();
+  if (!name) { showToast('Enter a crystal name', true); return; }
   const g = id => parseFloat(document.getElementById(id).value);
   const params = [
+    `freq_mass=${g('s-crystal-freq-mass')}`, `freq_temp=${g('s-crystal-freq-temp')}`,
     `fM_0=${g('s-coeff-fM0')}`, `fM_1=${g('s-coeff-fM1')}`,
     `fM_2=${g('s-coeff-fM2')}`, `fM_3=${g('s-coeff-fM3')}`,
     `fT_0=${g('s-coeff-fT0')}`, `fT_1=${g('s-coeff-fT1')}`,
     `fT_2=${g('s-coeff-fT2')}`, `fT_3=${g('s-coeff-fT3')}`,
   ].join('&');
   try {
-    const r = await fetch(`${API_URL}/settings/coefficients?${params}`, { method: 'POST' });
-    if (r.ok) showToast('Coefficients applied');
+    const r = await fetch(`${API_URL}/crystals/${encodeURIComponent(name)}/apply?${params}`, { method: 'POST' });
+    if (r.ok) showToast(`Crystal "${name}" applied`);
     else showToast('Apply failed', true);
   } catch(e) { showToast('Apply failed', true); }
+}
+
+function downloadCrystal() {
+  const name = document.getElementById('s-crystal-name').value.trim();
+  if (!name) { showToast('Enter a crystal name first', true); return; }
+  window.location.href = `${API_URL}/crystals/${encodeURIComponent(name)}/download`;
+}
+
+async function uploadCrystal(input) {
+  const file = input.files[0];
+  if (!file) return;
+  const form = new FormData();
+  form.append('file', file);
+  try {
+    const r = await fetch(`${API_URL}/crystals/upload`, { method: 'POST', body: form });
+    if (r.ok) {
+      const { name } = await r.json();
+      showToast(`Uploaded "${name}"`);
+      await loadCrystalForm(name);
+    } else { showToast('Upload failed', true); }
+  } catch(e) { showToast('Upload failed', true); }
+  input.value = '';
+}
+
+function goToCrystalSettings() {
+  document.getElementById('modal-lock-failed').style.display = 'none';
+  // Switch to Settings tab
+  document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+  document.querySelector('.tab[onclick*="settings"]').classList.add('active');
+  document.querySelectorAll('.tab-panel').forEach(p => p.classList.toggle('active', p.id === 'panel-settings'));
+  // Switch to Crystal settings panel
+  document.querySelectorAll('.settings-nav-item').forEach(i => i.classList.remove('active'));
+  document.querySelectorAll('.settings-panel').forEach(p => p.classList.toggle('active', p.id === 'spanel-crystals'));
+  document.querySelector('[onclick*="crystals"]')?.classList.add('active');
 }
 
 async function applyOutputMode() {
@@ -848,124 +892,24 @@ function applySystemSettings() {
   if (ws) ws.close();
 }
 
-async function applyAllSettings() { await applyOscSettings(1); await applyOscSettings(2); await applyOutputMode(); await applyCoefficients(); applySystemSettings(); }
+async function applyAllSettings() { await applyOscSettings(1); await applyOscSettings(2); await applyOutputMode(); await applyCrystal(); applySystemSettings(); }
 
-// ---- Crystal management ----
-let _selectedCrystal = null;
-
-async function loadCrystalList() {
-  try {
-    const { crystals, active } = await fetch(`${API_URL}/crystals`).then(r => r.json());
-    const list = document.getElementById('crystal-list');
-    if (!crystals.length) {
-      list.innerHTML = '<div style="padding:12px;font-family:\'DM Mono\',monospace;font-size:10px;color:var(--text-dim)">No crystals found</div>';
-      return;
-    }
-    list.innerHTML = crystals.map(n => `
-      <div class="crystal-item${n === _selectedCrystal ? ' selected' : ''}" onclick="selectCrystal('${n}')">
-        <span>${n}</span>
-        ${n === active ? '<span class="crystal-badge">ACTIVE</span>' : ''}
-      </div>`).join('');
-  } catch(e) { console.error('Crystal list failed', e); }
-}
-
-async function selectCrystal(name) {
-  _selectedCrystal = name;
-  loadCrystalList();  // re-render list to update selection highlight
-  try {
-    const p = await fetch(`${API_URL}/crystals/${name}`).then(r => r.json());
-    document.getElementById('crystal-detail').style.display = '';
-    document.getElementById('crystal-detail-title').textContent = p.name;
-    document.getElementById('cd-hours').textContent     = p.hours_active.toFixed(2);
-    document.getElementById('cd-deposited').textContent = p.total_deposited.toFixed(2);
-    document.getElementById('cd-fmass').textContent = `${p.freq_mass} Hz`;
-    document.getElementById('cd-ftemp').textContent = `${p.freq_temp} Hz`;
-    for (const k of ['fM0','fM1','fM2','fM3','fT0','fT1','fT2','fT3']) {
-      const key = k.replace(/([MmTt])(\d)/, '$1_$2');  // fM0 → fM_0
-      const el = document.getElementById(`cd-${k}`);
-      if (el) el.textContent = p[key] ?? '—';
-    }
-  } catch(e) { console.error('Crystal detail failed', e); }
-}
-
-async function createCrystal() {
-  const name = document.getElementById('crystal-new-name').value.trim();
-  if (!name) { showToast('Enter a crystal name', true); return; }
-  try {
-    const r = await fetch(`${API_URL}/crystals?name=${encodeURIComponent(name)}`, { method: 'POST' });
-    if (r.ok) {
-      document.getElementById('crystal-new-name').value = '';
-      showToast(`Created "${name}"`);
-      loadCrystalList();
-    } else { showToast('Create failed', true); }
-  } catch(e) { showToast('Create failed', true); }
-}
-
-async function activateCrystal() {
-  if (!_selectedCrystal) return;
-  try {
-    const r = await fetch(`${API_URL}/crystals/${_selectedCrystal}/activate`, { method: 'POST' });
-    if (r.ok) {
-      showToast(`Loaded "${_selectedCrystal}"`);
-      // Sync lock freq inputs with what the crystal provides
-      const p = await fetch(`${API_URL}/crystals/${_selectedCrystal}`).then(r => r.json());
-      document.getElementById('s-osc1-freq').value = p.freq_mass;
-      document.getElementById('s-osc2-freq').value = p.freq_temp;
-      // Sync coefficient inputs
-      for (const k of ['fM0','fM1','fM2','fM3','fT0','fT1','fT2','fT3']) {
-        const key = k.replace(/([MmTt])(\d)/, '$1_$2');
-        const el = document.getElementById(`s-coeff-${k}`);
-        if (el) el.value = p[key] ?? '';
-      }
-      loadCrystalList();
-    } else { showToast('Load failed', true); }
-  } catch(e) { showToast('Load failed', true); }
-}
-
-async function saveCurrentToCrystal() {
-  if (!_selectedCrystal) return;
-  try {
-    const r = await fetch(`${API_URL}/crystals/${_selectedCrystal}/save_current`, { method: 'POST' });
-    if (r.ok) { showToast(`Saved to "${_selectedCrystal}"`); selectCrystal(_selectedCrystal); }
-    else { showToast('Save failed', true); }
-  } catch(e) { showToast('Save failed', true); }
-}
-
-function downloadCrystal() {
-  if (!_selectedCrystal) return;
-  window.location.href = `${API_URL}/crystals/${_selectedCrystal}/download`;
-}
-
-async function deleteCrystal() {
-  if (!_selectedCrystal) return;
-  if (!confirm(`Delete crystal "${_selectedCrystal}"?`)) return;
-  try {
-    const r = await fetch(`${API_URL}/crystals/${_selectedCrystal}`, { method: 'DELETE' });
-    if (r.ok) {
-      showToast(`Deleted "${_selectedCrystal}"`);
-      _selectedCrystal = null;
-      document.getElementById('crystal-detail').style.display = 'none';
-      loadCrystalList();
-    } else { showToast('Delete failed', true); }
-  } catch(e) { showToast('Delete failed', true); }
-}
-
-async function uploadCrystal(input) {
-  const file = input.files[0];
-  if (!file) return;
-  const form = new FormData();
-  form.append('file', file);
-  try {
-    const r = await fetch(`${API_URL}/crystals/upload`, { method: 'POST', body: form });
-    if (r.ok) {
-      const { name } = await r.json();
-      showToast(`Uploaded "${name}"`);
-      loadCrystalList();
-    } else { showToast('Upload failed', true); }
-  } catch(e) { showToast('Upload failed', true); }
-  input.value = '';  // reset so the same file can be re-uploaded
-}
+// ---- Crystal management (old list-based functions removed) ----
 </script>
 <div id="toast" class="toast"></div>
+
+<div id="modal-lock-failed" class="modal-overlay" style="display:none">
+  <div class="modal">
+    <div class="modal-title">⚠ PLL LOCK FAILED</div>
+    <div class="modal-body">
+      The oscillators did not lock within the expected time.<br><br>
+      Please check the <strong>Start Frequencies</strong> in Crystal Settings — they should be within ~8 kHz of the crystal's actual resonant frequency.
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-orange" onclick="goToCrystalSettings()">OPEN CRYSTAL SETTINGS</button>
+      <button class="btn" onclick="document.getElementById('modal-lock-failed').style.display='none'">DISMISS</button>
+    </div>
+  </div>
+</div>
 </body>
 </html>

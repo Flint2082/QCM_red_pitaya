@@ -33,6 +33,20 @@ class MeasurementEvent(Event):
     data: MeasurementData
     
 @dataclass
+class LockFailedEvent(Event):
+    pass
+
+@dataclass
+class LockStatusEvent(Event):
+    lock_mass: bool
+    lock_temp: bool
+
+@dataclass
+class StartFreqAutoUpdatedEvent(Event):
+    freq_mass: float
+    freq_temp: float
+
+@dataclass
 class SystemStatusEvent(Event):
     integrator_gain_mass_mode: float
     integrator_gain_temp_mode: float

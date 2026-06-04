@@ -22,7 +22,7 @@ BASE_NODE_PATH = "|var|750-8000 Basic Controller 100 2ETH ECO.Application."
 class WagoClient:
     def __init__(
         self,
-        url: str = "opc.tcp://192.168.1.50:4840",
+        url: str = "opc.tcp://132.229.46.113:4840",
         user: str = "admin",
         password: str = "wago",
         namespace_url: str = DEFAULT_NAMESPACE_URL,

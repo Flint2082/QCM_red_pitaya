@@ -203,8 +203,7 @@ footer { height: 24px; background: var(--surface); border-top: 1px solid var(--b
       </div>
       <div class="toolbar-sep"></div>
       <button class="btn btn-orange" onclick="sendCommand('lock')"><svg viewBox="0 0 12 12"><path d="M6 1a3 3 0 0 0-3 3v1H2v6h8V5H9V4a3 3 0 0 0-3-3zm0 1.5a1.5 1.5 0 0 1 1.5 1.5v1h-3V4A1.5 1.5 0 0 1 6 2.5z"/></svg>GET LOCK</button>
-      <button class="btn btn-green"  onclick="sendCommand('start')"><svg viewBox="0 0 12 12"><polygon points="3,2 10,6 3,10"/></svg>START</button>
-      <button class="btn btn-red"    onclick="sendCommand('stop')"><svg viewBox="0 0 12 12"><rect x="2.5" y="2.5" width="7" height="7"/></svg>STOP</button>
+      <button class="btn btn-green" id="btn-start-stop" onclick="toggleStartStop()"><svg viewBox="0 0 12 12"><polygon points="3,2 10,6 3,10"/></svg>START</button>
       <div class="header-spacer"></div>
       <button class="btn" onclick="clearCharts()">CLEAR</button>
     </div>
@@ -393,7 +392,7 @@ footer { height: 24px; background: var(--surface); border-top: 1px solid var(--b
                 <span id="opc-panel-label" style="font-family:'DM Mono',monospace;font-size:11px;color:var(--text-dim)">DISCONNECTED</span>
               </div>
             </div>
-            <div class="settings-row"><div><div class="settings-row-label">Server URL</div><div class="settings-row-desc">e.g. opc.tcp://localhost:4840</div></div><div></div><input class="settings-input" type="text" id="s-opc-url" style="width:240px;text-align:left" placeholder="opc.tcp://192.168.1.50:4840"></div>
+            <div class="settings-row"><div><div class="settings-row-label">Server URL</div><div class="settings-row-desc">e.g. opc.tcp://localhost:4840</div></div><div></div><input class="settings-input" type="text" id="s-opc-url" style="width:240px;text-align:left" placeholder="opc.tcp://132.229.46.113:4840"></div>
             <div class="settings-row"><div><div class="settings-row-label">Username</div><div class="settings-row-desc">Leave blank for anonymous</div></div><div></div><input class="settings-input" type="text" id="s-opc-user" style="width:150px;text-align:left" placeholder="admin"></div>
             <div class="settings-row"><div><div class="settings-row-label">Password</div><div class="settings-row-desc"></div></div><div></div><input class="settings-input" type="password" id="s-opc-password" style="width:150px;text-align:left"></div>
           </div>
@@ -503,7 +502,13 @@ function switchTab(name, el) {
   document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
   el.classList.add('active');
   document.querySelectorAll('.tab-panel').forEach(p => p.classList.toggle('active', p.id === 'panel-' + name));
-  setTimeout(() => [...Object.values(charts), ...Object.values(sweepCharts)].forEach(c => c && c.resize()), 50);
+  setTimeout(() => {
+    [...Object.values(charts), ...Object.values(sweepCharts)].forEach(c => c && c.resize());
+    if (name === 'logs' && document.getElementById('log-autoscroll')?.checked) {
+      const out = document.getElementById('log-output');
+      if (out) out.scrollTop = out.scrollHeight;
+    }
+  }, 50);
 }
 
 function switchSettings(name, el) {
@@ -813,6 +818,28 @@ function onStateChange(state) {
   const pill = document.getElementById('status-pill');
   pill.className = 'status-pill ' + state.toLowerCase();
   document.getElementById('state-label').textContent = state.toUpperCase();
+
+  const btn = document.getElementById('btn-start-stop');
+  if (!btn) return;
+  if (state === 'RUNNING') {
+    btn.className = 'btn btn-red';
+    btn.innerHTML = '<svg viewBox="0 0 12 12"><rect x="2.5" y="2.5" width="7" height="7"/></svg>STOP';
+    btn.disabled = false;
+  } else if (state === 'IDLE') {
+    btn.className = 'btn btn-green';
+    btn.innerHTML = '<svg viewBox="0 0 12 12"><polygon points="3,2 10,6 3,10"/></svg>START';
+    btn.disabled = false;
+  } else {
+    // LOCKING / SWEEPING / CALIBRATING — not interruptable from this button
+    btn.className = 'btn';
+    btn.innerHTML = '<svg viewBox="0 0 12 12"><polygon points="3,2 10,6 3,10"/></svg>START';
+    btn.disabled = true;
+  }
+}
+
+function toggleStartStop() {
+  const btn = document.getElementById('btn-start-stop');
+  sendCommand(btn.classList.contains('btn-red') ? 'stop' : 'start');
 }
 
 function onLockStatus(ev) {

@@ -10,6 +10,7 @@ import json
 import logging
 import os
 import queue
+import re
 import sys
 import threading
 import time
@@ -31,6 +32,13 @@ from messaging.defines import OutputMode
 # Log capture — forwards print() and logging to WS clients
 # ==================================================
 
+_ANSI_RE = re.compile(r"\x1b(?:\[[0-9;]*[A-Za-z]|\][^\x07]*\x07|[^[])")
+
+def _clean(text: str) -> str:
+    """Strip ANSI escape codes and stray carriage returns."""
+    return _ANSI_RE.sub("", text).replace("\r", "")
+
+
 class _StdoutForwarder:
     """Wraps sys.stdout so that print() lines are also pushed as LogEvents."""
 
@@ -49,7 +57,7 @@ class _StdoutForwarder:
             if line.strip():
                 try:
                     self._queue.put_nowait(
-                        LogEvent(level="INFO", message=line, timestamp=time.time())
+                        LogEvent(level="INFO", message=_clean(line), timestamp=time.time())
                     )
                 except Exception:
                     pass
@@ -77,7 +85,7 @@ class _LoggingForwarder(logging.Handler):
     def emit(self, record: logging.LogRecord):
         try:
             self._queue.put_nowait(
-                LogEvent(level=record.levelname, message=self.format(record),
+                LogEvent(level=record.levelname, message=_clean(self.format(record)),
                          timestamp=record.created)
             )
         except Exception:

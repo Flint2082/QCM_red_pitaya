@@ -384,17 +384,21 @@ footer { height: 24px; background: var(--surface); border-top: 1px solid var(--b
         </div>
 
         <div class="settings-panel" id="spanel-opc">
-          <div class="settings-section-title">OPC-UA STATUS</div>
+          <div class="settings-section-title">CONNECTION</div>
           <div class="settings-group">
             <div class="settings-row">
-              <div><div class="settings-row-label">Connection</div><div class="settings-row-desc">WAGO PLC link</div></div>
+              <div><div class="settings-row-label">Status</div><div class="settings-row-desc">WAGO PLC link</div></div>
               <div></div>
               <div style="display:flex;align-items:center;gap:8px">
                 <div class="ws-dot" id="opc-panel-dot"></div>
                 <span id="opc-panel-label" style="font-family:'DM Mono',monospace;font-size:11px;color:var(--text-dim)">DISCONNECTED</span>
               </div>
             </div>
+            <div class="settings-row"><div><div class="settings-row-label">Server URL</div><div class="settings-row-desc">e.g. opc.tcp://localhost:4840</div></div><div></div><input class="settings-input" type="text" id="s-opc-url" style="width:240px;text-align:left" placeholder="opc.tcp://192.168.1.50:4840"></div>
+            <div class="settings-row"><div><div class="settings-row-label">Username</div><div class="settings-row-desc">Leave blank for anonymous</div></div><div></div><input class="settings-input" type="text" id="s-opc-user" style="width:150px;text-align:left" placeholder="admin"></div>
+            <div class="settings-row"><div><div class="settings-row-label">Password</div><div class="settings-row-desc"></div></div><div></div><input class="settings-input" type="password" id="s-opc-password" style="width:150px;text-align:left"></div>
           </div>
+          <button class="btn btn-blue" onclick="connectOpc()" style="margin-bottom:28px">CONNECT</button>
           <div class="settings-section-title">PLC SETTINGS <span style="font-size:9px;opacity:0.5;font-weight:normal">(read from PLC)</span></div>
           <div class="settings-group">
             <div class="settings-row"><div><div class="settings-row-label">Ambient Temperature</div></div><div></div><span id="opc-val-amb" style="font-family:'DM Mono',monospace;font-size:12px;color:var(--text-mid)">—</span></div>
@@ -740,9 +744,27 @@ async function loadInitialSettings() {
       if (c[key] != null) document.getElementById(`s-coeff-${id}`).value = c[key];
     }
   } catch(e) { /* coefficients file may not exist yet */ }
+  try {
+    const opc = await fetch(`${API_URL}/opc/settings`).then(r => r.json());
+    if (opc.url) document.getElementById('s-opc-url').value = opc.url;
+    if (opc.user) document.getElementById('s-opc-user').value = opc.user;
+  } catch(e) { /* OPC bridge may not be enabled */ }
   loadCrystalList();
 }
 loadInitialSettings();
+
+async function connectOpc() {
+  const url      = document.getElementById('s-opc-url').value.trim();
+  const user     = document.getElementById('s-opc-user').value.trim();
+  const password = document.getElementById('s-opc-password').value;
+  if (!url) { showToast('Enter a server URL', true); return; }
+  try {
+    const params = `url=${encodeURIComponent(url)}&user=${encodeURIComponent(user)}&password=${encodeURIComponent(password)}`;
+    const r = await fetch(`${API_URL}/opc/connect?${params}`, { method: 'POST' });
+    if (r.ok) showToast('Reconnecting…');
+    else showToast('Connect failed', true);
+  } catch(e) { showToast('Connect failed', true); }
+}
 
 function onStateChange(state) {
   const pill = document.getElementById('status-pill');

@@ -25,34 +25,36 @@ from plc.wago_client import WagoClient
 
 # Keys written by this system → PLC reads them
 _READ_KEYS = [
-    "QCM.READ.MassFrequency",
-    "QCM.READ.TempFrequency",
-    "QCM.READ.MassModeAmplitude",
-    "QCM.READ.TempModeAmplitude",
-    "QCM.READ.Temperature",
-    "QCM.READ.CompensatedThickness",
-    "QCM.READ.UncompensatedThickness",
-    "QCM.READ.CompensatedRate",           # stub – not yet in MeasurementData
-    "QCM.READ.UncompensatedRate",          # stub – not yet in MeasurementData
-    "QCM.READ.CompensatedMassFrequency",
-    "QCM.READ.Timestamp",
-    "QCM.READ.ErrorCode",
+    "GVL_QCM.READ.MassFrequency",
+    "GVL_QCM.READ.TempFrequency",
+    "GVL_QCM.READ.MassAmplitude",
+    "GVL_QCM.READ.TempAmplitude",
+    "GVL_QCM.READ.Temperature",
+    "GVL_QCM.READ.CompensatedThickness",
+    "GVL_QCM.READ.UncompensatedThickness",
+    "GVL_QCM.READ.CompensatedRate",           # stub – not yet in MeasurementData
+    "GVL_QCM.READ.UncompensatedRate",          # stub – not yet in MeasurementData
+    "GVL_QCM.READ.CompensatedMassFrequency",
+    "GVL_QCM.READ.Timestamp",
+    "GVL_QCM.READ.ErrorCode",
 ]
 
 # Keys written by PLC → this system reads them as control signals
 _CTRL_KEYS = [
-    "QCM.CTRL.StartMeasurement",
-    "QCM.CTRL.StopMeasurement",
+    "GVL_QCM.CTRL.StartMeasurement",
+    "GVL_QCM.CTRL.StopMeasurement",
+    "GVL_QCM.CTRL.SetZero",   # stub – not yet handled
+    "GVL_QCM.CTRL.Sweep",     # stub – not yet handled
 ]
 
 # Keys written by PLC → this system reads them as configuration
 _SET_KEYS = [
-    "QCM.SET.AmbientTemp",
-    "QCM.SET.StartFreqMass",
-    "QCM.SET.StartFreqTemp",
-    "QCM.SET.Density",      # stub – no corresponding command yet
-    "QCM.SET.Z-ratio",      # stub – no corresponding command yet
-    # QCM.SET.Coefficients omitted: array type, requires separate handling
+    "GVL_QCM.SET.AmbientTemp",
+    "GVL_QCM.SET.StartFreqMass",
+    "GVL_QCM.SET.StartFreqTemp",
+    "GVL_QCM.SET.Density",      # stub – no corresponding command yet
+    # GVL_QCM.SET.Z-ratio: not yet implemented on PLC backend
+    # GVL_QCM.SET.Coeffecients: array type, requires separate handling
 ]
 
 _RECONNECT_INTERVAL = 10.0   # seconds between reconnect attempts
@@ -61,20 +63,21 @@ _POLL_INTERVAL      =  0.5   # seconds between PLC polls
 
 def _build_measurement_payload(data: MeasurementData) -> dict:
     return {
-        "QCM.READ.MassFrequency":            float(data.freq_mass_mode),
-        "QCM.READ.TempFrequency":            float(data.freq_temp_mode),
-        "QCM.READ.MassModeAmplitude":        float(data.amp_mass),
-        "QCM.READ.TempModeAmplitude":        float(data.amp_temp),
-        "QCM.READ.Temperature":              float(data.calculated_temp),
-        "QCM.READ.CompensatedThickness":     float(data.calculated_thickness),
-        "QCM.READ.UncompensatedThickness":   float(data.uncompensated_thickness),
-        "QCM.READ.CompensatedRate":          0.0,   # stub
-        "QCM.READ.UncompensatedRate":        0.0,   # stub
-        "QCM.READ.CompensatedMassFrequency": float(data.compensated_freq),
-        "QCM.READ.Timestamp":                int(data.timestamp),
-        "QCM.READ.ErrorCode":                "",
-        "QCM.READ.LockMass":                 bool(data.lock_mass),
-        "QCM.READ.LockTemp":                 bool(data.lock_temp),
+        "GVL_QCM.READ.MassFrequency":            float(data.freq_mass_mode),
+        "GVL_QCM.READ.TempFrequency":            float(data.freq_temp_mode),
+        "GVL_QCM.READ.MassAmplitude":            float(data.amp_mass),
+        "GVL_QCM.READ.TempAmplitude":            float(data.amp_temp),
+        "GVL_QCM.READ.Temperature":              float(data.calculated_temp),
+        "GVL_QCM.READ.CompensatedThickness":     float(data.calculated_thickness),
+        "GVL_QCM.READ.UncompensatedThickness":   float(data.uncompensated_thickness),
+        "GVL_QCM.READ.CompensatedRate":          0.0,   # stub
+        "GVL_QCM.READ.UncompensatedRate":        0.0,   # stub
+        "GVL_QCM.READ.CompensatedMassFrequency": float(data.compensated_freq),
+        "GVL_QCM.READ.Timestamp":                int(data.timestamp),
+        "GVL_QCM.READ.ErrorCode":                "",
+        "GVL_QCM.READ.LockMass":                 bool(data.lock_mass),
+        "GVL_QCM.READ.LockTemp":                 bool(data.lock_temp),
+
     }
 
 
@@ -144,11 +147,10 @@ class OPCUAWorker(threading.Thread):
         self._was_connected = connected
         self.status_queue.put(OpcStatusEvent(
             connected=connected,
-            ambient_temp=self._settings.get("QCM.SET.AmbientTemp"),
-            start_freq_mass=self._settings.get("QCM.SET.StartFreqMass"),
-            start_freq_temp=self._settings.get("QCM.SET.StartFreqTemp"),
-            density=self._settings.get("QCM.SET.Density"),
-            z_ratio=self._settings.get("QCM.SET.Z-ratio"),
+            ambient_temp=self._settings.get("GVL_QCM.SET.AmbientTemp"),
+            start_freq_mass=self._settings.get("GVL_QCM.SET.StartFreqMass"),
+            start_freq_temp=self._settings.get("GVL_QCM.SET.StartFreqTemp"),
+            density=self._settings.get("GVL_QCM.SET.Density"),
         ))
 
     # --------------------------------------------------
@@ -184,15 +186,15 @@ class OPCUAWorker(threading.Thread):
         if result is None:
             return
 
-        prev_mass = self._settings.get("QCM.SET.StartFreqMass")
-        prev_temp = self._settings.get("QCM.SET.StartFreqTemp")
+        prev_mass = self._settings.get("GVL_QCM.SET.StartFreqMass")
+        prev_temp = self._settings.get("GVL_QCM.SET.StartFreqTemp")
         prev_settings_snapshot = dict(self._settings)
 
         self._settings.update({k: v for k, v in result.items() if v is not None})
 
         # Apply frequency changes immediately when the PLC updates them
-        new_mass = self._settings.get("QCM.SET.StartFreqMass")
-        new_temp = self._settings.get("QCM.SET.StartFreqTemp")
+        new_mass = self._settings.get("GVL_QCM.SET.StartFreqMass")
+        new_temp = self._settings.get("GVL_QCM.SET.StartFreqTemp")
         if new_mass is not None and new_mass != prev_mass:
             self.command_queue.put(SetFrequencyCommand(oscillator_idx=1, frequency=float(new_mass)))
         if new_temp is not None and new_temp != prev_temp:
@@ -207,12 +209,12 @@ class OPCUAWorker(threading.Thread):
         if result is None:
             return
 
-        start = bool(result.get("QCM.CTRL.StartMeasurement", False))
-        stop  = bool(result.get("QCM.CTRL.StopMeasurement", False))
+        start = bool(result.get("GVL_QCM.CTRL.StartMeasurement", False))
+        stop  = bool(result.get("GVL_QCM.CTRL.StopMeasurement", False))
 
         # Rising-edge detection: only emit command on 0→1 transition
         if start and not self._prev_ctrl.get("start", False):
-            ambient_temp = float(self._settings.get("QCM.SET.AmbientTemp", 20.0))
+            ambient_temp = float(self._settings.get("GVL_QCM.SET.AmbientTemp", 20.0))
             self.command_queue.put(StartMeasurementCommand(ambient_temp=ambient_temp))
             print(f"[OPCUA] StartMeasurement received (ambient={ambient_temp}°C)")
 

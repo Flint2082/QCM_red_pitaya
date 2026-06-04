@@ -52,9 +52,11 @@ class ConnectionManager:
 # ==================================================
 
 class RestServer:
-    def __init__(self, api_command_queue: queue.Queue, api_event_queue: queue.Queue):
+    def __init__(self, api_command_queue: queue.Queue, api_event_queue: queue.Queue,
+                 wago_client=None):
         self.command_queue = api_command_queue
         self.event_queue = api_event_queue
+        self._wago_client = wago_client  # optional reference for live reconfiguration
         self.manager = ConnectionManager()
         self._thread: threading.Thread | None = None
         self._loop: asyncio.AbstractEventLoop | None = None
@@ -380,12 +382,30 @@ class RestServer:
         def get_state():
             return {"state": self._last_state}
 
+        # ---- OPC-UA connection management ----
+
+        @app.get("/opc/settings")
+        def get_opc_settings():
+            c = self._wago_client
+            return {
+                "url":       c.url       if c else "",
+                "user":      c.user      if c else "",
+                "connected": c.is_connected if c else False,
+            }
+
+        @app.post("/opc/connect")
+        def opc_connect(url: str, user: str = "", password: str = ""):
+            if not self._wago_client:
+                raise HTTPException(503, "OPC-UA bridge not enabled")
+            self._wago_client.set_connection(url, user, password)
+            return {"status": "ok", "url": url}
+
         # ---- Health ----
 
         @app.get("/health")
         def health():
             return {"status": "ok"}
-        
+
         # ---- Static files (for frontend) ----
                 
         static_dir = os.path.join(os.path.dirname(__file__), "..", "static")

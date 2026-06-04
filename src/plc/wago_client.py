@@ -9,12 +9,14 @@ import threading
 
 from opcua import Client, ua
 
-# Namespace URL for WAGO CoDeSys 3.x PLCs.
-# Look this up with: client.get_namespace_array() after connecting.
+# Namespace URL registered by the WAGO CoDeSys runtime (or the test server).
+# If you don't know the URL, call client.get_namespace_array() after connecting
+# and pass the matching index directly via the namespace_idx constructor parameter.
 DEFAULT_NAMESPACE_URL = "urn:WAGO:UA:PlcRuntime"
 
-# Full OPC-UA node path prefix for all QCM nodes on the PLC.
-BASE_NODE_PATH = "|var|750-8000 Basic Controller 100 2ETH ECO.Application.GVL_OPCUA."
+# OPC-UA node path prefix shared by all QCM nodes.
+# The GVL object name (e.g. GVL_QCM) is part of each individual key, not the base.
+BASE_NODE_PATH = "|var|750-8000 Basic Controller 100 2ETH ECO.Application."
 
 
 class WagoClient:
@@ -24,14 +26,16 @@ class WagoClient:
         user: str = "admin",
         password: str = "wago",
         namespace_url: str = DEFAULT_NAMESPACE_URL,
+        namespace_idx: int | None = None,  # override URL lookup when index is known
         auto_connect: bool = True,
     ):
         self.url = url
         self.user = user
         self.password = password
         self.namespace_url = namespace_url
+        self._ns_idx_override = namespace_idx  # skip URL lookup when set
         self.client: Client | None = None
-        self._ns_idx: int | None = None
+        self._ns_idx: int | None = namespace_idx  # pre-seed cache if override given
         self._lock = threading.Lock()
 
         if auto_connect:
@@ -45,15 +49,26 @@ class WagoClient:
     def is_connected(self) -> bool:
         return self.client is not None
 
+    def set_connection(self, url: str, user: str = "", password: str = ""):
+        """Update connection parameters and drop the current connection.
+        The worker's reconnect loop will re-establish with the new settings."""
+        self.url = url
+        self.user = user
+        self.password = password
+        self.disconnect()
+
     def connect(self) -> bool:
         try:
             c = Client(self.url)
-            c.set_user(self.user)
-            c.set_password(self.password)
+            # Only send credentials if provided — test servers often have no user manager
+            if self.user:
+                c.set_user(self.user)
+            if self.password:
+                c.set_password(self.password)
             c.application_uri = "urn:wago-client"
             c.connect()
             self.client = c
-            self._ns_idx = None  # invalidate cached namespace index
+            self._ns_idx = self._ns_idx_override  # reset to override (or None for URL lookup)
             print("[WAGO] Connected to OPC UA server")
             return True
         except Exception as e:
@@ -70,7 +85,7 @@ class WagoClient:
             print(f"[WAGO] Disconnect error: {e}")
         finally:
             self.client = None
-            self._ns_idx = None
+            self._ns_idx = self._ns_idx_override
 
     def reconnect(self) -> bool:
         self.disconnect()

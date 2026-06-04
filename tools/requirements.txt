@@ -1,8 +1,0 @@
-opcua
-matplotlib
-numpy
-uuid
-cryptography
-ipython
-lxml
-pytz

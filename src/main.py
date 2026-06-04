@@ -65,6 +65,7 @@ def build_system(enable_opcua: bool = True):
     rest_server = RestServer(
         api_command_queue=api_command_queue,
         api_event_queue=api_event_queue,
+        wago_client=wago if enable_opcua else None,
     )
     rest_server.start()
 

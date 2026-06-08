@@ -412,7 +412,10 @@ class RestServer:
                 try:
                     with open(self._coeff_file) as f:
                         reader = _csv.DictReader(f)
-                        self._coefficients = {row['Name']: float(row['value']) for row in reader}
+                        self._coefficients = {
+                            row['Name']: (lambda v: v if math.isfinite(v) else None)(float(row['value']))
+                            for row in reader
+                        }
                 except Exception:
                     self._coefficients = {}
             return self._coefficients
@@ -434,13 +437,19 @@ class RestServer:
             self._save_settings()
             return {"status": "ok"}
 
+        def _finite(v):
+            return v if isinstance(v, float) and math.isfinite(v) else (None if isinstance(v, float) else v)
+
         @app.get("/settings")
         def get_settings():
             return {
                 "oscillators":      self._osc_settings,
                 "output_mode":      self._output_mode,
-                "lock_frequencies": {"mass": self._lock_freq_mass, "temp": self._lock_freq_temp},
-                "coefficients":     self._coefficients or {},
+                "lock_frequencies": {
+                    "mass": _finite(self._lock_freq_mass),
+                    "temp": _finite(self._lock_freq_temp),
+                },
+                "coefficients": {k: _finite(v) for k, v in (self._coefficients or {}).items()},
             }
 
         # ---- Crystal profiles ----

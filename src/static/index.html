@@ -5,6 +5,8 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>QCM Monitor</title>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/hammerjs@2.0.8/hammer.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-zoom@2.0.1/dist/chartjs-plugin-zoom.min.js"></script>
 <style>
 @import url('https://fonts.googleapis.com/css2?family=DM+Mono:wght@300;400;500&family=DM+Sans:wght@300;400;500;600&display=swap');
 
@@ -14,9 +16,9 @@
   --surface-2:   #272b35;
   --border:      #2e3340;
   --border-2:    #3a4050;
-  --text:        #d8dde8;
-  --text-dim:    #6b7585;
-  --text-mid:    #9aa3b2;
+  --text:        #e4e9f2;
+  --text-dim:    #8a95a8;
+  --text-mid:    #b4bece;
   --blue:        #4a9eff;
   --blue-dim:    rgba(74,158,255,0.12);
   --green:       #2ecc8a;
@@ -68,6 +70,9 @@ header { height: var(--header-h); background: var(--surface); border-bottom: 1px
 .btn.btn-red    { border-color: var(--red);    color: var(--red); }
 .btn.btn-red:hover    { background: var(--red-dim); }
 .btn svg { width: 11px; height: 11px; fill: currentColor; flex-shrink: 0; }
+.btn:disabled { opacity: 0.35; cursor: not-allowed; pointer-events: none; }
+@keyframes btn-pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.45; } }
+.btn.locking { animation: btn-pulse 0.75s ease-in-out infinite; pointer-events: none; }
 
 .num-input-wrap { display: flex; align-items: center; gap: 5px; background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 0 8px; height: 26px; transition: border-color 0.12s; }
 .num-input-wrap:focus-within { border-color: var(--blue); }
@@ -124,7 +129,9 @@ header { height: var(--header-h); background: var(--surface); border-bottom: 1px
 footer { height: 24px; background: var(--surface); border-top: 1px solid var(--border); display: flex; align-items: center; justify-content: space-between; padding: 0 16px; flex-shrink: 0; }
 .footer-text { font-family: 'DM Mono', monospace; font-size: 10px; color: var(--text-dim); letter-spacing: 0.04em; }
 .toast { position: fixed; bottom: 24px; right: 24px; background: var(--surface-2); border: 1px solid var(--green); border-radius: var(--radius); padding: 10px 18px; font-family: 'DM Mono', monospace; font-size: 11px; letter-spacing: 0.06em; color: var(--green); opacity: 0; transition: opacity 0.25s; pointer-events: none; z-index: 9999; }
-.toast.error { border-color: var(--red); color: var(--red); }
+.toast.error   { border-color: var(--red);    color: var(--red); }
+.toast.warning { border-color: var(--orange); color: var(--orange); }
+.toast.show { opacity: 1; }
 #log-output { flex:1; overflow-y:auto; font-family:'DM Mono',monospace; font-size:11px; line-height:1.6; padding:8px 14px; background:var(--bg); }
 .log-line { white-space:pre-wrap; word-break:break-all; padding:1px 0; }
 .log-info    { color:var(--text-mid); }
@@ -133,22 +140,37 @@ footer { height: 24px; background: var(--surface); border-top: 1px solid var(--b
 .log-critical{ color:var(--red); font-weight:500; }
 .log-debug   { color:var(--text-dim); }
 .modal-overlay { position:fixed; inset:0; background:rgba(0,0,0,0.75); display:flex; align-items:center; justify-content:center; z-index:9000; }
-.modal { background:var(--surface); border:1px solid var(--border-2); border-radius:4px; padding:28px; max-width:440px; width:90%; box-shadow:0 8px 32px rgba(0,0,0,0.5); }
+.modal { background:var(--surface); border:1px solid var(--border-2); border-radius:4px; padding:28px; max-width:500px; width:90%; box-shadow:0 8px 32px rgba(0,0,0,0.5); }
 .modal-title { font-family:'DM Mono',monospace; font-size:13px; letter-spacing:0.08em; color:var(--orange); margin-bottom:12px; }
+.modal-title.green { color: var(--green); }
 .modal-body { font-size:12px; color:var(--text-mid); line-height:1.7; margin-bottom:22px; }
-.modal-footer { display:flex; gap:8px; justify-content:flex-end; }
-.crystal-list { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); overflow-y: auto; max-height: 200px; margin-bottom: 16px; }
-.crystal-item { padding: 8px 12px; border-bottom: 1px solid var(--border); cursor: pointer; font-family: 'DM Mono', monospace; font-size: 11px; color: var(--text-dim); display: flex; justify-content: space-between; align-items: center; transition: background 0.12s, color 0.12s; user-select: none; }
-.crystal-item:last-child { border-bottom: none; }
-.crystal-item:hover { background: rgba(255,255,255,0.02); color: var(--text-mid); }
-.crystal-item.selected { background: var(--blue-dim); color: var(--blue); border-left: 2px solid var(--blue); }
-.crystal-badge { font-family: 'DM Mono', monospace; font-size: 9px; padding: 1px 6px; border-radius: 2px; background: var(--green-dim); color: var(--green); border: 1px solid var(--green); letter-spacing: 0.06em; }
+.modal-body ul { margin: 8px 0 0 18px; }
+.modal-body li { margin-bottom: 4px; }
+.modal-footer { display:flex; gap:8px; justify-content:flex-end; flex-wrap:wrap; }
 .crystal-stat-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 20px; }
 .crystal-stat-cell { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 8px 12px; }
 .crystal-stat-label { font-family: 'DM Mono', monospace; font-size: 9px; color: var(--text-dim); letter-spacing: 0.1em; text-transform: uppercase; }
 .crystal-stat-value { font-family: 'DM Mono', monospace; font-size: 15px; color: var(--text); margin-top: 3px; }
-.toast.show { opacity: 1; }
-.toast.error { border-color: var(--red); color: var(--red); }
+
+/* Toggle switch */
+.toggle-switch { position: relative; width: 38px; height: 22px; flex-shrink: 0; }
+.toggle-switch input { opacity: 0; width: 0; height: 0; }
+.toggle-slider { position: absolute; inset: 0; background: var(--border-2); border-radius: 11px; cursor: pointer; transition: 0.2s; }
+.toggle-slider::before { content: ''; position: absolute; width: 16px; height: 16px; left: 3px; top: 3px; background: var(--text-dim); border-radius: 50%; transition: 0.2s; }
+.toggle-switch input:checked + .toggle-slider { background: var(--blue); }
+.toggle-switch input:checked + .toggle-slider::before { transform: translateX(16px); background: #fff; }
+
+/* Notification rows */
+.notif-row { display: flex; align-items: center; justify-content: space-between; padding: 9px 0; border-bottom: 1px solid rgba(255,255,255,0.03); gap: 16px; }
+.notif-row-info { flex: 1; }
+.notif-label { font-size: 12px; color: var(--text-mid); }
+.notif-desc  { font-size: 11px; color: var(--text-dim); margin-top: 2px; }
+
+/* Coefficient polynomial graphs */
+.coeff-graphs { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin: 8px 0 24px; }
+.coeff-graph-card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); overflow: hidden; }
+.coeff-graph-header { padding: 5px 10px; border-bottom: 1px solid var(--border); font-family: 'DM Mono', monospace; font-size: 9px; letter-spacing: 0.1em; text-transform: uppercase; color: var(--text-dim); display: flex; align-items: center; gap: 6px; }
+.coeff-graph-body { height: 240px; padding: 4px; position: relative; }
 </style>
 </head>
 <body>
@@ -192,7 +214,7 @@ footer { height: 24px; background: var(--surface); border-top: 1px solid var(--b
     <div class="toolbar">
       <span class="toolbar-label">AMB TEMP</span>
       <div class="num-input-wrap">
-        <input id="input-amb-temp" type="number" value="23" min="-40" max="100" step="0.5">
+        <input id="input-amb-temp" type="number" value="23" min="-40" max="100" step="0.5" oninput="syncAmbTemp(this.value)">
         <span class="num-input-unit">°C</span>
       </div>
       <div class="toolbar-sep"></div>
@@ -202,7 +224,7 @@ footer { height: 24px; background: var(--surface); border-top: 1px solid var(--b
         <span class="num-input-unit">pts</span>
       </div>
       <div class="toolbar-sep"></div>
-      <button class="btn btn-orange" onclick="sendCommand('lock')"><svg viewBox="0 0 12 12"><path d="M6 1a3 3 0 0 0-3 3v1H2v6h8V5H9V4a3 3 0 0 0-3-3zm0 1.5a1.5 1.5 0 0 1 1.5 1.5v1h-3V4A1.5 1.5 0 0 1 6 2.5z"/></svg>GET LOCK</button>
+      <button class="btn btn-orange btn-get-lock" onclick="sendCommand('lock')"><svg viewBox="0 0 12 12"><path d="M6 1a3 3 0 0 0-3 3v1H2v6h8V5H9V4a3 3 0 0 0-3-3zm0 1.5a1.5 1.5 0 0 1 1.5 1.5v1h-3V4A1.5 1.5 0 0 1 6 2.5z"/></svg>GET LOCK</button>
       <button class="btn btn-green" id="btn-start-stop" onclick="toggleStartStop()"><svg viewBox="0 0 12 12"><polygon points="3,2 10,6 3,10"/></svg>START</button>
       <div class="header-spacer"></div>
       <button class="btn" onclick="clearCharts()">CLEAR</button>
@@ -225,18 +247,25 @@ footer { height: 24px; background: var(--surface); border-top: 1px solid var(--b
     </div>
   </div>
 
-  <!-- MONITOR -->
+  <!-- MONITOR — toolbar matches main -->
   <div class="tab-panel" id="panel-monitor">
     <div class="toolbar">
+      <span class="toolbar-label">AMB TEMP</span>
+      <div class="num-input-wrap">
+        <input id="input-amb-temp-2" type="number" value="23" min="-40" max="100" step="0.5" oninput="syncAmbTemp(this.value, true)">
+        <span class="num-input-unit">°C</span>
+      </div>
+      <div class="toolbar-sep"></div>
       <span class="toolbar-label">WINDOW</span>
       <div class="num-input-wrap">
         <input id="input-window-monitor" type="number" value="300" min="50" max="50000" step="50" onchange="setWindowMonitor(this.value)">
         <span class="num-input-unit">pts</span>
       </div>
       <div class="toolbar-sep"></div>
-      <button class="btn" onclick="clearCharts()">CLEAR ALL</button>
+      <button class="btn btn-orange btn-get-lock" onclick="sendCommand('lock')"><svg viewBox="0 0 12 12"><path d="M6 1a3 3 0 0 0-3 3v1H2v6h8V5H9V4a3 3 0 0 0-3-3zm0 1.5a1.5 1.5 0 0 1 1.5 1.5v1h-3V4A1.5 1.5 0 0 1 6 2.5z"/></svg>GET LOCK</button>
+      <button class="btn btn-green" id="btn-start-stop-2" onclick="toggleStartStop()"><svg viewBox="0 0 12 12"><polygon points="3,2 10,6 3,10"/></svg>START</button>
       <div class="header-spacer"></div>
-      <span style="font-family:'DM Mono',monospace;font-size:10px;color:var(--text-dim);letter-spacing:.06em"><span style="color:var(--green)">—</span> MASS &nbsp;<span style="color:var(--blue)">—</span> TEMP &nbsp;<span style="color:var(--purple)">- -</span> PHASE</span>
+      <button class="btn" onclick="clearCharts()">CLEAR</button>
     </div>
     <div class="stat-bar">
       <div class="stat"><div class="stat-label">Mass Mode Freq</div><div class="stat-value" id="val-fM" style="color:var(--green)">—</div><div class="stat-unit">Hz</div></div>
@@ -285,8 +314,7 @@ footer { height: 24px; background: var(--surface); border-top: 1px solid var(--b
         <span class="num-input-unit">s</span>
       </div>
       <div class="toolbar-sep"></div>
-      <button class="btn btn-blue" onclick="runSweep()"><svg viewBox="0 0 12 12" style="width:11px;height:11px;fill:currentColor"><polygon points="3,2 10,6 3,10"/></svg>RUN SWEEP</button>
-      <button class="btn btn-red"  onclick="abortSweep()"><svg viewBox="0 0 12 12" style="width:11px;height:11px;fill:currentColor"><rect x="2.5" y="2.5" width="7" height="7"/></svg>ABORT</button>
+      <button class="btn btn-blue" id="btn-sweep-toggle" onclick="toggleSweep()"><svg viewBox="0 0 12 12" style="width:11px;height:11px;fill:currentColor"><polygon points="3,2 10,6 3,10"/></svg>RUN SWEEP</button>
       <div class="header-spacer"></div>
       <button class="btn" onclick="clearSweep()">CLEAR</button>
     </div>
@@ -326,6 +354,7 @@ footer { height: 24px; background: var(--surface); border-top: 1px solid var(--b
         <div class="settings-nav-section">SYSTEM</div>
         <div class="settings-nav-item" onclick="switchSettings('system',this)">System</div>
         <div class="settings-nav-item" onclick="switchSettings('opc',this)">OPC-UA</div>
+        <div class="settings-nav-item" onclick="switchSettings('notif',this)">Notifications</div>
       </div>
       <div class="settings-content">
 
@@ -441,16 +470,84 @@ footer { height: 24px; background: var(--surface); border-top: 1px solid var(--b
 
           <div class="settings-section-title">CALIBRATION COEFFICIENTS</div>
           <div class="settings-group">
-            <div class="settings-row"><div><div class="settings-row-label">fM_3</div><div class="settings-row-desc">Mass mode cubic term</div></div><div></div><div style="display:flex;align-items:center;gap:6px"><input class="settings-input" type="number" id="s-coeff-fM3" step="any" style="width:180px"></div></div>
-            <div class="settings-row"><div><div class="settings-row-label">fM_2</div><div class="settings-row-desc">Mass mode quadratic term</div></div><div></div><div style="display:flex;align-items:center;gap:6px"><input class="settings-input" type="number" id="s-coeff-fM2" step="any" style="width:180px"></div></div>
-            <div class="settings-row"><div><div class="settings-row-label">fM_1</div><div class="settings-row-desc">Mass mode linear term</div></div><div></div><div style="display:flex;align-items:center;gap:6px"><input class="settings-input" type="number" id="s-coeff-fM1" step="any" style="width:180px"></div></div>
+            <div class="settings-row"><div><div class="settings-row-label">fM_3</div><div class="settings-row-desc">Mass mode cubic term</div></div><div></div><div style="display:flex;align-items:center;gap:6px"><input class="settings-input" type="number" id="s-coeff-fM3" step="any" style="width:180px" oninput="updateCoeffCharts()"></div></div>
+            <div class="settings-row"><div><div class="settings-row-label">fM_2</div><div class="settings-row-desc">Mass mode quadratic term</div></div><div></div><div style="display:flex;align-items:center;gap:6px"><input class="settings-input" type="number" id="s-coeff-fM2" step="any" style="width:180px" oninput="updateCoeffCharts()"></div></div>
+            <div class="settings-row"><div><div class="settings-row-label">fM_1</div><div class="settings-row-desc">Mass mode linear term</div></div><div></div><div style="display:flex;align-items:center;gap:6px"><input class="settings-input" type="number" id="s-coeff-fM1" step="any" style="width:180px" oninput="updateCoeffCharts()"></div></div>
             <div class="settings-row"><div><div class="settings-row-label">fM_0</div><div class="settings-row-desc">Mass mode constant term</div></div><div></div><div style="display:flex;align-items:center;gap:6px"><input class="settings-input" type="number" id="s-coeff-fM0" step="any" style="width:180px"></div></div>
-            <div class="settings-row"><div><div class="settings-row-label">fT_3</div><div class="settings-row-desc">Temp mode cubic term</div></div><div></div><div style="display:flex;align-items:center;gap:6px"><input class="settings-input" type="number" id="s-coeff-fT3" step="any" style="width:180px"></div></div>
-            <div class="settings-row"><div><div class="settings-row-label">fT_2</div><div class="settings-row-desc">Temp mode quadratic term</div></div><div></div><div style="display:flex;align-items:center;gap:6px"><input class="settings-input" type="number" id="s-coeff-fT2" step="any" style="width:180px"></div></div>
-            <div class="settings-row"><div><div class="settings-row-label">fT_1</div><div class="settings-row-desc">Temp mode linear term</div></div><div></div><div style="display:flex;align-items:center;gap:6px"><input class="settings-input" type="number" id="s-coeff-fT1" step="any" style="width:180px"></div></div>
+            <div class="settings-row"><div><div class="settings-row-label">fT_3</div><div class="settings-row-desc">Temp mode cubic term</div></div><div></div><div style="display:flex;align-items:center;gap:6px"><input class="settings-input" type="number" id="s-coeff-fT3" step="any" style="width:180px" oninput="updateCoeffCharts()"></div></div>
+            <div class="settings-row"><div><div class="settings-row-label">fT_2</div><div class="settings-row-desc">Temp mode quadratic term</div></div><div></div><div style="display:flex;align-items:center;gap:6px"><input class="settings-input" type="number" id="s-coeff-fT2" step="any" style="width:180px" oninput="updateCoeffCharts()"></div></div>
+            <div class="settings-row"><div><div class="settings-row-label">fT_1</div><div class="settings-row-desc">Temp mode linear term</div></div><div></div><div style="display:flex;align-items:center;gap:6px"><input class="settings-input" type="number" id="s-coeff-fT1" step="any" style="width:180px" oninput="updateCoeffCharts()"></div></div>
             <div class="settings-row"><div><div class="settings-row-label">fT_0</div><div class="settings-row-desc">Temp mode constant term</div></div><div></div><div style="display:flex;align-items:center;gap:6px"><input class="settings-input" type="number" id="s-coeff-fT0" step="any" style="width:180px"></div></div>
           </div>
+
+          <!-- Polynomial preview graphs (constant term excluded — shows Δf vs ΔT) -->
+          <div class="settings-section-title">POLYNOMIAL PREVIEW <span style="font-size:9px;opacity:0.5;font-weight:normal">Δf(ΔT) without constant term</span></div>
+          <div class="coeff-graphs">
+            <div class="coeff-graph-card">
+              <div class="coeff-graph-header"><div class="chart-color-bar" style="background:var(--green);margin-right:4px"></div>fM — MASS MODE</div>
+              <div class="coeff-graph-body"><canvas id="chart-coeff-fM"></canvas></div>
+            </div>
+            <div class="coeff-graph-card">
+              <div class="coeff-graph-header"><div class="chart-color-bar" style="background:var(--blue);margin-right:4px"></div>fT — TEMP MODE</div>
+              <div class="coeff-graph-body"><canvas id="chart-coeff-fT"></canvas></div>
+            </div>
+          </div>
+
           <button class="btn btn-blue" onclick="applyCrystal()">APPLY CRYSTAL</button>
+        </div>
+
+        <!-- NOTIFICATIONS -->
+        <div class="settings-panel" id="spanel-notif">
+          <div class="settings-section-title">NOTIFICATIONS</div>
+          <div class="settings-group">
+            <div class="notif-row">
+              <div class="notif-row-info">
+                <div class="notif-label">Enable browser notifications</div>
+                <div class="notif-desc">Requires permission grant in browser prompt</div>
+              </div>
+              <label class="toggle-switch"><input type="checkbox" id="notif-browser" onchange="onNotifBrowserToggle(this.checked)"><span class="toggle-slider"></span></label>
+            </div>
+            <div class="notif-row">
+              <div class="notif-row-info">
+                <div class="notif-label">Sound alerts</div>
+                <div class="notif-desc">Audible beep on events</div>
+              </div>
+              <label class="toggle-switch"><input type="checkbox" id="notif-sound" checked onchange="notifConfig.sound=this.checked"><span class="toggle-slider"></span></label>
+            </div>
+          </div>
+          <div class="settings-section-title">EVENTS</div>
+          <div class="settings-group">
+            <div class="notif-row">
+              <div class="notif-row-info">
+                <div class="notif-label">Lock Lost</div>
+                <div class="notif-desc">PLL drops lock during measurement</div>
+              </div>
+              <label class="toggle-switch"><input type="checkbox" id="notif-lockLost" checked onchange="notifConfig.lockLost=this.checked"><span class="toggle-slider"></span></label>
+            </div>
+            <div class="notif-row">
+              <div class="notif-row-info">
+                <div class="notif-label">Sweep Complete</div>
+                <div class="notif-desc">Frequency sweep finishes</div>
+              </div>
+              <label class="toggle-switch"><input type="checkbox" id="notif-sweepComplete" checked onchange="notifConfig.sweepComplete=this.checked"><span class="toggle-slider"></span></label>
+            </div>
+            <div class="notif-row">
+              <div class="notif-row-info">
+                <div class="notif-label">OPC Connection Lost</div>
+                <div class="notif-desc">WAGO PLC link drops</div>
+              </div>
+              <label class="toggle-switch"><input type="checkbox" id="notif-opcLost" checked onchange="notifConfig.opcLost=this.checked"><span class="toggle-slider"></span></label>
+            </div>
+            <div class="notif-row">
+              <div class="notif-row-info">
+                <div class="notif-label">WebSocket Disconnected</div>
+                <div class="notif-desc">Backend server connection lost</div>
+              </div>
+              <label class="toggle-switch"><input type="checkbox" id="notif-wsLost" checked onchange="notifConfig.wsLost=this.checked"><span class="toggle-slider"></span></label>
+            </div>
+          </div>
+          <button class="btn" onclick="testNotifSound()" style="margin-right:8px">TEST SOUND</button>
+          <button class="btn btn-blue" onclick="requestNotifPermission()">REQUEST PERMISSION</button>
         </div>
 
       </div>
@@ -487,6 +584,7 @@ let API_URL = `http://${backendHost}:8000`;
 let WS_URL  = `ws://${backendHost}:8000/ws`;
 let MAX_PTS_MAIN = 3000;
 let MAX_PTS_MONITOR = 300;
+
 function setWindowMain(v) {
   MAX_PTS_MAIN = Math.max(50, parseInt(v) || 3000);
   document.getElementById('input-window-main').value = MAX_PTS_MAIN;
@@ -495,7 +593,25 @@ function setWindowMonitor(v) {
   MAX_PTS_MONITOR = Math.max(50, parseInt(v) || 300);
   document.getElementById('input-window-monitor').value = MAX_PTS_MONITOR;
 }
+function syncAmbTemp(value, fromMonitor = false) {
+  const other = fromMonitor ? 'input-amb-temp' : 'input-amb-temp-2';
+  const el = document.getElementById(other);
+  if (el) el.value = value;
+}
+
 document.getElementById('s-api-host').value = backendHost;
+
+// ---- State tracking ----
+let lockMass = false;
+let lockTemp = false;
+let _prevLockMass = null;
+let _prevLockTemp = null;
+let _prevOpcConnected = null;
+let _prevWsConnected = false;
+let _isRunning = false;
+let _sweepRunning = false;
+let _runBuffer = [];
+let _runLog = [];
 
 // ---- Tab switching ----
 function switchTab(name, el) {
@@ -515,12 +631,15 @@ function switchSettings(name, el) {
   document.querySelectorAll('.settings-nav-item').forEach(i => i.classList.remove('active'));
   el.classList.add('active');
   document.querySelectorAll('.settings-panel').forEach(p => p.classList.toggle('active', p.id === 'spanel-' + name));
+  if (name === 'crystals') initCoeffChartsIfNeeded();
 }
 
 // ---- Chart factory ----
-const YAXIS = { display: true, ticks: { color: '#6b7585', font: { family: 'DM Mono', size: 9 }, maxTicksLimit: 4 }, grid: { color: 'rgba(255,255,255,0.03)' }, border: { color: 'transparent' } };
-const TAXIS = { display: true, ticks: { color: '#6b7585', font: { family: 'DM Mono', size: 9 }, maxTicksLimit: 5, autoSkip: true }, grid: { display: false }, border: { color: 'transparent' } };
-const BASE_OPTS = { responsive: true, maintainAspectRatio: false, animation: false, plugins: { legend: { display: false }, tooltip: { enabled: false } }, scales: { x: TAXIS, y: YAXIS } };
+const TC = '#8a95a8';  // tick color — matches --text-dim
+const YAXIS = { display: true, ticks: { color: TC, font: { family: 'DM Mono', size: 9 }, maxTicksLimit: 4 }, grid: { color: 'rgba(255,255,255,0.03)' }, border: { color: 'transparent' } };
+const TAXIS = { display: true, ticks: { color: TC, font: { family: 'DM Mono', size: 9 }, maxTicksLimit: 5, autoSkip: true }, grid: { display: false }, border: { color: 'transparent' } };
+const ZOOM_CFG = { zoom: { drag: { enabled: true, backgroundColor: 'rgba(74,158,255,0.06)', borderColor: 'rgba(74,158,255,0.35)', borderWidth: 1 }, mode: 'x' } };
+const BASE_OPTS = { responsive: true, maintainAspectRatio: false, animation: false, plugins: { legend: { display: false }, tooltip: { enabled: false }, zoom: ZOOM_CFG }, scales: { x: TAXIS, y: YAXIS } };
 
 function makeChart(id, color) {
   const ctx = document.getElementById(id); if (!ctx) return null;
@@ -536,7 +655,7 @@ function makeDualChart(id, c1, c2) {
       { data: [], borderColor: c2, borderWidth: 1.5, pointRadius: 0, tension: 0.2, fill: false, yAxisID: 'y2', borderDash: [4,2], label: 'PHASE' },
     ]},
     options: { ...structuredClone(BASE_OPTS),
-      plugins: { tooltip: { enabled: false }, legend: { display: true, labels: { color: '#6b7585', font: { family: 'DM Mono', size: 9 }, boxWidth: 14, padding: 8 } } },
+      plugins: { tooltip: { enabled: false }, legend: { display: true, labels: { color: TC, font: { family: 'DM Mono', size: 9 }, boxWidth: 14, padding: 8 } }, zoom: ZOOM_CFG },
       scales: { x: TAXIS, y: { ...YAXIS, position: 'left' }, y2: { ...YAXIS, position: 'right', grid: { drawOnChartArea: false } } }
     }
   });
@@ -554,7 +673,7 @@ const charts = {
 };
 
 // ---- Sweep charts (x-axis = frequency) ----
-const XAXIS = { display: true, ticks: { color: '#6b7585', font: { family: 'DM Mono', size: 9 }, maxTicksLimit: 8, callback: function(v) { return (this.getLabelForValue(v)/1e6).toFixed(3) + 'M'; } }, grid: { color: 'rgba(255,255,255,0.03)' }, border: { color: 'transparent' } };
+const XAXIS = { display: true, ticks: { color: TC, font: { family: 'DM Mono', size: 9 }, maxTicksLimit: 8, callback: function(v) { return (this.getLabelForValue(v)/1e6).toFixed(3) + 'M'; } }, grid: { color: 'rgba(255,255,255,0.03)' }, border: { color: 'transparent' } };
 function makeSweepChart(id, color) {
   const ctx = document.getElementById(id); if (!ctx) return null;
   const opts = structuredClone(BASE_OPTS);
@@ -566,9 +685,68 @@ const sweepCharts = {
   phase: makeSweepChart('chart-sweep-phase', '#a78bfa'),
 };
 
+// ---- Synchronized zoom groups (one group per tab) ----
+function setupZoomGroup(chartList) {
+  const group = chartList.filter(Boolean);
+  // `syncing` suppresses re-entrant onZoomComplete calls fired by zoomScale()
+  // (sync) and resetZoom() — both of which trigger the callback in the plugin.
+  const state = { zoomed: false, syncing: false };
+  group.forEach(chart => {
+    chart._zoomGroupState = state;
+    chart.options.plugins.zoom.zoom.onZoomComplete = ({ chart: c }) => {
+      if (state.syncing) return;
+      state.zoomed = true;
+      const { min, max } = c.scales.x;
+      state.syncing = true;
+      group.forEach(other => { if (other !== c) other.zoomScale('x', { min, max }, 'none'); });
+      state.syncing = false;
+    };
+    chart.update('none');
+    chart.canvas.addEventListener('dblclick', () => {
+      state.zoomed = false;
+      state.syncing = true;
+      group.forEach(c => {
+        c.resetZoom('none');
+        // Trim data that accumulated while frozen, then resume live view
+        const mx = c._maxPts;
+        if (mx != null) {
+          const d = c.data;
+          while (d.labels.length > mx) {
+            d.labels.shift();
+            d.datasets.forEach(ds => { if (ds.data.length > mx) ds.data.shift(); });
+          }
+        }
+        c.update('none');
+      });
+      state.syncing = false;
+    });
+  });
+}
+setupZoomGroup([charts.mainComp, charts.mainTemp]);
+setupZoomGroup([charts.fM, charts.fT, charts.compA, charts.tempA, charts.iq1, charts.iq2]);
+setupZoomGroup([sweepCharts.amp, sweepCharts.phase]);
+
 let _sweepPeakAmp = -Infinity;
 let _sweepPeakFreq = null;
 let _sweepTotal = 0;
+
+function setSweepBtnState(running) {
+  _sweepRunning = running;
+  const btn = document.getElementById('btn-sweep-toggle');
+  if (!btn) return;
+  if (running) {
+    btn.className = 'btn btn-red';
+    btn.innerHTML = '<svg viewBox="0 0 12 12" style="width:11px;height:11px;fill:currentColor"><rect x="2.5" y="2.5" width="7" height="7"/></svg>ABORT';
+  } else {
+    btn.className = 'btn btn-blue';
+    btn.innerHTML = '<svg viewBox="0 0 12 12" style="width:11px;height:11px;fill:currentColor"><polygon points="3,2 10,6 3,10"/></svg>RUN SWEEP';
+  }
+}
+
+function toggleSweep() {
+  if (_sweepRunning) abortSweep();
+  else runSweep();
+}
 
 async function runSweep() {
   const osc    = parseInt(document.getElementById('sweep-osc').value);
@@ -576,21 +754,25 @@ async function runSweep() {
   const stop   = parseFloat(document.getElementById('sweep-stop').value);
   const step   = parseFloat(document.getElementById('sweep-step').value);
   const settle = parseFloat(document.getElementById('sweep-settle').value);
-  if ([start, stop, step, settle].some(isNaN)) { alert('Enter valid sweep parameters.'); return; }
+  if ([start, stop, step, settle].some(isNaN)) { showToast('Enter valid sweep parameters.', true); return; }
   _sweepTotal = Math.floor((stop - start) / step) + 1;
   clearSweep();
   document.getElementById('val-sweep-status').textContent = 'PENDING';
+  setSweepBtnState(true);
   try {
     await fetch(`${API_URL}/sweep/start?oscillator_idx=${osc}&start_freq=${start}&stop_freq=${stop}&step_size=${step}&settle_time=${settle}`, { method: 'POST' });
   } catch(e) {
     console.error('Sweep failed:', e);
     document.getElementById('val-sweep-status').textContent = 'ERROR';
+    setSweepBtnState(false);
   }
 }
 
 async function abortSweep() {
   try { await fetch(`${API_URL}/sweep/abort`, { method: 'POST' }); }
   catch(e) { console.error('Abort failed:', e); }
+  setSweepBtnState(false);
+  document.getElementById('val-sweep-status').textContent = 'ABORTED';
 }
 
 function onSweepPoint(e) {
@@ -618,6 +800,8 @@ function onSweepPoint(e) {
 
 function onSweepComplete() {
   document.getElementById('val-sweep-status').textContent = 'DONE';
+  setSweepBtnState(false);
+  sendNotif('QCM — Sweep Complete', 'Frequency sweep finished', 'sweepComplete');
 }
 
 function clearSweep() {
@@ -637,11 +821,14 @@ let sampleCount = 0;
 
 function push(chart, value, dsIdx = 0, max = MAX_PTS_MAIN, label = '') {
   if (!chart) return;
+  chart._maxPts = max;
   const d = chart.data;
   if (dsIdx === 0) d.labels.push(label);
   d.datasets[dsIdx].data.push(value);
-  if (d.labels.length > max) { d.labels.shift(); d.datasets.forEach(ds => { if (ds.data.length > max) ds.data.shift(); }); }
-  if (dsIdx === d.datasets.length - 1) chart.update('none');
+  if (!chart._zoomGroupState?.zoomed) {
+    if (d.labels.length > max) { d.labels.shift(); d.datasets.forEach(ds => { if (ds.data.length > max) ds.data.shift(); }); }
+    if (dsIdx === d.datasets.length - 1) chart.update('none');
+  }
 }
 
 function setLock(mode, locked) {
@@ -650,6 +837,21 @@ function setLock(mode, locked) {
   if (!dot) return;
   dot.className   = 'ws-dot ' + (locked ? 'connected' : 'error');
   label.textContent = (mode === 'mass' ? 'MASS' : 'TEMP') + (locked ? ' LOCKED' : ' UNLOCKED');
+  if (mode === 'mass') lockMass = locked;
+  if (mode === 'temp') lockTemp = locked;
+}
+
+function checkLockLost(newMass, newTemp) {
+  if (_prevLockMass === true && newMass === false) {
+    sendNotif('QCM — Lock Lost', 'Mass mode PLL has lost lock', 'lockLost');
+    if (_isRunning) _runLog.push({ timestamp: Date.now() / 1000, type: 'LOCK_LOST_MASS', detail: 'Mass PLL lost lock' });
+  }
+  if (_prevLockTemp === true && newTemp === false) {
+    sendNotif('QCM — Lock Lost', 'Temp mode PLL has lost lock', 'lockLost');
+    if (_isRunning) _runLog.push({ timestamp: Date.now() / 1000, type: 'LOCK_LOST_TEMP', detail: 'Temp PLL lost lock' });
+  }
+  _prevLockMass = newMass;
+  _prevLockTemp = newTemp;
 }
 
 function fmt(v, d = 3) { return (v == null) ? '—' : Number(v).toFixed(d); }
@@ -671,15 +873,16 @@ function onMeasurement(e) {
   push(charts.mainComp, e.calculated_thickness,  0, MAX_PTS_MAIN,    ts);
   push(charts.mainTemp, e.calculated_temp,         0, MAX_PTS_MAIN,    ts);
   push(charts.fM,       e.freq_mass_mode,          0, MAX_PTS_MONITOR, ts);
-  push(charts.fT,       e.freq_temp_mode,           0, MAX_PTS_MONITOR, ts);
+  push(charts.fT,       e.freq_temp_mode,          0, MAX_PTS_MONITOR, ts);
   push(charts.compA,    e.calculated_thickness,    0, MAX_PTS_MONITOR, ts);
-  push(charts.tempA,    e.calculated_temp,          0, MAX_PTS_MONITOR, ts);
+  push(charts.tempA,    e.calculated_temp,         0, MAX_PTS_MONITOR, ts);
 
   if (e.amp_mass != null) { push(charts.iq1, e.amp_mass,   0, MAX_PTS_MONITOR, ts); push(charts.iq1, e.phase_mass, 1, MAX_PTS_MONITOR); }
   if (e.amp_temp != null) { push(charts.iq2, e.amp_temp,   0, MAX_PTS_MONITOR, ts); push(charts.iq2, e.phase_temp, 1, MAX_PTS_MONITOR); }
 
   setLock('mass', e.lock_mass);
   setLock('temp', e.lock_temp);
+  checkLockLost(e.lock_mass, e.lock_temp);
 
   setMeta('meta-comp',   e.calculated_thickness,  'nm');
   setMeta('meta-temp',   e.calculated_temp,  '°C');
@@ -687,6 +890,24 @@ function onMeasurement(e) {
   setMeta('meta-fT',     e.freq_temp_mode,   'Hz');
   setMeta('meta-comp-a', e.calculated_thickness,  'nm');
   setMeta('meta-temp-a', e.calculated_temp,  '°C');
+
+  if (_isRunning && e.timestamp != null) {
+    _runBuffer.push({
+      ts_iso:           new Date(e.timestamp * 1000).toISOString(),
+      ts_s:             e.timestamp,
+      freq_mass_hz:     e.freq_mass_mode,
+      freq_temp_hz:     e.freq_temp_mode,
+      thickness_comp_nm:   e.calculated_thickness,
+      thickness_uncomp_nm: e.uncompensated_thickness,
+      temperature_c:    e.calculated_temp,
+      amp_mass:         e.amp_mass,
+      phase_mass:       e.phase_mass,
+      amp_temp:         e.amp_temp,
+      phase_temp:       e.phase_temp,
+      lock_mass:        e.lock_mass ? 1 : 0,
+      lock_temp:        e.lock_temp ? 1 : 0,
+    });
+  }
 
   sampleCount++;
   setText('val-n', sampleCount);
@@ -707,8 +928,16 @@ function setWsStatus(s) {
 }
 function connect() {
   ws = new WebSocket(WS_URL);
-  ws.onopen  = () => setWsStatus('connected');
-  ws.onclose = () => { setWsStatus(''); setTimeout(connect, 2000); };
+  ws.onopen  = () => { setWsStatus('connected'); _prevWsConnected = true; };
+  ws.onclose = () => {
+    if (_prevWsConnected) {
+      sendNotif('QCM — WebSocket Lost', 'Connection to backend lost', 'wsLost');
+      if (_isRunning) _runLog.push({ timestamp: Date.now() / 1000, type: 'WS_LOST', detail: '' });
+    }
+    _prevWsConnected = false;
+    setWsStatus('');
+    setTimeout(connect, 2000);
+  };
   ws.onerror = () => setWsStatus('error');
   ws.onmessage = msg => {
     try {
@@ -718,10 +947,10 @@ function connect() {
       if (ev.type === 'SweepPointEvent')    onSweepPoint(ev);
       if (ev.type === 'SweepCompleteEvent') onSweepComplete();
       if (ev.type === 'OpcStatusEvent')     onOpcStatus(ev);
-      if (ev.type === 'LockFailedEvent')           document.getElementById('modal-lock-failed').style.display = 'flex';
-      if (ev.type === 'LockStatusEvent')           onLockStatus(ev);
+      if (ev.type === 'LockFailedEvent')    document.getElementById('modal-lock-failed').style.display = 'flex';
+      if (ev.type === 'LockStatusEvent')    onLockStatus(ev);
       if (ev.type === 'StartFreqAutoUpdatedEvent') onStartFreqAutoUpdated(ev);
-      if (ev.type === 'LogEvent')                  onLogEvent(ev);
+      if (ev.type === 'LogEvent')           onLogEvent(ev);
     } catch(e) { console.warn('Bad WS msg', e); }
   };
 }
@@ -729,12 +958,136 @@ connect();
 
 // ---- Toast notification ----
 let _toastTimer = null;
-function showToast(msg, isError = false) {
+function showToast(msg, isError = false, isWarning = false) {
   const t = document.getElementById('toast');
   t.textContent = msg;
-  t.className = 'toast show' + (isError ? ' error' : '');
+  t.className = 'toast show' + (isError ? ' error' : isWarning ? ' warning' : '');
   clearTimeout(_toastTimer);
   _toastTimer = setTimeout(() => t.classList.remove('show'), 2500);
+}
+
+// ---- Notification system ----
+const notifConfig = { enabled: false, sound: true, lockLost: true, sweepComplete: true, opcLost: true, wsLost: true };
+let _audioCtx = null;
+
+function getAudioCtx() {
+  if (!_audioCtx) _audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+  return _audioCtx;
+}
+
+function playBeep(freq, duration, volume = 0.25, delay = 0) {
+  try {
+    const ctx = getAudioCtx();
+    if (ctx.state === 'suspended') ctx.resume();
+    const osc  = ctx.createOscillator();
+    const gain = ctx.createGain();
+    osc.type = 'sine';
+    osc.frequency.value = freq;
+    gain.gain.setValueAtTime(0, ctx.currentTime + delay);
+    gain.gain.linearRampToValueAtTime(volume, ctx.currentTime + delay + 0.01);
+    gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + delay + duration);
+    osc.connect(gain);
+    gain.connect(ctx.destination);
+    osc.start(ctx.currentTime + delay);
+    osc.stop(ctx.currentTime + delay + duration);
+  } catch(e) { /* ignore */ }
+}
+
+function playNotifSound(eventType) {
+  if (!notifConfig.sound) return;
+  switch (eventType) {
+    case 'lockLost':
+      playBeep(440, 0.14);
+      playBeep(440, 0.14, 0.25, 0.20);
+      playBeep(440, 0.18, 0.25, 0.40);
+      break;
+    case 'sweepComplete':
+      playBeep(600, 0.18);
+      playBeep(900, 0.25, 0.25, 0.22);
+      break;
+    case 'opcLost':
+      playBeep(550, 0.22);
+      playBeep(330, 0.32, 0.25, 0.28);
+      break;
+    case 'wsLost':
+      playBeep(280, 0.45);
+      break;
+  }
+}
+
+function testNotifSound() {
+  playBeep(600, 0.18);
+  playBeep(900, 0.25, 0.25, 0.22);
+}
+
+function sendNotif(title, body, eventType) {
+  if (!notifConfig[eventType]) return;
+  playNotifSound(eventType);
+  showToast(title, eventType === 'lockLost' || eventType === 'opcLost' || eventType === 'wsLost', false);
+  if (notifConfig.enabled && 'Notification' in window && Notification.permission === 'granted') {
+    try { new Notification(title, { body, silent: true }); } catch(e) {}
+  }
+}
+
+function requestNotifPermission() {
+  if ('Notification' in window) {
+    Notification.requestPermission().then(p => {
+      if (p === 'granted') {
+        notifConfig.enabled = true;
+        document.getElementById('notif-browser').checked = true;
+        showToast('Notifications enabled');
+      } else {
+        showToast('Permission denied', true);
+      }
+    });
+  } else {
+    showToast('Notifications not supported', true);
+  }
+}
+
+function onNotifBrowserToggle(checked) {
+  if (checked && 'Notification' in window && Notification.permission !== 'granted') {
+    requestNotifPermission();
+  } else {
+    notifConfig.enabled = checked;
+  }
+}
+
+// ---- CSV export ----
+function downloadRunCsv() {
+  document.getElementById('modal-save-csv').style.display = 'none';
+  const headers = ['timestamp_iso','timestamp_s','freq_mass_hz','freq_temp_hz','thickness_comp_nm','thickness_uncomp_nm','temperature_c','amp_mass','phase_mass','amp_temp','phase_temp','lock_mass','lock_temp','event_type','event_detail'];
+
+  const dataRows = _runBuffer.map(r => ({
+    timestamp_iso: r.ts_iso, timestamp_s: r.ts_s,
+    freq_mass_hz: r.freq_mass_hz, freq_temp_hz: r.freq_temp_hz,
+    thickness_comp_nm: r.thickness_comp_nm, thickness_uncomp_nm: r.thickness_uncomp_nm,
+    temperature_c: r.temperature_c, amp_mass: r.amp_mass, phase_mass: r.phase_mass,
+    amp_temp: r.amp_temp, phase_temp: r.phase_temp,
+    lock_mass: r.lock_mass, lock_temp: r.lock_temp,
+    event_type: '', event_detail: '',
+  }));
+
+  const eventRows = _runLog.map(e => ({
+    timestamp_iso: new Date(e.timestamp * 1000).toISOString(), timestamp_s: e.timestamp,
+    freq_mass_hz: '', freq_temp_hz: '', thickness_comp_nm: '', thickness_uncomp_nm: '',
+    temperature_c: '', amp_mass: '', phase_mass: '', amp_temp: '', phase_temp: '',
+    lock_mass: '', lock_temp: '', event_type: e.type, event_detail: e.detail || '',
+  }));
+
+  const allRows = [...dataRows, ...eventRows].sort((a, b) => (a.timestamp_s || 0) - (b.timestamp_s || 0));
+  const esc = v => (v == null || v === '') ? '' : String(v).includes(',') ? `"${v}"` : v;
+  const csv = [headers.join(','), ...allRows.map(r => headers.map(h => esc(r[h])).join(','))].join('\n');
+
+  const blob = new Blob([csv], { type: 'text/csv' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `qcm_${new Date().toISOString().slice(0,19).replace(/[T:]/g,'-')}.csv`;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
 }
 
 // ---- Initial settings load from backend ----
@@ -752,15 +1105,14 @@ async function loadCrystalForm(name) {
       const el = document.getElementById(`s-coeff-${id}`);
       if (el && p[key] != null) el.value = p[key];
     }
+    updateCoeffCharts();
   } catch(e) { console.warn('Could not load crystal form', e); }
 }
 
 async function loadInitialSettings() {
-  // Single round-trip for all settings
+  let s = null;
   try {
-    const s = await fetch(`${API_URL}/settings`).then(r => r.json());
-
-    // Oscillator settings
+    s = await fetch(`${API_URL}/settings`).then(r => r.json());
     for (const osc of [1, 2]) {
       const os = s.oscillators?.[osc];
       if (!os) continue;
@@ -768,31 +1120,33 @@ async function loadInitialSettings() {
       document.getElementById(`s-osc${osc}-iq`).value  = os.iq_gain  ?? '';
       document.getElementById(`s-osc${osc}-inv`).value = os.inverted ? '1' : '0';
     }
-
-    // Output mode
     if (s.output_mode != null) document.getElementById('s-output-mode').value = s.output_mode;
+  } catch(e) { /* backend not yet reachable */ }
 
-    // Crystal / lock frequencies + coefficients
+  let crystalLoaded = false;
+  try {
     const cl = await fetch(`${API_URL}/crystals`).then(r => r.json());
     if (cl.active) {
       await loadCrystalForm(cl.active);
-    } else {
-      // No active crystal — use values from the settings response
-      const lf = s.lock_frequencies;
-      if (lf) {
-        document.getElementById('s-crystal-freq-mass').value = lf.mass;
-        document.getElementById('s-crystal-freq-temp').value = lf.temp;
-      }
-      const c = s.coefficients ?? {};
-      const coeffMap = { fM0:'fM_0', fM1:'fM_1', fM2:'fM_2', fM3:'fM_3',
-                         fT0:'fT_0', fT1:'fT_1', fT2:'fT_2', fT3:'fT_3' };
-      for (const [id, key] of Object.entries(coeffMap)) {
-        if (c[key] != null) document.getElementById(`s-coeff-${id}`).value = c[key];
-      }
+      crystalLoaded = true;
     }
-  } catch(e) { /* backend not yet reachable */ }
+  } catch(e) { /* crystals endpoint may not be available on test server */ }
 
-  // OPC connection
+  if (!crystalLoaded && s) {
+    const lf = s.lock_frequencies;
+    if (lf) {
+      if (lf.mass != null) document.getElementById('s-crystal-freq-mass').value = lf.mass;
+      if (lf.temp != null) document.getElementById('s-crystal-freq-temp').value = lf.temp;
+    }
+    const c = s.coefficients ?? {};
+    const coeffMap = { fM0:'fM_0', fM1:'fM_1', fM2:'fM_2', fM3:'fM_3',
+                       fT0:'fT_0', fT1:'fT_1', fT2:'fT_2', fT3:'fT_3' };
+    for (const [id, key] of Object.entries(coeffMap)) {
+      if (c[key] != null) document.getElementById(`s-coeff-${id}`).value = c[key];
+    }
+    updateCoeffCharts();
+  }
+
   try {
     const opc = await fetch(`${API_URL}/opc/settings`).then(r => r.json());
     if (opc.url)  document.getElementById('s-opc-url').value  = opc.url;
@@ -814,37 +1168,105 @@ async function connectOpc() {
   } catch(e) { showToast('Connect failed', true); }
 }
 
+function updateStartStopBtns(state) {
+  const ids = ['btn-start-stop', 'btn-start-stop-2'];
+  ids.forEach(id => {
+    const btn = document.getElementById(id);
+    if (!btn) return;
+    if (state === 'RUNNING') {
+      btn.className = 'btn btn-red';
+      btn.innerHTML = '<svg viewBox="0 0 12 12"><rect x="2.5" y="2.5" width="7" height="7"/></svg>STOP';
+      btn.disabled = false;
+    } else if (state === 'IDLE') {
+      btn.className = 'btn btn-green';
+      btn.innerHTML = '<svg viewBox="0 0 12 12"><polygon points="3,2 10,6 3,10"/></svg>START';
+      btn.disabled = false;
+    } else {
+      btn.className = 'btn';
+      btn.innerHTML = '<svg viewBox="0 0 12 12"><polygon points="3,2 10,6 3,10"/></svg>START';
+      btn.disabled = true;
+    }
+  });
+}
+
+const _lockSvg = '<svg viewBox="0 0 12 12"><path d="M6 1a3 3 0 0 0-3 3v1H2v6h8V5H9V4a3 3 0 0 0-3-3zm0 1.5a1.5 1.5 0 0 1 1.5 1.5v1h-3V4A1.5 1.5 0 0 1 6 2.5z"/></svg>';
+function setLockBtnState(locking) {
+  document.querySelectorAll('.btn-get-lock').forEach(btn => {
+    if (locking) {
+      btn.classList.add('locking');
+      btn.innerHTML = _lockSvg + 'LOCKING…';
+    } else {
+      btn.classList.remove('locking');
+      btn.innerHTML = _lockSvg + 'GET LOCK';
+    }
+  });
+}
+
 function onStateChange(state) {
   const pill = document.getElementById('status-pill');
   pill.className = 'status-pill ' + state.toLowerCase();
   document.getElementById('state-label').textContent = state.toUpperCase();
 
-  const btn = document.getElementById('btn-start-stop');
-  if (!btn) return;
-  if (state === 'RUNNING') {
-    btn.className = 'btn btn-red';
-    btn.innerHTML = '<svg viewBox="0 0 12 12"><rect x="2.5" y="2.5" width="7" height="7"/></svg>STOP';
-    btn.disabled = false;
-  } else if (state === 'IDLE') {
-    btn.className = 'btn btn-green';
-    btn.innerHTML = '<svg viewBox="0 0 12 12"><polygon points="3,2 10,6 3,10"/></svg>START';
-    btn.disabled = false;
-  } else {
-    // LOCKING / SWEEPING / CALIBRATING — not interruptable from this button
-    btn.className = 'btn';
-    btn.innerHTML = '<svg viewBox="0 0 12 12"><polygon points="3,2 10,6 3,10"/></svg>START';
-    btn.disabled = true;
+  const wasRunning = _isRunning;
+  _isRunning = state === 'RUNNING';
+
+  // Sweep button: ABORT while sweeping, disabled while running, RUN SWEEP otherwise
+  const sweepBtn = document.getElementById('btn-sweep-toggle');
+  if (sweepBtn) {
+    if (state === 'RUNNING') {
+      sweepBtn.disabled = true;
+    } else if (state === 'SWEEPING') {
+      sweepBtn.disabled = false;
+      setSweepBtnState(true);
+    } else {
+      sweepBtn.disabled = false;
+      setSweepBtnState(false);
+    }
+  }
+
+  // GET LOCK button: pulse with "LOCKING…" text while locking
+  setLockBtnState(state === 'LOCKING');
+
+  updateStartStopBtns(state);
+
+  // When run ends, offer CSV download if data was recorded
+  if (wasRunning && !_isRunning && _runBuffer.length > 0) {
+    const el = document.getElementById('csv-row-count');
+    if (el) el.textContent = _runBuffer.length;
+    document.getElementById('modal-save-csv').style.display = 'flex';
+  }
+  if (_isRunning) {
+    _runBuffer = [];
+    _runLog = [];
   }
 }
 
 function toggleStartStop() {
   const btn = document.getElementById('btn-start-stop');
-  sendCommand(btn.classList.contains('btn-red') ? 'stop' : 'start');
+  if (btn && btn.classList.contains('btn-red')) {
+    sendCommand('stop');
+  } else {
+    if (!lockMass || !lockTemp) {
+      document.getElementById('confirm-mass-status').textContent = lockMass ? '✓ LOCKED' : '✗ UNLOCKED';
+      document.getElementById('confirm-temp-status').textContent = lockTemp ? '✓ LOCKED' : '✗ UNLOCKED';
+      document.getElementById('confirm-mass-status').style.color = lockMass ? 'var(--green)' : 'var(--red)';
+      document.getElementById('confirm-temp-status').style.color = lockTemp ? 'var(--green)' : 'var(--red)';
+      document.getElementById('modal-confirm-start').style.display = 'flex';
+    } else {
+      sendCommand('start');
+    }
+  }
+}
+
+function doStartAnyway() {
+  document.getElementById('modal-confirm-start').style.display = 'none';
+  sendCommand('start');
 }
 
 function onLockStatus(ev) {
   setLock('mass', ev.lock_mass);
   setLock('temp', ev.lock_temp);
+  checkLockLost(ev.lock_mass, ev.lock_temp);
 }
 
 function onStartFreqAutoUpdated(ev) {
@@ -855,18 +1277,22 @@ function onStartFreqAutoUpdated(ev) {
 
 function onOpcStatus(ev) {
   const connected = ev.connected;
-  // Header dot
+
+  if (_prevOpcConnected === true && !connected) {
+    sendNotif('QCM — OPC Disconnected', 'Connection to WAGO PLC lost', 'opcLost');
+    if (_isRunning) _runLog.push({ timestamp: Date.now() / 1000, type: 'OPC_LOST', detail: '' });
+  }
+  _prevOpcConnected = connected;
+
   document.getElementById('opc-dot').className       = 'ws-dot ' + (connected ? 'connected' : 'error');
-  // Settings panel dot + label
   document.getElementById('opc-panel-dot').className = 'ws-dot ' + (connected ? 'connected' : 'error');
   document.getElementById('opc-panel-label').textContent = connected ? 'CONNECTED' : 'DISCONNECTED';
-  // PLC settings values
-  const fmt = (v, unit) => v != null ? `${v} ${unit}`.trim() : '—';
-  document.getElementById('opc-val-amb').textContent    = fmt(ev.ambient_temp,    '°C');
-  document.getElementById('opc-val-fmass').textContent  = fmt(ev.start_freq_mass, 'Hz');
-  document.getElementById('opc-val-ftemp').textContent  = fmt(ev.start_freq_temp, 'Hz');
-  document.getElementById('opc-val-dens').textContent   = fmt(ev.density,         'kg/m³');
-  document.getElementById('opc-val-zratio').textContent = fmt(ev.z_ratio,         '');
+  const fmtv = (v, unit) => v != null ? `${v} ${unit}`.trim() : '—';
+  document.getElementById('opc-val-amb').textContent    = fmtv(ev.ambient_temp,    '°C');
+  document.getElementById('opc-val-fmass').textContent  = fmtv(ev.start_freq_mass, 'Hz');
+  document.getElementById('opc-val-ftemp').textContent  = fmtv(ev.start_freq_temp, 'Hz');
+  document.getElementById('opc-val-dens').textContent   = fmtv(ev.density,         'kg/m³');
+  document.getElementById('opc-val-zratio').textContent = fmtv(ev.z_ratio,         '');
 }
 
 // ---- Commands ----
@@ -874,17 +1300,19 @@ async function sendCommand(action) {
   let url;
   if (action === 'start') {
     const t = parseFloat(document.getElementById('input-amb-temp').value);
-    if (isNaN(t)) { alert('Enter a valid ambient temperature.'); return; }
+    if (isNaN(t)) { showToast('Enter a valid ambient temperature.', true); return; }
     url = `${API_URL}/measurement/start?ambient_temp=${t}`;
   } else if (action === 'stop') {
     url = `${API_URL}/measurement/stop`;
   } else if (action === 'lock') {
     const mass = parseFloat(document.getElementById('s-crystal-freq-mass').value);
     const temp = parseFloat(document.getElementById('s-crystal-freq-temp').value);
+    if (isNaN(mass) || isNaN(temp)) { showToast('Set valid lock frequencies in Crystal Settings', true); return; }
+    setLockBtnState(true);
     try {
       await fetch(`${API_URL}/settings/lock_frequencies?mass=${mass}&temp=${temp}`, { method: 'POST' });
       await fetch(`${API_URL}/measurement/get_lock`, { method: 'POST' });
-    } catch(e) { console.error('Lock command failed:', e); }
+    } catch(e) { console.error('Lock command failed:', e); setLockBtnState(false); }
     return;
   }
   try { await fetch(url, { method: 'POST' }); } catch(e) { console.error('Command failed:', e); }
@@ -920,11 +1348,9 @@ async function applyCrystal() {
 async function downloadCrystal() {
   const name = document.getElementById('s-crystal-name').value.trim();
   if (!name) { showToast('Enter a crystal name first', true); return; }
-  // Auto-save if the file doesn't exist yet so the download always works
   const exists = await fetch(`${API_URL}/crystals/${encodeURIComponent(name)}`).then(r => r.ok);
   if (!exists) {
     await applyCrystal();
-    // applyCrystal shows a toast on error and returns early — re-check before redirecting
     const saved = await fetch(`${API_URL}/crystals/${encodeURIComponent(name)}`).then(r => r.ok);
     if (!saved) return;
   }
@@ -949,14 +1375,13 @@ async function uploadCrystal(input) {
 
 function goToCrystalSettings() {
   document.getElementById('modal-lock-failed').style.display = 'none';
-  // Switch to Settings tab
   document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
   document.querySelector('.tab[onclick*="settings"]').classList.add('active');
   document.querySelectorAll('.tab-panel').forEach(p => p.classList.toggle('active', p.id === 'panel-settings'));
-  // Switch to Crystal settings panel
   document.querySelectorAll('.settings-nav-item').forEach(i => i.classList.remove('active'));
   document.querySelectorAll('.settings-panel').forEach(p => p.classList.toggle('active', p.id === 'spanel-crystals'));
   document.querySelector('[onclick*="crystals"]')?.classList.add('active');
+  initCoeffChartsIfNeeded();
 }
 
 async function applyOutputMode() {
@@ -974,6 +1399,54 @@ function applySystemSettings() {
 
 async function applyAllSettings() { await applyOscSettings(1); await applyOscSettings(2); await applyOutputMode(); await applyCrystal(); applySystemSettings(); }
 
+// ---- Coefficient polynomial charts ----
+let _coeffCharts = { fM: null, fT: null };
+let _coeffChartsInit = false;
+
+function initCoeffChartsIfNeeded() {
+  if (_coeffChartsInit) { _coeffCharts.fM && _coeffCharts.fM.resize(); _coeffCharts.fT && _coeffCharts.fT.resize(); updateCoeffCharts(); return; }
+  _coeffChartsInit = true;
+  const axOpts = (title) => ({
+    display: true,
+    title: { display: true, text: title, color: TC, font: { family: 'DM Mono', size: 9 } },
+    ticks: { color: TC, font: { family: 'DM Mono', size: 9 }, maxTicksLimit: 5 },
+    grid: { color: 'rgba(255,255,255,0.04)' },
+    border: { color: 'transparent' }
+  });
+  const coeffOpts = {
+    responsive: true, maintainAspectRatio: false, animation: false,
+    plugins: { legend: { display: false }, tooltip: { enabled: false }, zoom: ZOOM_CFG },
+    scales: { x: axOpts('T (°C)'), y: axOpts('Δf (Hz)') }
+  };
+  const mkCoeffChart = (id, color) => {
+    const ctx = document.getElementById(id);
+    if (!ctx) return null;
+    const chart = new Chart(ctx, {
+      type: 'line',
+      data: { labels: [], datasets: [{ data: [], borderColor: color, borderWidth: 1.5, pointRadius: 0, tension: 0.3, fill: true, backgroundColor: color + '18' }] },
+      options: JSON.parse(JSON.stringify(coeffOpts))
+    });
+    ctx.addEventListener('dblclick', () => chart.resetZoom());
+    return chart;
+  };
+  _coeffCharts.fM = mkCoeffChart('chart-coeff-fM', '#2ecc8a');
+  _coeffCharts.fT = mkCoeffChart('chart-coeff-fT', '#4a9eff');
+  setupZoomGroup([_coeffCharts.fM, _coeffCharts.fT]);
+  updateCoeffCharts();
+}
+
+function updateCoeffCharts() {
+  if (!_coeffChartsInit) return;
+  const gv = id => parseFloat(document.getElementById(id)?.value) || 0;
+  const fM3 = gv('s-coeff-fM3'), fM2 = gv('s-coeff-fM2'), fM1 = gv('s-coeff-fM1');
+  const fT3 = gv('s-coeff-fT3'), fT2 = gv('s-coeff-fT2'), fT1 = gv('s-coeff-fT1');
+  const temps = Array.from({ length: 101 }, (_, i) => i);  // 0–100 °C
+  const fMdata = temps.map(t => fM3*t**3 + fM2*t**2 + fM1*t);
+  const fTdata = temps.map(t => fT3*t**3 + fT2*t**2 + fT1*t);
+  if (_coeffCharts.fM) { _coeffCharts.fM.data.labels = temps; _coeffCharts.fM.data.datasets[0].data = fMdata; _coeffCharts.fM.update('none'); }
+  if (_coeffCharts.fT) { _coeffCharts.fT.data.labels = temps; _coeffCharts.fT.data.datasets[0].data = fTdata; _coeffCharts.fT.update('none'); }
+}
+
 // ---- Log tab ----
 const _MAX_LOG_LINES = 1000;
 
@@ -989,10 +1462,8 @@ function onLogEvent(ev) {
   line.textContent = `${hms}  ${level.padEnd(8)} ${ev.message}`;
   out.appendChild(line);
 
-  // Trim to keep memory bounded
   while (out.children.length > _MAX_LOG_LINES) out.removeChild(out.firstChild);
 
-  // Update count + dot colour (dim → green when logs arrive)
   document.getElementById('log-count').textContent = `${out.children.length} lines`;
   const dot = document.getElementById('log-tab-dot');
   if (dot && dot.style.background !== 'var(--green)') dot.style.background = 'var(--green)';
@@ -1005,17 +1476,23 @@ function clearLogs() {
   if (out) out.innerHTML = '';
   document.getElementById('log-count').textContent = '0 lines';
 }
-
-// ---- Crystal management (old list-based functions removed) ----
 </script>
+
 <div id="toast" class="toast"></div>
 
+<!-- Lock failed modal -->
 <div id="modal-lock-failed" class="modal-overlay" style="display:none">
   <div class="modal">
     <div class="modal-title">⚠ PLL LOCK FAILED</div>
     <div class="modal-body">
       The oscillators did not lock within the expected time.<br><br>
-      Please check the <strong>Start Frequencies</strong> in Crystal Settings — they should be within ~8 kHz of the crystal's actual resonant frequency.
+      Please check the following:
+      <ul>
+        <li><strong>Start Frequencies</strong> — must be within ~8 kHz of the crystal's resonant frequency</li>
+        <li><strong>Crystal Settings</strong> — verify the correct crystal profile is selected</li>
+        <li><strong>RF Cabling</strong> — check all connections between the Red Pitaya outputs and the crystal oscillator circuit inputs</li>
+        <li><strong>Signal levels</strong> — confirm the crystal is oscillating and the signal path is intact</li>
+      </ul>
     </div>
     <div class="modal-footer">
       <button class="btn btn-orange" onclick="goToCrystalSettings()">OPEN CRYSTAL SETTINGS</button>
@@ -1023,5 +1500,40 @@ function clearLogs() {
     </div>
   </div>
 </div>
+
+<!-- Start confirmation when PLL not locked -->
+<div id="modal-confirm-start" class="modal-overlay" style="display:none">
+  <div class="modal">
+    <div class="modal-title">⚠ PLL NOT LOCKED</div>
+    <div class="modal-body">
+      One or both PLLs are not locked. Data quality will be unreliable.<br><br>
+      <span style="font-family:'DM Mono',monospace;font-size:11px;display:block;margin-top:6px">
+        Mass mode: <span id="confirm-mass-status" style="font-weight:500">—</span><br>
+        Temp mode: <span id="confirm-temp-status" style="font-weight:500">—</span>
+      </span>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-orange" onclick="sendCommand('lock');document.getElementById('modal-confirm-start').style.display='none'">GET LOCK FIRST</button>
+      <button class="btn btn-red" onclick="doStartAnyway()">START ANYWAY</button>
+      <button class="btn" onclick="document.getElementById('modal-confirm-start').style.display='none'">CANCEL</button>
+    </div>
+  </div>
+</div>
+
+<!-- CSV download prompt -->
+<div id="modal-save-csv" class="modal-overlay" style="display:none">
+  <div class="modal">
+    <div class="modal-title green">RUN COMPLETE</div>
+    <div class="modal-body">
+      Run finished — <span id="csv-row-count">0</span> measurement points recorded.<br><br>
+      Save the data as a CSV file? The export includes all measurement channels and any logged events (lock lost, disconnections).
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-green" onclick="downloadRunCsv()">DOWNLOAD CSV</button>
+      <button class="btn" onclick="document.getElementById('modal-save-csv').style.display='none'">DISMISS</button>
+    </div>
+  </div>
+</div>
+
 </body>
 </html>

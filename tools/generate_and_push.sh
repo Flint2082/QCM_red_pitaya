@@ -70,7 +70,8 @@ cd "$PROJECT_DIR" || die "Project directory not found: $PROJECT_DIR"
 git rev-parse --is-inside-work-tree >/dev/null 2>&1 || die "$PROJECT_DIR is not a git repository"
 
 log "📝 Staging bitstream and .fpg ..."
-git add -- "$OUTPUT_BIN" "$FPG_FILE"
+# Both artifacts typically live under .gitignore'd build/output dirs, so force-add.
+git add -f -- "$OUTPUT_BIN" "$FPG_FILE"
 
 if git diff --cached --quiet; then
     log "ℹ️  Nothing to commit — bitstream and .fpg are already up to date."

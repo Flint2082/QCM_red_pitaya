@@ -27,7 +27,7 @@ class QCMInterface:
         
         self.INT_GAIN_PRE_LOCK = 0.01
         self.INT_GAIN_POST_LOCK = 0.00001
-        self.IQ_GAIN = 0.00001
+        self.LPF_GAIN = 0.00001
         
         # variables
         self.coeff_file = os.path.join(base_dir, "..", "..", "data", "coeffecients.csv")
@@ -65,8 +65,8 @@ class QCMInterface:
     def setInt(self, osc_index, gain):
         self.fpga.write_register(register_name='integral_'+str(osc_index),value=int(gain*2**32)) # multiplication to account for fixed-point (32F32) representation in FPGA
 
-    def setIQGain(self, osc_index, gain):
-        self.fpga.write_register(register_name='IQ_gain_'+str(osc_index),value=int(gain*2**32)) # multiplication to account for fixed-point (32F32) representation in FPGA
+    def setLPFGain(self, osc_index, gain):
+        self.fpga.write_register(register_name='lpf_gain_'+str(osc_index),value=int(gain*2**32)) # multiplication to account for fixed-point (32F32) representation in FPGA
 
     def setInv(self, osc_index, inv: bool):
         self.fpga.write_register(register_name='inv_fb_'+str(osc_index), value=inv)
@@ -106,25 +106,18 @@ class QCMInterface:
 
         return freq
 
-    def getI(self, osc_index):
-        inPhase = self.to_signed(self.fpga.read_register(f'I_out_{osc_index}'),32)
+    def getMag(self, osc_index):
+        inPhase = self.to_signed(self.fpga.read_register(f'mag_out_{osc_index}'),32)
         return inPhase/2**31
         
-    def getQ(self, osc_index):
-        quadrature = self.to_signed(self.fpga.read_register(f'Q_out_{osc_index}'),32)
+    def getPhase(self, osc_index):
+        quadrature = self.to_signed(self.fpga.read_register(f'phase_out_{osc_index}'),32)
         return quadrature/2**31
-
-    def getAmpAndPhase(self, osc_index):
-        I = self.getI(osc_index)
-        Q = self.getQ(osc_index)
-        amp = (I**2 + Q**2)**0.5
-        # arctan2(-Q, -I) rotates by exactly π and stays within [-π, π]
-        phase = np.arctan2(-Q, -I) if self._inv.get(osc_index, False) else np.arctan2(Q, I)
-        return amp, phase
     
     def getLockDetect(self, osc_index, amp=None, phase=None):
         if amp is None or phase is None:
-            amp, phase = self.getAmpAndPhase(osc_index)
+            amp = self.getMag(osc_index)
+            phase = self.getPhase(osc_index)
         # Amplitude above threshold and phase close to 0 indicates lock. The phase is the most important factor, but the amplitude check helps avoid false positives when the signal is very weak.
         return amp > 0.1 and abs(round(phase*10)) == 0
     
@@ -141,11 +134,11 @@ class QCMInterface:
         self.standby(2)
         self.setFreq(1, 6000000)
         self.setInt(1, 0.00)
-        self.setIQGain(1, self.IQ_GAIN)
+        self.setLPFGain(1, self.LPF_GAIN)
 
         while True:
             try:
-                amplitude = self.getAmpAndPhase(1)[0]
+                amplitude = self.getMag(1)
                 print(f"Amplitude: {amplitude}")
                 time.sleep(0.1)
             except KeyboardInterrupt:
@@ -167,7 +160,8 @@ class QCMInterface:
             self.setFreq(osc_index, f)
             self.reset()
             time.sleep(timestep)
-            amplitude, phase = self.getAmpAndPhase(osc_index)
+            amplitude = self.getMag(osc_index)
+            phase = self.getPhase(osc_index)
             frequencies.append(f)
             phases.append(phase)
             amplitudes.append(amplitude)
@@ -181,10 +175,10 @@ class QCMInterface:
         
         ## 6MHz crystal
         self.setInv(1,1)      
-        self.setIQGain(1, self.IQ_GAIN)                    
+        self.setLPFGain(1, self.LPF_GAIN)                    
         
         self.setInv(2,1)
-        self.setIQGain(2, self.IQ_GAIN)
+        self.setLPFGain(2, self.LPF_GAIN)
         
         for t in range(self.MAX_STARTUP_TRIES): # try to lock for up to MAX_STARTUP_TRIES
             self.reset()  # Ensure we're starting from a known state each time
@@ -206,8 +200,8 @@ class QCMInterface:
             print("Warning: PLLs did not lock within expected time. Check starting frequencies.")
         else:
             print("PLLs locked successfully at frequencies:")
-            print(f"  Oscillator 1: {self.getFreq(1)} Hz    Phase: {self.getAmpAndPhase(1)[1]} ")
-            print(f"  Oscillator 2: {self.getFreq(2)} Hz    Phase: {self.getAmpAndPhase(2)[1]} ")
+            print(f"  Oscillator 1: {self.getFreq(1)} Hz    Phase: {self.getPhase(1)} ")
+            print(f"  Oscillator 2: {self.getFreq(2)} Hz    Phase: {self.getPhase(2)} ")
 
         self.setInt(1, self.INT_GAIN_POST_LOCK)
         self.setInt(2, self.INT_GAIN_POST_LOCK)
@@ -256,8 +250,10 @@ class QCMInterface:
     def getMeasurement(self):
         fM = self.getFreq(1)
         fT = self.getFreq(2)
-        amp_mass, phase_mass = self.getAmpAndPhase(1)
-        amp_temp, phase_temp = self.getAmpAndPhase(2)
+        amp_mass = self.getMag(1)
+        phase_mass = self.getPhase(1)
+        amp_temp = self.getMag(2)
+        phase_temp = self.getPhase(2)
         T_calc, uncompensated_thickness_nm, compensated_thickness_nm, compensated_m_freq = self.temp_comp.FreqToTemp(fT, fM)
         return MeasurementData(
             timestamp=time.time(),

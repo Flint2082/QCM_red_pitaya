@@ -78,10 +78,8 @@ else
     git commit -m "build: update bitstream and fpg ($(basename "$OUTPUT_BIN"), $(basename "$FPG_FILE"))" \
         || die "git commit failed"
     log "✅ Committed $(basename "$OUTPUT_BIN") and $(basename "$FPG_FILE")."
-    
-    log "📤 Pushing to remote..."
-    git push || die "git push failed"
-    log "✅ Push complete."
 fi
 
-
+log "📤 Pushing to remote..."
+git push || die "git push failed"
+log "✅ Push complete."

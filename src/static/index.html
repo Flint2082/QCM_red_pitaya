@@ -184,6 +184,10 @@ footer { height: 24px; background: var(--surface); border-top: 1px solid var(--b
   </div>
   <div class="logo-sep"></div>
   <div class="device-badge">RED PITAYA · ZYNQ 7010</div>
+  <button class="btn btn-green" id="btn-download-latest" onclick="downloadLatestRun()" disabled title="Download the latest run as CSV">
+    <svg viewBox="0 0 12 12"><path d="M5.25 1h1.5v4h2L6 8 3.25 5h2z"/><path d="M2.5 9.5h7v1.2h-7z"/></svg>
+    SAVE CSV
+  </button>
   <div class="header-spacer"></div>
   <div class="status-pill idle" id="status-pill"><span id="state-label">IDLE</span></div>
   <div class="logo-sep"></div>
@@ -613,10 +617,6 @@ let _isRunning = false;
 let _sweepRunning = false;
 let _runBuffer = [];
 let _runLog = [];
-// Snapshot of the previous run, stashed when the next run starts, so the
-// run-complete popup can still offer it as a backup download.
-let _prevRunBuffer = [];
-let _prevRunLog = [];
 
 // ---- Tab switching ----
 function switchTab(name, el) {
@@ -912,6 +912,7 @@ function onMeasurement(e) {
       lock_mass:        e.lock_mass ? 1 : 0,
       lock_temp:        e.lock_temp ? 1 : 0,
     });
+    if (_runBuffer.length === 1) updateDownloadBtn();  // first point of a run: enable the button
   }
 
   sampleCount++;
@@ -931,13 +932,20 @@ function setWsStatus(s) {
   document.getElementById('ws-dot').className = 'ws-dot ' + s;
   document.getElementById('ws-label').textContent = s === 'connected' ? 'CONNECTED' : s === 'error' ? 'ERROR' : 'DISCONNECTED';
 }
+let _wsOpenedAt = 0;
 function connect() {
   ws = new WebSocket(WS_URL);
-  ws.onopen  = () => { setWsStatus('connected'); _prevWsConnected = true; };
-  ws.onclose = () => {
+  ws.onopen  = () => { setWsStatus('connected'); _prevWsConnected = true; _wsOpenedAt = Date.now(); };
+  ws.onclose = (ev) => {
+    // Diagnostics for the frequent WS drops: log close code, reason and how
+    // long the socket survived. Code 1006 = abnormal (no close frame: network
+    // drop or ping timeout); 1011 = server error; 1001 = going away; 1000 = clean.
+    const upMs = _wsOpenedAt ? Date.now() - _wsOpenedAt : 0;
+    const detail = `code=${ev.code} reason="${ev.reason || ''}" clean=${ev.wasClean} up=${(upMs/1000).toFixed(1)}s`;
+    onLogEvent({ level: 'WARN', message: `[WS] closed — ${detail}`, timestamp: Date.now() / 1000 });
     if (_prevWsConnected) {
       sendNotif('QCM — WebSocket Lost', 'Connection to backend lost', 'wsLost');
-      if (_isRunning) _runLog.push({ timestamp: Date.now() / 1000, type: 'WS_LOST', detail: '' });
+      if (_isRunning) _runLog.push({ timestamp: Date.now() / 1000, type: 'WS_LOST', detail });
     }
     _prevWsConnected = false;
     setWsStatus('');
@@ -1059,7 +1067,7 @@ function onNotifBrowserToggle(checked) {
 }
 
 // ---- CSV export ----
-function buildRunCsv(buffer, log, suffix = '') {
+function buildRunCsv(buffer, log) {
   const headers = ['timestamp_iso','timestamp_s','freq_mass_hz','freq_temp_hz','thickness_comp_nm','thickness_uncomp_nm','temperature_c','amp_mass','phase_mass','amp_temp','phase_temp','lock_mass','lock_temp','event_type','event_detail'];
 
   const dataRows = buffer.map(r => ({
@@ -1087,7 +1095,7 @@ function buildRunCsv(buffer, log, suffix = '') {
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
   a.href = url;
-  a.download = `qcm_${new Date().toISOString().slice(0,19).replace(/[T:]/g,'-')}${suffix}.csv`;
+  a.download = `qcm_${new Date().toISOString().slice(0,19).replace(/[T:]/g,'-')}.csv`;
   document.body.appendChild(a);
   a.click();
   document.body.removeChild(a);
@@ -1099,12 +1107,17 @@ function downloadRunCsv() {
   buildRunCsv(_runBuffer, _runLog);
 }
 
-// Backup download of the run prior to the one that just finished. Kept around
-// because the live buffer is only cleared when the next run starts, so a run
-// you forgot to save is recoverable from this popup until a third run begins.
-function downloadPrevRunCsv() {
-  if (!_prevRunBuffer.length) return;
-  buildRunCsv(_prevRunBuffer, _prevRunLog, '_previous');
+// Always-on download button: saves the latest run (the live buffer, which holds
+// the current run while measuring or the most recent run until the next start).
+function downloadLatestRun() {
+  if (!_runBuffer.length) return;
+  buildRunCsv(_runBuffer, _runLog);
+}
+
+// Enable the download button whenever there is run data to save, grey it out otherwise.
+function updateDownloadBtn() {
+  const btn = document.getElementById('btn-download-latest');
+  if (btn) btn.disabled = _runBuffer.length === 0;
 }
 
 // ---- Initial settings load from backend ----
@@ -1250,16 +1263,6 @@ function onStateChange(state) {
   if (wasRunning && !_isRunning && _runBuffer.length > 0) {
     const el = document.getElementById('csv-row-count');
     if (el) el.textContent = _runBuffer.length;
-    // Show the previous-run backup button only if there is a previous run to grab.
-    const prevBtn = document.getElementById('btn-prev-run-csv');
-    if (prevBtn) {
-      if (_prevRunBuffer.length > 0) {
-        prevBtn.textContent = `BACKUP PREVIOUS RUN (${_prevRunBuffer.length})`;
-        prevBtn.style.display = '';
-      } else {
-        prevBtn.style.display = 'none';
-      }
-    }
     document.getElementById('modal-save-csv').style.display = 'flex';
   }
   // Clear the buffer only on the transition INTO running (a fresh run start),
@@ -1267,16 +1270,10 @@ function onStateChange(state) {
   // each WebSocket (re)connect, so clearing on every RUNNING event would wipe
   // the whole run mid-flight after a brief WS drop.
   if (!wasRunning && _isRunning) {
-    // Stash the finished run as a backup before clearing, so it stays
-    // recoverable from the next run's popup. Only overwrite when there is
-    // real data, so an empty start doesn't discard a good backup.
-    if (_runBuffer.length > 0) {
-      _prevRunBuffer = _runBuffer;
-      _prevRunLog = _runLog;
-    }
     _runBuffer = [];
     _runLog = [];
   }
+  updateDownloadBtn();
 }
 
 function toggleStartStop() {
@@ -1568,7 +1565,6 @@ function clearLogs() {
     </div>
     <div class="modal-footer">
       <button class="btn btn-green" onclick="downloadRunCsv()">DOWNLOAD CSV</button>
-      <button class="btn" id="btn-prev-run-csv" onclick="downloadPrevRunCsv()" style="display:none">BACKUP PREVIOUS RUN</button>
       <button class="btn" onclick="document.getElementById('modal-save-csv').style.display='none'">DISMISS</button>
     </div>
   </div>

@@ -152,6 +152,8 @@ class RestServer:
         self.manager = ConnectionManager()
         self._thread: threading.Thread | None = None
         self._loop: asyncio.AbstractEventLoop | None = None
+        self._server: uvicorn.Server | None = None
+        self._broadcaster_started = False  # guards against starting two broadcasters
         self._last_state: str = "IDLE"
         self._last_opc_status: dict | None = None
         # Lock frequencies used by the GET LOCK command
@@ -249,8 +251,12 @@ class RestServer:
         logging.getLogger().addHandler(handler)
 
     def stop(self):
-        if self._loop:
-            self._loop.call_soon_threadsafe(self._loop.stop)
+        # Ask uvicorn to shut down gracefully so serve() returns and
+        # run_until_complete() finishes cleanly. Stopping the loop directly
+        # made run_until_complete raise "Event loop stopped before Future
+        # completed" and crashed the api-server thread on shutdown.
+        if self._server is not None:
+            self._server.should_exit = True
 
     def _run(self):
         self._loop = asyncio.new_event_loop()
@@ -263,18 +269,24 @@ class RestServer:
             app=self.app,
             host="0.0.0.0",
             port=8000,
-            loop="asyncio",        
+            loop="asyncio",
             ws="websockets", # explicitly tell uvicorn which WS library to use
             log_level="info",
         )
-        server = uvicorn.Server(config)
-        self._loop.run_until_complete(server.serve())
+        self._server = uvicorn.Server(config)
+        self._loop.run_until_complete(self._server.serve())
 
     # --------------------------------------------------
     # Event broadcaster (event_queue → WebSocket clients)
     # --------------------------------------------------
 
     async def _event_broadcaster(self):
+        # This is scheduled from both _run() and the FastAPI lifespan; guard so
+        # only one instance ever runs. Two broadcasters would race on the same
+        # queue (each get_nowait() steals events from the other).
+        if self._broadcaster_started:
+            return
+        self._broadcaster_started = True
         while True:
             try:
                 event = self.event_queue.get_nowait()
@@ -340,13 +352,21 @@ class RestServer:
         @app.websocket("/ws")
         async def websocket_endpoint(ws: WebSocket):
             await self.manager.connect(ws)
+            opened = time.time()
+            client = f"{ws.client.host}:{ws.client.port}" if ws.client else "?"
             await ws.send_json({"type": "StateEvent", "state": self._last_state})
             if self._last_opc_status:
                 await ws.send_json(self._last_opc_status)
             try:
                 while True:
                     await ws.receive_text()   # keep connection alive; we only push, not receive
-            except WebSocketDisconnect:
+            except WebSocketDisconnect as e:
+                # Diagnostics for frequent drops: 1000=clean, 1001=going away,
+                # 1006=abnormal (no close frame), 1011=server error.
+                print(f"[WS] {client} disconnected code={e.code} up={time.time()-opened:.1f}s")
+                self.manager.disconnect(ws)
+            except Exception as e:
+                print(f"[WS] {client} error {type(e).__name__}: {e} up={time.time()-opened:.1f}s")
                 self.manager.disconnect(ws)
 
         # ---- Measurement control ----

@@ -36,12 +36,23 @@ class QCMInterface:
         self.LOCK_PHASE_TOLERANCE = 0.05  # maximum |phase|
         
         # variables
-        self.coeff_file = os.path.join(base_dir, "..", "..", "data", "coeffecients.csv")
+        # Calibration coefficients, pushed in from the active crystal profile via
+        # setCoefficients. fM_0/fT_0 are recomputed by the temp-comp algorithm
+        # from the start frequencies, so the 0-order terms here are unused.
+        self.coefficients = {
+            'fM_0': 0.0, 'fM_1': 0.0, 'fM_2': 0.0, 'fM_3': 0.0,
+            'fT_0': 0.0, 'fT_1': 0.0, 'fT_2': 0.0, 'fT_3': 0.0,
+        }
 
         self.T_start = 0
         self.fT_start = 0
         self.fM_start = 0
-        self._inv = {1: False, 2: False}  # cached INV state, updated by setInv
+        # Cached per-oscillator loop settings, updated via setOscConfig and reused
+        # by startupPLL so a lock honors the configured settings rather than fixed
+        # defaults. Defaults match startupPLL's historical hard-coded values.
+        self._inv = {1: True, 2: True}                                          # inverted feedback
+        self._int_gain = {1: self.INT_GAIN_POST_LOCK, 2: self.INT_GAIN_POST_LOCK}  # post-lock integrator gain
+        self._lpf_gain = {1: self.LPF_GAIN, 2: self.LPF_GAIN}                   # LPF gain
 
 
         self.fpga = fpga
@@ -84,6 +95,20 @@ class QCMInterface:
     def setInv(self, osc_index, inv: bool):
         self.fpga.write_register(register_name='inv_fb_'+str(osc_index), value=inv)
         self._inv[osc_index] = bool(inv)
+
+    def setOscConfig(self, osc_index, int_gain=None, lpf_gain=None, inverted=None):
+        """Apply and remember the configured per-oscillator loop settings. The
+        cached values are reused by startupPLL so a lock uses the persisted
+        settings. Low-level setters (setInt/setLPFGain) stay uncached for the
+        transient writes done during locking, sweeps and standby."""
+        if int_gain is not None:
+            self._int_gain[osc_index] = int_gain
+            self.setInt(osc_index, int_gain)
+        if lpf_gain is not None:
+            self._lpf_gain[osc_index] = lpf_gain
+            self.setLPFGain(osc_index, lpf_gain)
+        if inverted is not None:
+            self.setInv(osc_index, inverted)
         
     def setOutputMode(self, mode = -1):
         if mode == -1:
@@ -186,14 +211,14 @@ class QCMInterface:
         self.MAX_STARTUP_TRIES = 100  # seconds
         
         print(f"Starting up PLLs around frequencies {start_freq_mass} and {start_freq_temp}")
-        
-        ## 6MHz crystal
-        self.setInv(1,1)      
-        self.setLPFGain(1, self.LPF_GAIN)                    
-        
-        self.setInv(2,1)
-        self.setLPFGain(2, self.LPF_GAIN)
-        
+
+        ## Apply the configured per-oscillator settings (inversion + LPF gain)
+        self.setInv(1, self._inv[1])
+        self.setLPFGain(1, self._lpf_gain[1])
+
+        self.setInv(2, self._inv[2])
+        self.setLPFGain(2, self._lpf_gain[2])
+
         for t in range(self.MAX_STARTUP_TRIES): # try to lock for up to MAX_STARTUP_TRIES
             self.reset()  # Ensure we're starting from a known state each time
             self.setFreq(1,start_freq_mass-self.WINDOW_SIZE/2)
@@ -217,26 +242,19 @@ class QCMInterface:
             print(f"  Oscillator 1: {self.getFreq(1)} Hz    Phase: {self.getPhase(1)} ")
             print(f"  Oscillator 2: {self.getFreq(2)} Hz    Phase: {self.getPhase(2)} ")
 
-        self.setInt(1, self.INT_GAIN_POST_LOCK)
-        self.setInt(2, self.INT_GAIN_POST_LOCK)
+        # Settle to the configured (post-lock) integrator gain
+        self.setInt(1, self._int_gain[1])
+        self.setInt(2, self._int_gain[2])
         return bothLocked
         
     def getCoefficients(self) -> dict:
-        import csv as _csv
-        try:
-            with open(self.coeff_file) as f:
-                reader = _csv.DictReader(f)
-                return {row['Name']: float(row['value']) for row in reader}
-        except Exception as e:
-            print(f"[QCM] Failed to read coefficients: {e}")
-            return {}
+        return dict(self.coefficients)
 
     def setCoefficients(self, fM_0, fM_1, fM_2, fM_3, fT_0, fT_1, fT_2, fT_3):
-        with open(self.coeff_file, 'w') as f:
-            f.write("Name,value\n")
-            for name, val in [('fM_0', fM_0), ('fM_1', fM_1), ('fM_2', fM_2), ('fM_3', fM_3),
-                               ('fT_0', fT_0), ('fT_1', fT_1), ('fT_2', fT_2), ('fT_3', fT_3)]:
-                f.write(f"{name},{val}\n")
+        self.coefficients = {
+            'fM_0': fM_0, 'fM_1': fM_1, 'fM_2': fM_2, 'fM_3': fM_3,
+            'fT_0': fT_0, 'fT_1': fT_1, 'fT_2': fT_2, 'fT_3': fT_3,
+        }
         # Hot-patch the running TempCompAlgorithm if one is active
         tc = getattr(self, 'temp_comp', None)
         if tc is not None:
@@ -252,8 +270,8 @@ class QCMInterface:
         self.fT_start = self.getFreq(2)
         self.T_start = T # would be nice to measure this with a thermometer
         self.temp_comp = tca.TempCompAlgorithm(
-            coefficient_file = self.coeff_file,
-            T_start=T, 
+            coefficients = self.coefficients,
+            T_start=T,
             mat_dens=mat_dens,
             fM_start= self.fM_start,  # Hz
             fT_start= self.fT_start # Hz

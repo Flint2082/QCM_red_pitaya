@@ -19,9 +19,13 @@ start_values = calibration_data[len(calibration_data)-1]
 
 print(f"There are {len(calibration_data)} entries in the calibration data.")
 
+# Load coefficients from the legacy CSV into a dict for the algorithm.
+with open('data/coeffecients.csv', mode='r') as file:
+    coefficients = {row['Name']: float(row['value']) for row in csv.DictReader(file)}
+
 temp_comp = tca.TempCompAlgorithm(
-    coefficient_file = "data/coeffecients.csv",
-    T_start= float(start_values['Temp']), 
+    coefficients = coefficients,
+    T_start= float(start_values['Temp']),
     fT_start= float(start_values['Freq_T']),
     fM_start= float(start_values['Freq_M'])
 )

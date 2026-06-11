@@ -168,8 +168,7 @@ class RestServer:
         # Lock-detect conditions (defaults match QCMInterface)
         self._lock_amp_threshold: float = 0.1
         self._lock_phase_tolerance: float = 0.05
-        # Coefficient cache (lazy-loaded from CSV on first GET)
-        self._coeff_file = os.path.join(os.path.dirname(__file__), "..", "..", "data", "coeffecients.csv")
+        # Coefficient cache — reflects the active crystal (no standalone CSV)
         self._coefficients: dict | None = None
         # Crystal profiles
         self._crystals = CrystalManager()
@@ -240,14 +239,31 @@ class RestServer:
         except Exception as e:
             print(f"[Settings] Save failed: {e}")
 
+    def _apply_crystal(self, profile: CrystalProfile):
+        """Push a crystal's settings into server state and the command queue.
+        The active crystal is the source of truth for lock frequencies and
+        calibration coefficients."""
+        self._lock_freq_mass = profile.freq_mass
+        self._lock_freq_temp = profile.freq_temp
+        self._coefficients = {
+            "fM_0": profile.fM_0, "fM_1": profile.fM_1,
+            "fM_2": profile.fM_2, "fM_3": profile.fM_3,
+            "fT_0": profile.fT_0, "fT_1": profile.fT_1,
+            "fT_2": profile.fT_2, "fT_3": profile.fT_3,
+        }
+        self.command_queue.put(SetCoefficientsCommand(
+            profile.fM_0, profile.fM_1, profile.fM_2, profile.fM_3,
+            profile.fT_0, profile.fT_1, profile.fT_2, profile.fT_3,
+        ))
+
     def _enqueue_boot_settings(self):
         """Push persisted settings to the hardware at startup so saved values take
         effect without a manual 'apply' click. These commands buffer on the queue
         until the worker thread starts and drains them.
 
-        Coefficients are intentionally omitted: they are file-backed and loaded by
-        the QCM when a measurement starts. Lock frequencies are server-side only
-        (used by the GET LOCK command), so they are not pushed either.
+        Coefficients and lock frequencies come from the active crystal profile
+        (the only persisted crystal state is which one is active), so the active
+        crystal is applied here too.
         """
         for osc, s in self._osc_settings.items():
             if "int_gain" in s:
@@ -263,6 +279,16 @@ class RestServer:
             print(f"[Settings] Skipping invalid persisted output_mode={self._output_mode} on boot")
 
         self.command_queue.put(SetLockDetectCommand(self._lock_amp_threshold, self._lock_phase_tolerance))
+
+        # Apply the active crystal's coefficients + lock frequencies, if any.
+        if self._active_crystal:
+            profile = self._crystals.load(self._active_crystal)
+            if profile:
+                self._apply_crystal(profile)
+                print(f"[Settings] Applied active crystal '{self._active_crystal}' on boot")
+            else:
+                print(f"[Settings] Active crystal '{self._active_crystal}' not found; skipping")
+
         print("[Settings] Queued persisted settings to apply on boot")
 
     # --------------------------------------------------
@@ -462,18 +488,12 @@ class RestServer:
 
         @app.get("/settings/coefficients")
         def get_coefficients():
-            if self._coefficients is None:
-                import csv as _csv
-                try:
-                    with open(self._coeff_file) as f:
-                        reader = _csv.DictReader(f)
-                        self._coefficients = {
-                            row['Name']: (lambda v: v if math.isfinite(v) else None)(float(row['value']))
-                            for row in reader
-                        }
-                except Exception:
-                    self._coefficients = {}
-            return self._coefficients
+            # Coefficients come from the active crystal profile.
+            if self._coefficients is None and self._active_crystal:
+                profile = self._crystals.load(self._active_crystal)
+                if profile:
+                    self._apply_crystal(profile)
+            return self._coefficients or {}
 
         @app.post("/settings/coefficients")
         def set_coefficients(
@@ -520,21 +540,6 @@ class RestServer:
             }
 
         # ---- Crystal profiles ----
-
-        def _apply_crystal(profile: CrystalProfile):
-            """Push a crystal's settings into server state and command queue."""
-            self._lock_freq_mass = profile.freq_mass
-            self._lock_freq_temp = profile.freq_temp
-            self._coefficients = {
-                "fM_0": profile.fM_0, "fM_1": profile.fM_1,
-                "fM_2": profile.fM_2, "fM_3": profile.fM_3,
-                "fT_0": profile.fT_0, "fT_1": profile.fT_1,
-                "fT_2": profile.fT_2, "fT_3": profile.fT_3,
-            }
-            self.command_queue.put(SetCoefficientsCommand(
-                profile.fM_0, profile.fM_1, profile.fM_2, profile.fM_3,
-                profile.fT_0, profile.fT_1, profile.fT_2, profile.fT_3,
-            ))
 
         @app.get("/crystals")
         def list_crystals():
@@ -599,7 +604,7 @@ class RestServer:
             profile.fM_0, profile.fM_1, profile.fM_2, profile.fM_3 = fM_0, fM_1, fM_2, fM_3
             profile.fT_0, profile.fT_1, profile.fT_2, profile.fT_3 = fT_0, fT_1, fT_2, fT_3
             self._crystals.save(profile)
-            _apply_crystal(profile)
+            self._apply_crystal(profile)
             self._active_crystal = name
             self._save_settings()
             return {"status": "ok"}
@@ -609,7 +614,7 @@ class RestServer:
             profile = self._crystals.load(name)
             if not profile:
                 raise HTTPException(404, "Crystal not found")
-            _apply_crystal(profile)
+            self._apply_crystal(profile)
             self._active_crystal = name
             self._save_settings()
             return {"status": "ok"}

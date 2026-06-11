@@ -1,0 +1,9 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(echo \"=== exit $? \\(1 = no matches, good\\) ===\")",
+      "PowerShell(python -m py_compile src\\\\processing\\\\TempCompAlgorithm.py src\\\\domain\\\\qcm_interface.py src\\\\workers\\\\qcm_worker.py src\\\\api\\\\server.py tools\\\\test_comp_alogrithm.py)",
+      "PowerShell(if \\($?\\) { \"all compile OK\" })"
+    ]
+  }
+}

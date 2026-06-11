@@ -3,20 +3,18 @@ import numpy as np
 import matplotlib.pyplot as plt
 
 class TempCompAlgorithm:
-    def __init__(self, coefficient_file, T_start, fT_start, fM_start, mat_dens=19320, sens_area=32.0E-6):
-        # Load calibration parameters from the provided file
-        with open(coefficient_file, mode='r') as file:
-            reader = csv.DictReader(file)
-            params = {row['Name']: float(row['value']) for row in reader}
-        
-        self.fT_0 = 121000 * (fT_start/fM_start)        # (fT_start * 2)/28.5 
+    def __init__(self, coefficients, T_start, fT_start, fM_start, mat_dens=19320, sens_area=32.0E-6):
+        # Calibration coefficients are provided directly (e.g. from the active
+        # crystal profile). fM_0/fT_0 are derived from the start frequencies,
+        # so only the fM_1..3 / fT_1..3 terms are read from the supplied dict.
+        self.fT_0 = 121000 * (fT_start/fM_start)        # (fT_start * 2)/28.5
         self.fM_0 = 121000                              # (fM_start * 2)/28.5
-        self.fT_1 = params['fT_1']
-        self.fT_2 = params['fT_2']
-        self.fT_3 = params['fT_3']
-        self.fM_1 = params['fM_1']
-        self.fM_2 = params['fM_2']
-        self.fM_3 = params['fM_3']
+        self.fT_1 = coefficients['fT_1']
+        self.fT_2 = coefficients['fT_2']
+        self.fT_3 = coefficients['fT_3']
+        self.fM_1 = coefficients['fM_1']
+        self.fM_2 = coefficients['fM_2']
+        self.fM_3 = coefficients['fM_3']
         
         # values from the starting measurement
         self.T_start = T_start

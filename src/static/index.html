@@ -283,8 +283,8 @@ footer { height: 24px; background: var(--surface); border-top: 1px solid var(--b
       <div class="chart-card"><div class="chart-card-header"><div class="chart-card-title"><div class="chart-color-bar" style="background:var(--orange)"></div>TEMPERATURE</div><div class="chart-card-meta" id="meta-temp-a">—</div></div><div class="chart-body" style="min-height:110px"><canvas id="chart-temp-a"></canvas></div></div>
       <div class="chart-card"><div class="chart-card-header"><div class="chart-card-title"><div class="chart-color-bar" style="background:var(--green)"></div>MASS MODE FREQ</div><div class="chart-card-meta" id="meta-fM">—</div></div><div class="chart-body" style="min-height:110px"><canvas id="chart-fM"></canvas></div></div>
       <div class="chart-card"><div class="chart-card-header"><div class="chart-card-title"><div class="chart-color-bar" style="background:var(--blue)"></div>TEMP MODE FREQ</div><div class="chart-card-meta" id="meta-fT">—</div></div><div class="chart-body" style="min-height:110px"><canvas id="chart-fT"></canvas></div></div>
-      <div class="chart-card"><div class="chart-card-header"><div class="chart-card-title"><div class="chart-color-bar" style="background:var(--green)"></div>MASS MODE — AMP &amp; PHASE</div></div><div class="chart-body" style="min-height:110px"><canvas id="chart-iq1"></canvas></div></div>
-      <div class="chart-card"><div class="chart-card-header"><div class="chart-card-title"><div class="chart-color-bar" style="background:var(--blue)"></div>TEMP MODE — AMP &amp; PHASE</div></div><div class="chart-body" style="min-height:110px"><canvas id="chart-iq2"></canvas></div></div>
+      <div class="chart-card"><div class="chart-card-header"><div class="chart-card-title"><div class="chart-color-bar" style="background:var(--green)"></div>MASS MODE — AMP &amp; PHASE</div></div><div class="chart-body" style="min-height:110px"><canvas id="chart-lpf1"></canvas></div></div>
+      <div class="chart-card"><div class="chart-card-header"><div class="chart-card-title"><div class="chart-color-bar" style="background:var(--blue)"></div>TEMP MODE — AMP &amp; PHASE</div></div><div class="chart-body" style="min-height:110px"><canvas id="chart-lpf2"></canvas></div></div>
     </div>
   </div>
 
@@ -366,7 +366,7 @@ footer { height: 24px; background: var(--surface); border-top: 1px solid var(--b
           <div class="settings-section-title">OSCILLATOR 1 — MASS MODE</div>
           <div class="settings-group">
             <div class="settings-row"><div><div class="settings-row-label">Integrator Gain</div><div class="settings-row-desc">PLL loop integrator coefficient</div></div><div></div><div style="display:flex;align-items:center;gap:6px"><input class="settings-input" type="number" id="s-osc1-int" value="0.00001" step="0.000001"><span class="settings-unit"></span></div></div>
-            <div class="settings-row"><div><div class="settings-row-label">IQ Gain</div><div class="settings-row-desc">Demodulator gain factor</div></div><div></div><div style="display:flex;align-items:center;gap:6px"><input class="settings-input" type="number" id="s-osc1-iq" value="0.00001" step="0.000001"><span class="settings-unit"></span></div></div>
+            <div class="settings-row"><div><div class="settings-row-label">LPF Gain</div><div class="settings-row-desc">Demodulator gain factor</div></div><div></div><div style="display:flex;align-items:center;gap:6px"><input class="settings-input" type="number" id="s-osc1-lpf" value="0.00001" step="0.000001"><span class="settings-unit"></span></div></div>
             <div class="settings-row"><div><div class="settings-row-label">Invert Feedback</div><div class="settings-row-desc">Invert the feedback signal</div></div><div></div><div style="display:flex;align-items:center;gap:6px"><select class="settings-input" id="s-osc1-inv" style="width:150px;text-align:left"><option value="0">Disabled</option><option value="1">Enabled</option></select></div></div>
           </div>
           <button class="btn btn-blue" onclick="applyOscSettings(1)" style="margin-bottom:28px">APPLY OSC 1</button>
@@ -374,7 +374,7 @@ footer { height: 24px; background: var(--surface); border-top: 1px solid var(--b
           <div class="settings-section-title">OSCILLATOR 2 — TEMP MODE</div>
           <div class="settings-group">
             <div class="settings-row"><div><div class="settings-row-label">Integrator Gain</div><div class="settings-row-desc">PLL loop integrator coefficient</div></div><div></div><div style="display:flex;align-items:center;gap:6px"><input class="settings-input" type="number" id="s-osc2-int" value="0.00001" step="0.000001"><span class="settings-unit"></span></div></div>
-            <div class="settings-row"><div><div class="settings-row-label">IQ Gain</div><div class="settings-row-desc">Demodulator gain factor</div></div><div></div><div style="display:flex;align-items:center;gap:6px"><input class="settings-input" type="number" id="s-osc2-iq" value="0.00001" step="0.000001"><span class="settings-unit"></span></div></div>
+            <div class="settings-row"><div><div class="settings-row-label">LPF Gain</div><div class="settings-row-desc">Demodulator gain factor</div></div><div></div><div style="display:flex;align-items:center;gap:6px"><input class="settings-input" type="number" id="s-osc2-lpf" value="0.00001" step="0.000001"><span class="settings-unit"></span></div></div>
             <div class="settings-row"><div><div class="settings-row-label">Invert Feedback</div><div class="settings-row-desc">Invert the feedback signal</div></div><div></div><div style="display:flex;align-items:center;gap:6px"><select class="settings-input" id="s-osc2-inv" style="width:150px;text-align:left"><option value="0">Disabled</option><option value="1">Enabled</option></select></div></div>
           </div>
           <button class="btn btn-blue" onclick="applyOscSettings(2)">APPLY OSC 2</button>
@@ -386,6 +386,13 @@ footer { height: 24px; background: var(--surface); border-top: 1px solid var(--b
             <div class="settings-row"><div><div class="settings-row-label">Ambient Temperature</div><div class="settings-row-desc">Starting reference temperature</div></div><div></div><div style="display:flex;align-items:center;gap:6px"><input class="settings-input" type="number" id="s-amb-temp" value="23" step="0.5"><span class="settings-unit">°C</span></div></div>
             <div class="settings-row"><div><div class="settings-row-label">Material Density</div><div class="settings-row-desc">Deposited film material density</div></div><div></div><div style="display:flex;align-items:center;gap:6px"><input class="settings-input" type="number" id="s-mat-dens" value="19320" step="10"><span class="settings-unit">kg/m³</span></div></div>
           </div>
+
+          <div class="settings-section-title">LOCK DETECTION</div>
+          <div class="settings-group">
+            <div class="settings-row"><div><div class="settings-row-label">Amplitude Threshold</div><div class="settings-row-desc">Minimum signal amplitude to count as locked</div></div><div></div><div style="display:flex;align-items:center;gap:6px"><input class="settings-input" type="number" id="s-lock-amp" value="0.1" step="0.01" min="0"><span class="settings-unit"></span></div></div>
+            <div class="settings-row"><div><div class="settings-row-label">Phase Tolerance</div><div class="settings-row-desc">Maximum |phase| from zero to count as locked</div></div><div></div><div style="display:flex;align-items:center;gap:6px"><input class="settings-input" type="number" id="s-lock-phase" value="0.05" step="0.01" min="0"><span class="settings-unit"></span></div></div>
+          </div>
+          <button class="btn btn-blue" onclick="applyLockDetect()">APPLY LOCK DETECTION</button>
         </div>
 
         <div class="settings-panel" id="spanel-system">
@@ -673,8 +680,8 @@ const charts = {
   fT:       makeChart('chart-fT',        '#4a9eff'),
   compA:    makeChart('chart-comp-a',    '#2ecc8a'),
   tempA:    makeChart('chart-temp-a',    '#f5a623'),
-  iq1:      makeDualChart('chart-iq1',   '#2ecc8a', '#a78bfa'),
-  iq2:      makeDualChart('chart-iq2',   '#4a9eff', '#a78bfa'),
+  lpf1:     makeDualChart('chart-lpf1',   '#2ecc8a', '#a78bfa'),
+  lpf2:     makeDualChart('chart-lpf2',   '#4a9eff', '#a78bfa'),
 };
 
 // ---- Sweep charts (x-axis = frequency) ----
@@ -728,7 +735,7 @@ function setupZoomGroup(chartList) {
   });
 }
 setupZoomGroup([charts.mainComp, charts.mainTemp]);
-setupZoomGroup([charts.fM, charts.fT, charts.compA, charts.tempA, charts.iq1, charts.iq2]);
+setupZoomGroup([charts.fM, charts.fT, charts.compA, charts.tempA, charts.lpf1, charts.lpf2]);
 setupZoomGroup([sweepCharts.amp, sweepCharts.phase]);
 
 let _sweepPeakAmp = -Infinity;
@@ -882,8 +889,8 @@ function onMeasurement(e) {
   push(charts.compA,    e.calculated_thickness,    0, MAX_PTS_MONITOR, ts);
   push(charts.tempA,    e.calculated_temp,         0, MAX_PTS_MONITOR, ts);
 
-  if (e.amp_mass != null) { push(charts.iq1, e.amp_mass,   0, MAX_PTS_MONITOR, ts); push(charts.iq1, e.phase_mass, 1, MAX_PTS_MONITOR); }
-  if (e.amp_temp != null) { push(charts.iq2, e.amp_temp,   0, MAX_PTS_MONITOR, ts); push(charts.iq2, e.phase_temp, 1, MAX_PTS_MONITOR); }
+  if (e.amp_mass != null) { push(charts.lpf1, e.amp_mass,   0, MAX_PTS_MONITOR, ts); push(charts.lpf1, e.phase_mass, 1, MAX_PTS_MONITOR); }
+  if (e.amp_temp != null) { push(charts.lpf2, e.amp_temp,   0, MAX_PTS_MONITOR, ts); push(charts.lpf2, e.phase_temp, 1, MAX_PTS_MONITOR); }
 
   setLock('mass', e.lock_mass);
   setLock('temp', e.lock_temp);
@@ -1147,10 +1154,14 @@ async function loadInitialSettings() {
       const os = s.oscillators?.[osc];
       if (!os) continue;
       document.getElementById(`s-osc${osc}-int`).value = os.int_gain ?? '';
-      document.getElementById(`s-osc${osc}-iq`).value  = os.iq_gain  ?? '';
+      document.getElementById(`s-osc${osc}-lpf`).value  = os.lpf_gain  ?? '';
       document.getElementById(`s-osc${osc}-inv`).value = os.inverted ? '1' : '0';
     }
     if (s.output_mode != null) document.getElementById('s-output-mode').value = s.output_mode;
+    if (s.lock_detect) {
+      if (s.lock_detect.amp_threshold != null)   document.getElementById('s-lock-amp').value   = s.lock_detect.amp_threshold;
+      if (s.lock_detect.phase_tolerance != null) document.getElementById('s-lock-phase').value = s.lock_detect.phase_tolerance;
+    }
   } catch(e) { /* backend not yet reachable */ }
 
   let crystalLoaded = false;
@@ -1355,10 +1366,10 @@ async function sendCommand(action) {
 
 async function applyOscSettings(osc) {
   const intGain = parseFloat(document.getElementById(`s-osc${osc}-int`).value);
-  const iqGain  = parseFloat(document.getElementById(`s-osc${osc}-iq`).value);
+  const lpfGain = parseFloat(document.getElementById(`s-osc${osc}-lpf`).value);
   const inv     = document.getElementById(`s-osc${osc}-inv`).value === '1';
   await fetch(`${API_URL}/settings/integrator_gain?oscillator_idx=${osc}&gain=${intGain}`, { method: 'POST' });
-  await fetch(`${API_URL}/settings/iq_gain?oscillator_idx=${osc}&gain=${iqGain}`, { method: 'POST' });
+  await fetch(`${API_URL}/settings/lpf_gain?oscillator_idx=${osc}&gain=${lpfGain}`, { method: 'POST' });
   await fetch(`${API_URL}/settings/inverted?oscillator_idx=${osc}&inverted=${inv}`, { method: 'POST' });
 }
 
@@ -1424,6 +1435,12 @@ async function applyOutputMode() {
   await fetch(`${API_URL}/settings/output_mode?mode=${mode}`, { method: 'POST' });
 }
 
+async function applyLockDetect() {
+  const amp   = parseFloat(document.getElementById('s-lock-amp').value);
+  const phase = parseFloat(document.getElementById('s-lock-phase').value);
+  await fetch(`${API_URL}/settings/lock_detect?amp_threshold=${amp}&phase_tolerance=${phase}`, { method: 'POST' });
+}
+
 function applySystemSettings() {
   const host = document.getElementById('s-api-host').value;
   const port = document.getElementById('s-api-port').value;
@@ -1432,7 +1449,7 @@ function applySystemSettings() {
   if (ws) ws.close();
 }
 
-async function applyAllSettings() { await applyOscSettings(1); await applyOscSettings(2); await applyOutputMode(); await applyCrystal(); applySystemSettings(); }
+async function applyAllSettings() { await applyOscSettings(1); await applyOscSettings(2); await applyOutputMode(); await applyLockDetect(); await applyCrystal(); applySystemSettings(); }
 
 // ---- Coefficient polynomial charts ----
 let _coeffCharts = { fM: null, fT: null };

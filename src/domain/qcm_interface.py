@@ -28,6 +28,12 @@ class QCMInterface:
         self.INT_GAIN_PRE_LOCK = 0.01
         self.INT_GAIN_POST_LOCK = 0.00001
         self.LPF_GAIN = 0.00001
+
+        # Lock-detect conditions (configurable via settings). A channel counts
+        # as locked when its amplitude exceeds the threshold AND its phase is
+        # within the tolerance of zero.
+        self.LOCK_AMP_THRESHOLD = 0.1     # minimum amplitude
+        self.LOCK_PHASE_TOLERANCE = 0.05  # maximum |phase|
         
         # variables
         self.coeff_file = os.path.join(base_dir, "..", "..", "data", "coeffecients.csv")
@@ -67,6 +73,10 @@ class QCMInterface:
 
     def setLPFGain(self, osc_index, gain):
         self.fpga.write_register(register_name='lpf_gain_'+str(osc_index),value=int(gain*2**32)) # multiplication to account for fixed-point (32F32) representation in FPGA
+
+    def setLockDetect(self, amp_threshold, phase_tolerance):
+        self.LOCK_AMP_THRESHOLD = amp_threshold
+        self.LOCK_PHASE_TOLERANCE = phase_tolerance
 
     def setMockSigFreq(self, freq):
         self.fpga.write_register(register_name='mock_sig_freq', value=int(freq*2**6)) # multiplication to account for fixed-point (32F6) representation in FPGA
@@ -123,7 +133,7 @@ class QCMInterface:
             amp = self.getMag(osc_index)
             phase = self.getPhase(osc_index)
         # Amplitude above threshold and phase close to 0 indicates lock. The phase is the most important factor, but the amplitude check helps avoid false positives when the signal is very weak.
-        return amp > 0.1 and abs(round(phase*10)) == 0
+        return amp > self.LOCK_AMP_THRESHOLD and abs(phase) < self.LOCK_PHASE_TOLERANCE
     
     # ===========================
     # Control methods

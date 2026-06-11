@@ -121,10 +121,12 @@ class Application(threading.Thread):
             self.worker_command_queue.put(wc.SetIntegratorGainCommand(command.oscillator_idx, command.gain))
         elif isinstance(command, ac.SetInvertedCommand):
             self.worker_command_queue.put(wc.SetInvertedCommand(command.oscillator_idx, command.inverted))
-        elif isinstance(command, ac.SetIQGainCommand):
-            self.worker_command_queue.put(wc.SetIQGainCommand(command.oscillator_idx, command.gain))
+        elif isinstance(command, ac.SetLPFGainCommand):
+            self.worker_command_queue.put(wc.SetLPFGainCommand(command.oscillator_idx, command.gain))
         elif isinstance(command, ac.SetOutputModeCommand):
             self.worker_command_queue.put(wc.SetOutputModeCommand(command.oscillator_idx, command.mode))
+        elif isinstance(command, ac.SetLockDetectCommand):
+            self.worker_command_queue.put(wc.SetLockDetectCommand(command.amp_threshold, command.phase_tolerance))
         elif isinstance(command, ac.SetCoefficientsCommand):
             self.worker_command_queue.put(wc.SetCoefficientsCommand(
                 command.fM_0, command.fM_1, command.fM_2, command.fM_3,

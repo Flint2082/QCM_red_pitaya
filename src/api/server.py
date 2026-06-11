@@ -161,10 +161,13 @@ class RestServer:
         self._lock_freq_temp: float = 6570000.0
         # Oscillator settings cache — defaults match QCMInterface post-lock state
         self._osc_settings: dict = {
-            1: {"int_gain": 0.00001, "iq_gain": 0.00001, "inverted": True},
-            2: {"int_gain": 0.00001, "iq_gain": 0.00001, "inverted": True},
+            1: {"int_gain": 0.00001, "lpf_gain": 0.00001, "inverted": True},
+            2: {"int_gain": 0.00001, "lpf_gain": 0.00001, "inverted": True},
         }
         self._output_mode: int = 0
+        # Lock-detect conditions (defaults match QCMInterface)
+        self._lock_amp_threshold: float = 0.1
+        self._lock_phase_tolerance: float = 0.05
         # Coefficient cache (lazy-loaded from CSV on first GET)
         self._coeff_file = os.path.join(os.path.dirname(__file__), "..", "..", "data", "coeffecients.csv")
         self._coefficients: dict | None = None
@@ -199,6 +202,10 @@ class RestServer:
             self._osc_settings = {int(k): v for k, v in d["osc_settings"].items()}
         if "output_mode" in d:
             self._output_mode = int(d["output_mode"])
+        if "lock_amp_threshold" in d:
+            self._lock_amp_threshold = float(d["lock_amp_threshold"])
+        if "lock_phase_tolerance" in d:
+            self._lock_phase_tolerance = float(d["lock_phase_tolerance"])
         if "lock_freq_mass" in d:
             self._lock_freq_mass = float(d["lock_freq_mass"])
         if "lock_freq_temp" in d:
@@ -215,6 +222,8 @@ class RestServer:
         data = {
             "osc_settings":   {str(k): v for k, v in self._osc_settings.items()},
             "output_mode":    self._output_mode,
+            "lock_amp_threshold":   self._lock_amp_threshold,
+            "lock_phase_tolerance": self._lock_phase_tolerance,
             "lock_freq_mass": self._lock_freq_mass,
             "lock_freq_temp": self._lock_freq_temp,
             "active_crystal": self._active_crystal,
@@ -400,10 +409,10 @@ class RestServer:
             self._save_settings()
             return {"status": "ok"}
 
-        @app.post("/settings/iq_gain")
-        def set_iq_gain(oscillator_idx: int, gain: float):
-            self._osc_settings.setdefault(oscillator_idx, {})["iq_gain"] = gain
-            self.command_queue.put(SetIQGainCommand(oscillator_idx, gain))
+        @app.post("/settings/lpf_gain")
+        def set_lpf_gain(oscillator_idx: int, gain: float):
+            self._osc_settings.setdefault(oscillator_idx, {})["lpf_gain"] = gain
+            self.command_queue.put(SetLPFGainCommand(oscillator_idx, gain))
             self._save_settings()
             return {"status": "ok"}
 
@@ -457,6 +466,14 @@ class RestServer:
             self._save_settings()
             return {"status": "ok"}
 
+        @app.post("/settings/lock_detect")
+        def set_lock_detect(amp_threshold: float, phase_tolerance: float):
+            self._lock_amp_threshold = amp_threshold
+            self._lock_phase_tolerance = phase_tolerance
+            self.command_queue.put(SetLockDetectCommand(amp_threshold, phase_tolerance))
+            self._save_settings()
+            return {"status": "ok"}
+
         def _finite(v):
             return v if isinstance(v, float) and math.isfinite(v) else (None if isinstance(v, float) else v)
 
@@ -465,6 +482,10 @@ class RestServer:
             return {
                 "oscillators":      self._osc_settings,
                 "output_mode":      self._output_mode,
+                "lock_detect": {
+                    "amp_threshold":   self._lock_amp_threshold,
+                    "phase_tolerance": self._lock_phase_tolerance,
+                },
                 "lock_frequencies": {
                     "mass": _finite(self._lock_freq_mass),
                     "temp": _finite(self._lock_freq_temp),

@@ -65,7 +65,7 @@ class SetInvertedCommand(ApiCommand):
     inverted: bool
 
 @dataclass
-class SetIQGainCommand(ApiCommand):
+class SetLPFGainCommand(ApiCommand):
     oscillator_idx: int
     gain: float
     
@@ -73,3 +73,8 @@ class SetIQGainCommand(ApiCommand):
 class SetOutputModeCommand(ApiCommand):
     oscillator_idx: int
     mode: OutputMode
+
+@dataclass
+class SetLockDetectCommand(ApiCommand):
+    amp_threshold: float
+    phase_tolerance: float

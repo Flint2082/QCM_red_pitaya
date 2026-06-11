@@ -8,7 +8,10 @@
       "Bash(python -m py_compile tools/test_comp_alogrithm.py)",
       "Bash(MPLBACKEND=Agg python tools/test_comp_alogrithm.py)",
       "PowerShell(python -m py_compile src\\\\app\\\\application.py src\\\\workers\\\\qcm_worker.py)",
-      "PowerShell(if \\($?\\) { \"compile OK\" })"
+      "PowerShell(if \\($?\\) { \"compile OK\" })",
+      "PowerShell(python -m py_compile src\\\\processing\\\\TempCompAlgorithm.py src\\\\domain\\\\crystal.py src\\\\domain\\\\qcm_interface.py src\\\\messaging\\\\api_command.py src\\\\messaging\\\\worker_command.py src\\\\app\\\\application.py src\\\\workers\\\\qcm_worker.py src\\\\api\\\\server.py)",
+      "Bash(python -c ' *)",
+      "Bash(python -m py_compile src/processing/TempCompAlgorithm.py src/domain/crystal.py src/domain/qcm_interface.py src/api/server.py)"
     ]
   }
 }

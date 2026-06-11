@@ -30,6 +30,9 @@ class CrystalProfile:
     fT_1: float = 0.0
     fT_2: float = 0.0
     fT_3: float = 0.0
+    # Sensor parameters
+    mass_sensitivity: float = -13.3e-8  # kg/(m²·Hz) — negative: added mass lowers the frequency
+    sens_area:        float = 5.25e-5  # m²
     # Usage stats
     hours_active:    float = 0.0
     total_deposited: float = 0.0  # nm, cumulative across sessions

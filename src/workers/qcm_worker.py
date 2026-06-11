@@ -116,6 +116,8 @@ class QCMWorker(threading.Thread):
             self.qcm.setOutputMode(command.mode.value)
         elif isinstance(command, SetLockDetectCommand):
             self.qcm.setLockDetect(command.amp_threshold, command.phase_tolerance)
+        elif isinstance(command, SetSensorParamsCommand):
+            self.qcm.setSensorParams(command.mass_sensitivity, command.sens_area)
         elif isinstance(command, SetCoefficientsCommand):
             self.qcm.setCoefficients(
                 command.fM_0, command.fM_1, command.fM_2, command.fM_3,

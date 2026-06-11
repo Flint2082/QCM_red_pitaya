@@ -139,6 +139,8 @@ class Application(threading.Thread):
             self.worker_command_queue.put(wc.SetOutputModeCommand(command.oscillator_idx, command.mode))
         elif isinstance(command, ac.SetLockDetectCommand):
             self.worker_command_queue.put(wc.SetLockDetectCommand(command.amp_threshold, command.phase_tolerance))
+        elif isinstance(command, ac.SetSensorParamsCommand):
+            self.worker_command_queue.put(wc.SetSensorParamsCommand(command.mass_sensitivity, command.sens_area))
         elif isinstance(command, ac.SetCoefficientsCommand):
             self.worker_command_queue.put(wc.SetCoefficientsCommand(
                 command.fM_0, command.fM_1, command.fM_2, command.fM_3,

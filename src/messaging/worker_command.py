@@ -78,3 +78,8 @@ class SetOutputModeCommand(WorkerCommand):
 class SetLockDetectCommand(WorkerCommand):
     amp_threshold: float
     phase_tolerance: float
+
+@dataclass
+class SetSensorParamsCommand(WorkerCommand):
+    mass_sensitivity: float
+    sens_area: float

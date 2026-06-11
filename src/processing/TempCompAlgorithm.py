@@ -3,13 +3,18 @@ import numpy as np
 import matplotlib.pyplot as plt
 
 class TempCompAlgorithm:
-    def __init__(self, coefficients, T_start, fT_start, fM_start, mat_dens=19320, sens_area=32.0E-6):
+    def __init__(self, coefficients, T_start, fT_start, fM_start, 
+                 mat_dens=19320,            # kg/m^3 = Material density (e.g. gold)
+                 sens_area=5.25e-5,         # m^2 = Sensor area (e.g. 5.25e-5 m^2 for 8.2 mm dia apature)
+                 mass_sensitivity=-13.3e-8  # kg/m^2/Hz = Mass sensitivity, negative: added mass lowers the frequency (-13.3 ng/(cm2*Hz) for ~6 MHz AT-cut)
+                 ):
         # Calibration coefficients are provided directly (e.g. from the active
-        # crystal profile). fM_0/fT_0 are derived from the start frequencies,
+        # crystal profile).
         # so only the fM_1..3 / fT_1..3 terms are read from the supplied dict.
-        self.fT_0 = 121000 * (fT_start/fM_start)        # (fT_start * 2)/28.5
-        self.fM_0 = 121000                              # (fM_start * 2)/28.5
-        self.fT_1 = coefficients['fT_1']
+        self.mass_sensitivity = mass_sensitivity        
+        self.fT_0 = (fT_start/fM_start) / (mass_sensitivity * sens_area)  # Hz/kg = Temp sensitivity NOTE: this is derived from the starting frequencies and mass sensitivity, not fitted from calibration data
+        self.fM_0 = 1 / ( mass_sensitivity * sens_area )                  # Hz/kg = Mass sensitivity              
+        self.fT_1 = coefficients['fT_1']               
         self.fT_2 = coefficients['fT_2']
         self.fT_3 = coefficients['fT_3']
         self.fM_1 = coefficients['fM_1']
@@ -21,8 +26,8 @@ class TempCompAlgorithm:
         self.fT_start = fT_start    
         self.fM_start = fM_start
         
-        self.mat_dens = mat_dens # kg/m^3  // Material density
-        self.sens_area = sens_area  # m^2  // Sensor area
+        self.mat_dens = mat_dens        # kg/m^3 = Material density
+        self.sens_area = sens_area      # m^2 = Sensor area
         
         # Coefficients for the cubic equation a*T_dif^3 + b*T_dif^2 + c*T_dif + d = 0
         # with d calculated later
@@ -53,9 +58,15 @@ class TempCompAlgorithm:
             # Calculate the compensated mass change using the found temperature difference
             M_dif = -(-fM_dif + (self.fM_3 * (T_dif[0])**3 + self.fM_2 * (T_dif[0])**2 + self.fM_1 * (T_dif[0])) - (self.fM_3 * (self.T_start)**3 + self.fM_2 * (self.T_start)**2 + self.fM_1 * (self.T_start)))/ self.fM_0
 
+            def mass_to_thickness(mass):
+                return (mass / self.mat_dens) / self.sens_area  # in meters
 
-            uncompensated_thickness_nm = (fM_dif / self.fM_0)*1000/(self.mat_dens * self.sens_area)
-            compensated_thickness_nm = (M_dif*1000)/(self.mat_dens * self.sens_area)
+            # conversion from mass to thickness using the material density and sensor area
+            uncompensated_thickness = mass_to_thickness(fM_dif / self.fM_0)  # in meters
+            uncompensated_thickness_nm = uncompensated_thickness * 1e9  # convert m to nm
+            
+            compensated_thickness = mass_to_thickness(M_dif)  # in meters
+            compensated_thickness_nm = compensated_thickness * 1e9  # convert m to nm
 
             compensated_m_freq = self.fM_start + self.fM_0 * M_dif 
 

@@ -78,3 +78,8 @@ class SetOutputModeCommand(ApiCommand):
 class SetLockDetectCommand(ApiCommand):
     amp_threshold: float
     phase_tolerance: float
+
+@dataclass
+class SetSensorParamsCommand(ApiCommand):
+    mass_sensitivity: float
+    sens_area: float

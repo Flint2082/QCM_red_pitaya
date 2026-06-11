@@ -481,6 +481,12 @@ footer { height: 24px; background: var(--surface); border-top: 1px solid var(--b
             <div class="settings-row"><div><div class="settings-row-label">Temp Lock Freq</div><div class="settings-row-desc">PLL start frequency — OSC 2</div></div><div></div><div style="display:flex;align-items:center;gap:6px"><input class="settings-input" type="number" id="s-crystal-freq-temp" value="6570000" step="1000"><span class="settings-unit">Hz</span></div></div>
           </div>
 
+          <div class="settings-section-title">SENSOR PARAMETERS</div>
+          <div class="settings-group">
+            <div class="settings-row"><div><div class="settings-row-label">Mass Sensitivity</div><div class="settings-row-desc">Areal mass per unit frequency shift (Sauerbrey)</div></div><div></div><div style="display:flex;align-items:center;gap:6px"><input class="settings-input" type="number" id="s-crystal-mass-sens" value="-1.33e-7" step="any" style="width:180px"><span class="settings-unit">kg/m²/Hz</span></div></div>
+            <div class="settings-row"><div><div class="settings-row-label">Sensor Area</div><div class="settings-row-desc">Active sensing area of the crystal</div></div><div></div><div style="display:flex;align-items:center;gap:6px"><input class="settings-input" type="number" id="s-crystal-sens-area" value="5.25e-5" step="any" style="width:180px"><span class="settings-unit">m²</span></div></div>
+          </div>
+
           <div class="settings-section-title">CALIBRATION COEFFICIENTS</div>
           <div class="settings-group">
             <div class="settings-row"><div><div class="settings-row-label">fM_3</div><div class="settings-row-desc">Mass mode cubic term</div></div><div></div><div style="display:flex;align-items:center;gap:6px"><input class="settings-input" type="number" id="s-coeff-fM3" step="any" style="width:180px" oninput="updateCoeffCharts()"></div></div>
@@ -506,7 +512,10 @@ footer { height: 24px; background: var(--surface); border-top: 1px solid var(--b
             </div>
           </div>
 
-          <button class="btn btn-blue" onclick="applyCrystal()">APPLY CRYSTAL</button>
+          <div style="display:flex;gap:8px">
+            <button class="btn btn-blue" onclick="applyCrystal()">APPLY CRYSTAL</button>
+            <button class="btn" onclick="revertCrystalDefaults()">REVERT TO DEFAULTS</button>
+          </div>
         </div>
 
         <!-- NOTIFICATIONS -->
@@ -1152,6 +1161,8 @@ async function loadCrystalForm(name) {
     document.getElementById('s-crystal-freq-temp').value    = p.freq_temp ?? '';
     document.getElementById('s-crystal-hours').textContent  = (p.hours_active ?? 0).toFixed(2);
     document.getElementById('s-crystal-deposited').textContent = (p.total_deposited ?? 0).toFixed(2);
+    document.getElementById('s-crystal-mass-sens').value = p.mass_sensitivity ?? -13.3e-8;
+    document.getElementById('s-crystal-sens-area').value = p.sens_area ?? 5.25e-5;
     const coeffMap = { fM0:'fM_0', fM1:'fM_1', fM2:'fM_2', fM3:'fM_3',
                        fT0:'fT_0', fT1:'fT_1', fT2:'fT_2', fT3:'fT_3' };
     for (const [id, key] of Object.entries(coeffMap)) {
@@ -1399,12 +1410,33 @@ async function applyCrystal() {
     `fM_2=${g('s-coeff-fM2')}`, `fM_3=${g('s-coeff-fM3')}`,
     `fT_0=${g('s-coeff-fT0')}`, `fT_1=${g('s-coeff-fT1')}`,
     `fT_2=${g('s-coeff-fT2')}`, `fT_3=${g('s-coeff-fT3')}`,
+    `mass_sensitivity=${g('s-crystal-mass-sens')}`, `sens_area=${g('s-crystal-sens-area')}`,
   ].join('&');
   try {
     const r = await fetch(`${API_URL}/crystals/${encodeURIComponent(name)}/apply?${params}`, { method: 'POST' });
     if (r.ok) showToast(`Crystal "${name}" applied`);
     else showToast('Apply failed', true);
   } catch(e) { showToast('Apply failed', true); }
+}
+
+// Default values for the crystal form (matches the CrystalProfile dataclass
+// defaults on the backend). Resets the form only — APPLY CRYSTAL saves it.
+const CRYSTAL_DEFAULTS = {
+  's-crystal-freq-mass': 5983000,
+  's-crystal-freq-temp': 6570000,
+  's-crystal-mass-sens': -13.3e-8,
+  's-crystal-sens-area': 5.25e-5,
+  's-coeff-fM0': 0, 's-coeff-fM1': 0, 's-coeff-fM2': 0, 's-coeff-fM3': 0,
+  's-coeff-fT0': 0, 's-coeff-fT1': 0, 's-coeff-fT2': 0, 's-coeff-fT3': 0,
+};
+
+function revertCrystalDefaults() {
+  for (const [id, v] of Object.entries(CRYSTAL_DEFAULTS)) {
+    const el = document.getElementById(id);
+    if (el) el.value = v;
+  }
+  updateCoeffCharts();
+  showToast('Crystal form reset to defaults — click APPLY CRYSTAL to save');
 }
 
 async function downloadCrystal() {
@@ -1557,9 +1589,8 @@ function clearLogs() {
       Please check the following:
       <ul>
         <li><strong>Start Frequencies</strong> — must be within ~8 kHz of the crystal's resonant frequency</li>
-        <li><strong>Crystal Settings</strong> — verify the correct crystal profile is selected</li>
+        <li><strong>Lock Conditions</strong> — ensure the lock thresholds are appropriate for the crystal</li>
         <li><strong>RF Cabling</strong> — check all connections between the Red Pitaya outputs and the crystal oscillator circuit inputs</li>
-        <li><strong>Signal levels</strong> — confirm the crystal is oscillating and the signal path is intact</li>
       </ul>
     </div>
     <div class="modal-footer">

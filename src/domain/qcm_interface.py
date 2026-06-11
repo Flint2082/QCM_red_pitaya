@@ -44,6 +44,11 @@ class QCMInterface:
             'fT_0': 0.0, 'fT_1': 0.0, 'fT_2': 0.0, 'fT_3': 0.0,
         }
 
+        # Sensor parameters, pushed in from the active crystal profile via
+        # setSensorParams. Defaults match TempCompAlgorithm's.
+        self.mass_sensitivity = -13.3e-8  # kg/(m²·Hz) — negative: added mass lowers the frequency
+        self.sens_area = 5.25e-5         # m²
+
         self.T_start = 0
         self.fT_start = 0
         self.fM_start = 0
@@ -88,6 +93,23 @@ class QCMInterface:
     def setLockDetect(self, amp_threshold, phase_tolerance):
         self.LOCK_AMP_THRESHOLD = amp_threshold
         self.LOCK_PHASE_TOLERANCE = phase_tolerance
+
+    def setSensorParams(self, mass_sensitivity, sens_area):
+        self.mass_sensitivity = mass_sensitivity
+        self.sens_area = sens_area
+        # Hot-patch the running TempCompAlgorithm if one is active. Mirrors the
+        # derivations in TempCompAlgorithm.__init__: fM_0 = 1/(ms*A) and
+        # fT_0 = (fT_start/fM_start)/(ms*A), both in Hz/kg.
+        tc = getattr(self, 'temp_comp', None)
+        if tc is not None:
+            tc.mass_sensitivity = mass_sensitivity
+            tc.sens_area = sens_area
+            tc.fM_0 = 1 / (mass_sensitivity * sens_area)
+            tc.fT_0 = (tc.fT_start / tc.fM_start) / (mass_sensitivity * sens_area)
+            tc.a = tc.fM_3 * tc.fT_0 - tc.fT_3 * tc.fM_0
+            tc.b = tc.fM_2 * tc.fT_0 - tc.fT_2 * tc.fM_0
+            tc.c = tc.fM_1 * tc.fT_0 - tc.fT_1 * tc.fM_0
+        print(f"[QCM] Sensor params updated: mass_sensitivity={mass_sensitivity}, sens_area={sens_area}")
 
     def setMockSigFreq(self, freq):
         self.fpga.write_register(register_name='mock_sig_freq', value=int(freq*2**6)) # multiplication to account for fixed-point (32F6) representation in FPGA
@@ -273,6 +295,8 @@ class QCMInterface:
             coefficients = self.coefficients,
             T_start=T,
             mat_dens=mat_dens,
+            sens_area=self.sens_area,
+            mass_sensitivity=self.mass_sensitivity,
             fM_start= self.fM_start,  # Hz
             fT_start= self.fT_start # Hz
         )

@@ -57,7 +57,7 @@ class TempCompAlgorithm:
             uncompensated_thickness_nm = (fM_dif / self.fM_0)*1000/(self.mat_dens * self.sens_area)
             compensated_thickness_nm = (M_dif*1000)/(self.mat_dens * self.sens_area)
 
-            compensated_m_freq = 0
+            compensated_m_freq = self.fM_start + self.fM_0 * M_dif 
 
             return T_dif[0], uncompensated_thickness_nm, compensated_thickness_nm, compensated_m_freq
         except Exception as e:

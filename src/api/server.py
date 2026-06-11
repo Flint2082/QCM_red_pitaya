@@ -156,7 +156,9 @@ class RestServer:
         self._broadcaster_started = False  # guards against starting two broadcasters
         self._last_state: str = "IDLE"
         self._last_opc_status: dict | None = None
-        # Lock frequencies used by the GET LOCK command
+        # Lock frequencies used by the GET LOCK command. These are NOT persisted:
+        # the active crystal profile is the source of truth (applied on boot).
+        # The values here are only a fallback until a crystal is applied.
         self._lock_freq_mass: float = 5983000.0
         self._lock_freq_temp: float = 6570000.0
         # Oscillator settings cache — defaults match QCMInterface post-lock state
@@ -206,10 +208,6 @@ class RestServer:
             self._lock_amp_threshold = float(d["lock_amp_threshold"])
         if "lock_phase_tolerance" in d:
             self._lock_phase_tolerance = float(d["lock_phase_tolerance"])
-        if "lock_freq_mass" in d:
-            self._lock_freq_mass = float(d["lock_freq_mass"])
-        if "lock_freq_temp" in d:
-            self._lock_freq_temp = float(d["lock_freq_temp"])
         if "active_crystal" in d:
             self._active_crystal = d["active_crystal"]
         # Restore OPC connection parameters without triggering a reconnect
@@ -224,8 +222,6 @@ class RestServer:
             "output_mode":    self._output_mode,
             "lock_amp_threshold":   self._lock_amp_threshold,
             "lock_phase_tolerance": self._lock_phase_tolerance,
-            "lock_freq_mass": self._lock_freq_mass,
-            "lock_freq_temp": self._lock_freq_temp,
             "active_crystal": self._active_crystal,
         }
         if self._wago_client:
@@ -481,9 +477,10 @@ class RestServer:
 
         @app.post("/settings/lock_frequencies")
         def set_lock_frequencies(mass: float, temp: float):
+            # Transient: feeds the GET LOCK command from the crystal form. Not
+            # persisted — the active crystal profile owns the lock frequencies.
             self._lock_freq_mass = mass
             self._lock_freq_temp = temp
-            self._save_settings()
             return {"status": "ok"}
 
         @app.get("/settings/coefficients")

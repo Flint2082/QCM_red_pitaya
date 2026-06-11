@@ -14,12 +14,13 @@ import time
 import threading
 import queue
 
+from domain.qcm_interface import QCMInterface
 from messaging.defines import WorkerState
 from messaging.worker_event import *
 from messaging.worker_command import *
 
 class QCMWorker(threading.Thread):
-    def __init__(self, qcm, command_queue, event_queue):
+    def __init__(self, qcm: QCMInterface, command_queue: queue.Queue, event_queue: queue.Queue):
         super().__init__()
         self.qcm = qcm
         self.command_queue = command_queue
@@ -58,7 +59,7 @@ class QCMWorker(threading.Thread):
         self.state = new_state
         self.event_queue.put(StateEvent(state=new_state))
 
-    def handle_command(self, command):
+    def handle_command(self, command: WorkerCommand):
 
         # ============================
         # Control commands
@@ -139,7 +140,7 @@ class QCMWorker(threading.Thread):
             self.qcm.setFreq(command.oscillator_idx, freq)
             self.qcm.reset() # resets the PLL integratos, making sure the frequency is the desired one.
             time.sleep(command.settle_time)
-            amplitude = self.qcm.getAmplitude(command.oscillator_idx)
+            amplitude = self.qcm.getMag(command.oscillator_idx)
             phase = self.qcm.getPhase(command.oscillator_idx)
             self.event_queue.put(SweepPointEvent(frequency=freq, amplitude=amplitude, phase=phase))
         self.event_queue.put(SweepCompleteEvent())

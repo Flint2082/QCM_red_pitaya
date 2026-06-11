@@ -1,0 +1,25 @@
+{
+  "osc_settings": {
+    "1": {
+      "int_gain": 1e-05,
+      "iq_gain": 1e-05,
+      "inverted": true,
+      "lpf_gain": 1e-05
+    },
+    "2": {
+      "int_gain": 1e-05,
+      "iq_gain": 1e-05,
+      "inverted": true,
+      "lpf_gain": 1e-05
+    }
+  },
+  "output_mode": 0,
+  "lock_amp_threshold": 0.1,
+  "lock_phase_tolerance": 0.05,
+  "lock_freq_mass": 5983000.0,
+  "lock_freq_temp": 6570000.0,
+  "active_crystal": "TestCrystal",
+  "opc_url": "opc.tcp://132.229.46.113:4840",
+  "opc_user": "admin",
+  "opc_password": "admin"
+}

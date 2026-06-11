@@ -139,7 +139,8 @@ class QCMWorker(threading.Thread):
             self.qcm.setFreq(command.oscillator_idx, freq)
             self.qcm.reset() # resets the PLL integratos, making sure the frequency is the desired one.
             time.sleep(command.settle_time)
-            amplitude, phase = self.qcm.getAmpAndPhase(command.oscillator_idx)
+            amplitude = self.qcm.getAmplitude(command.oscillator_idx)
+            phase = self.qcm.getPhase(command.oscillator_idx)
             self.event_queue.put(SweepPointEvent(frequency=freq, amplitude=amplitude, phase=phase))
         self.event_queue.put(SweepCompleteEvent())
 

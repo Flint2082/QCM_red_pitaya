@@ -180,6 +180,7 @@ class RestServer:
         # Persistent settings file
         self._settings_file = os.path.join(os.path.dirname(__file__), "..", "..", "data", "settings.json")
         self._load_settings()   # override defaults with last saved values
+        self._enqueue_boot_settings()  # push persisted settings to the hardware on startup
         self.app = self._build_app()
         
 
@@ -238,6 +239,31 @@ class RestServer:
                 json.dump(data, f, indent=2)
         except Exception as e:
             print(f"[Settings] Save failed: {e}")
+
+    def _enqueue_boot_settings(self):
+        """Push persisted settings to the hardware at startup so saved values take
+        effect without a manual 'apply' click. These commands buffer on the queue
+        until the worker thread starts and drains them.
+
+        Coefficients are intentionally omitted: they are file-backed and loaded by
+        the QCM when a measurement starts. Lock frequencies are server-side only
+        (used by the GET LOCK command), so they are not pushed either.
+        """
+        for osc, s in self._osc_settings.items():
+            if "int_gain" in s:
+                self.command_queue.put(SetIntegratorGainCommand(osc, s["int_gain"]))
+            if "lpf_gain" in s:
+                self.command_queue.put(SetLPFGainCommand(osc, s["lpf_gain"]))
+            if "inverted" in s:
+                self.command_queue.put(SetInvertedCommand(osc, bool(s["inverted"])))
+
+        try:
+            self.command_queue.put(SetOutputModeCommand(1, OutputMode(self._output_mode)))
+        except ValueError:
+            print(f"[Settings] Skipping invalid persisted output_mode={self._output_mode} on boot")
+
+        self.command_queue.put(SetLockDetectCommand(self._lock_amp_threshold, self._lock_phase_tolerance))
+        print("[Settings] Queued persisted settings to apply on boot")
 
     # --------------------------------------------------
     # Lifecycle

@@ -68,6 +68,9 @@ class QCMInterface:
     def setLPFGain(self, osc_index, gain):
         self.fpga.write_register(register_name='lpf_gain_'+str(osc_index),value=int(gain*2**32)) # multiplication to account for fixed-point (32F32) representation in FPGA
 
+    def setMockSigFreq(self, freq):
+        self.fpga.write_register(register_name='mock_sig_freq', value=int(freq*2**6)) # multiplication to account for fixed-point (32F6) representation in FPGA
+
     def setInv(self, osc_index, inv: bool):
         self.fpga.write_register(register_name='inv_fb_'+str(osc_index), value=inv)
         self._inv[osc_index] = bool(inv)
@@ -76,16 +79,17 @@ class QCMInterface:
         if mode == -1:
             print("Output mode not set. These are the available modes:")
             print("0: The delta of the two inputs")
-            print("1: The mass mode frequency (fine)")
-            print("2: The mass mode frequency (coarse)")
-            print("3: The mass mode multiplier output")
-            print("4: The mass mode lock detector")
-            print("5: The mass mode power detector")
-            print("6: The temp mode frequency (fine)")
-            print("7: The temp mode frequency (coarse)")
-            print("8: The temp mode multiplier output")
-            print("9: The temp mode lock detector")
-            print("10: The temp mode power detector")
+            print("1: Mock sinewave at the software-defined frequency (mock_sig_freq)")
+            print("2: The mass mode frequency (fine)")
+            print("3: The mass mode frequency (coarse)")
+            print("4: The mass mode multiplier output")
+            print("5: The mass mode lock detector")
+            print("6: The mass mode power detector")
+            print("7: The temp mode frequency (fine)")
+            print("8: The temp mode frequency (coarse)")
+            print("9: The temp mode multiplier output")
+            print("10: The temp mode lock detector")
+            print("11: The temp mode power detector")
         else:
             self.fpga.write_register(register_name='output_select', value=mode)
         
@@ -255,6 +259,8 @@ class QCMInterface:
         amp_temp = self.getMag(2)
         phase_temp = self.getPhase(2)
         T_calc, uncompensated_thickness_nm, compensated_thickness_nm, compensated_m_freq = self.temp_comp.FreqToTemp(fT, fM)
+        if np.isfinite(compensated_m_freq):
+            self.setMockSigFreq(compensated_m_freq)
         return MeasurementData(
             timestamp=time.time(),
             freq_mass_mode=fM,

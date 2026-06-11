@@ -31,6 +31,7 @@ CHANNELS = [
     ("temperature_c",       "Temperature (°C)",       "tab:red"),
     ("freq_mass_hz",        "Mass Freq (Hz)",         "tab:blue"),
     ("freq_temp_hz",        "Temp Freq (Hz)",         "tab:cyan"),
+    ("comp_mass_freq_hz",   "Comp. Mass Freq (Hz)",   "tab:orange"),
     ("amp_mass",            "Mass Amplitude",         "tab:purple"),
     ("phase_mass",          "Mass Phase",             "tab:pink"),
     ("amp_temp",            "Temp Amplitude",         "tab:brown"),
@@ -40,7 +41,7 @@ CHANNELS = [
 ]
 
 # Channels shown when the window first opens.
-DEFAULT_ON = {"thickness_comp_nm", "thickness_uncomp_nm", "temperature_c"}
+DEFAULT_ON = {"thickness_comp_nm", "thickness_uncomp_nm", "temperature_c", "comp_mass_freq_hz"}
 
 LOCK_COLUMNS = {"lock_mass", "lock_temp"}
 

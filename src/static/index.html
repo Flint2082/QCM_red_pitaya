@@ -793,8 +793,8 @@ function onSweepPoint(e) {
   sweepCharts.amp.data.datasets[0].data.push(e.amplitude);
   sweepCharts.phase.data.labels.push(e.frequency);
   sweepCharts.phase.data.datasets[0].data.push(e.phase);
-  sweepCharts.amp.update('none');
-  sweepCharts.phase.update('none');
+  _dirtyCharts.add(sweepCharts.amp);
+  _dirtyCharts.add(sweepCharts.phase);
 
   const n = sweepCharts.amp.data.labels.length;
   const pct = _sweepTotal > 0 ? Math.round(100 * n / _sweepTotal) : 0;
@@ -832,6 +832,18 @@ function clearSweep() {
 
 let sampleCount = 0;
 
+// Chart redraws are batched: push() only appends data and marks the chart
+// dirty; a single timer repaints dirty charts at a fixed rate. Redrawing all
+// charts on every measurement (~10/s × 8 charts × up to 3000 pts) made the UI
+// progressively unresponsive as the charts filled up.
+const CHART_REDRAW_MS = 250;
+const _dirtyCharts = new Set();
+setInterval(() => {
+  if (document.hidden) return;  // skip repaints in background tabs; data still accumulates
+  for (const c of _dirtyCharts) c.update('none');
+  _dirtyCharts.clear();
+}, CHART_REDRAW_MS);
+
 function push(chart, value, dsIdx = 0, max = MAX_PTS_MAIN, label = '') {
   if (!chart) return;
   chart._maxPts = max;
@@ -840,7 +852,7 @@ function push(chart, value, dsIdx = 0, max = MAX_PTS_MAIN, label = '') {
   d.datasets[dsIdx].data.push(value);
   if (!chart._zoomGroupState?.zoomed) {
     if (d.labels.length > max) { d.labels.shift(); d.datasets.forEach(ds => { if (ds.data.length > max) ds.data.shift(); }); }
-    if (dsIdx === d.datasets.length - 1) chart.update('none');
+    _dirtyCharts.add(chart);
   }
 }
 

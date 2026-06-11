@@ -8,6 +8,7 @@
 
 import queue
 import threading
+import time
 
 import messaging.api_command as ac
 import messaging.api_event as ae
@@ -67,9 +68,14 @@ class Application(threading.Thread):
 
         while self.running:
             try:
-                self._process_api_commands()
-                self._process_worker_events()
-                self._process_opc_status()
+                did_work = self._process_api_commands()
+                did_work |= self._process_worker_events()
+                did_work |= self._process_opc_status()
+                # Sleep briefly when idle — without this the loop busy-spins at
+                # 100% CPU, starving the worker and the uvicorn event loop (GIL
+                # contention), which makes the UI laggy and drops WebSockets.
+                if not did_work:
+                    time.sleep(0.005)
             except Exception:
                 print(f"[Application] Unhandled exception:\n{traceback.format_exc()}")
 
@@ -79,26 +85,32 @@ class Application(threading.Thread):
     # Inbound: OPC status events → forward to REST/WS clients
     # --------------------------------------------------
 
-    def _process_opc_status(self):
+    def _process_opc_status(self) -> bool:
         if self._opc_status_queue is None:
-            return
+            return False
+        did_work = False
         try:
             while True:
                 self._emit(self._opc_status_queue.get_nowait())
+                did_work = True
         except queue.Empty:
             pass
+        return did_work
 
     # --------------------------------------------------
     # Inbound: commands from API → forward to worker
     # --------------------------------------------------
 
-    def _process_api_commands(self):
+    def _process_api_commands(self) -> bool:
+        did_work = False
         for q in self._command_queues:
             try:
                 while True:
                     self._handle_api_command(q.get_nowait())
+                    did_work = True
             except queue.Empty:
                 pass
+        return did_work
 
     def _handle_api_command(self, command):
         """
@@ -140,13 +152,16 @@ class Application(threading.Thread):
     # Inbound: events from worker → forward to API layer
     # --------------------------------------------------
 
-    def _process_worker_events(self):
+    def _process_worker_events(self) -> bool:
+        did_work = False
         try:
             while True:
                 event = self.worker_event_queue.get_nowait()
                 self._handle_worker_event(event)
+                did_work = True
         except queue.Empty:
             pass
+        return did_work
 
     def _handle_worker_event(self, event):
         """

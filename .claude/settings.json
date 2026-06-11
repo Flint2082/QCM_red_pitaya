@@ -6,7 +6,9 @@
       "PowerShell(if \\($?\\) { \"all compile OK\" })",
       "PowerShell(if \\($?\\) { \"server.py compile OK\" })",
       "Bash(python -m py_compile tools/test_comp_alogrithm.py)",
-      "Bash(MPLBACKEND=Agg python tools/test_comp_alogrithm.py)"
+      "Bash(MPLBACKEND=Agg python tools/test_comp_alogrithm.py)",
+      "PowerShell(python -m py_compile src\\\\app\\\\application.py src\\\\workers\\\\qcm_worker.py)",
+      "PowerShell(if \\($?\\) { \"compile OK\" })"
     ]
   }
 }

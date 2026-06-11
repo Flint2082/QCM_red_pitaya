@@ -27,6 +27,12 @@ class QCMWorker(threading.Thread):
         self.event_queue = event_queue
         self.running = True
         self.state = WorkerState.IDLE
+        # Lock-status emission throttle: send on change, plus a periodic
+        # heartbeat so new WS clients converge. Unthrottled this produced
+        # ~10 events/sec of WS traffic even when idle.
+        self.LOCK_STATUS_HEARTBEAT = 1.0  # seconds
+        self._last_lock_status: tuple | None = None
+        self._last_lock_emit = 0.0
         
     def stop(self):
         self.running = False
@@ -146,10 +152,16 @@ class QCMWorker(threading.Thread):
         self.event_queue.put(SweepCompleteEvent())
 
     def update(self):
-        # Always emit lock status so the UI reflects it immediately, independent of measurement rate
+        # Emit lock status on change (immediate UI feedback) or as a periodic
+        # heartbeat — not every loop iteration, which floods the WS clients.
         lock_mass = self.qcm.getLockDetect(1)
         lock_temp = self.qcm.getLockDetect(2)
-        self.event_queue.put(LockStatusEvent(lock_mass=lock_mass, lock_temp=lock_temp))
+        now = time.time()
+        status = (lock_mass, lock_temp)
+        if status != self._last_lock_status or now - self._last_lock_emit >= self.LOCK_STATUS_HEARTBEAT:
+            self.event_queue.put(LockStatusEvent(lock_mass=lock_mass, lock_temp=lock_temp))
+            self._last_lock_status = status
+            self._last_lock_emit = now
 
         # Perform measurement acquisition if in measuring state
         if self.state == WorkerState.MEASURING:

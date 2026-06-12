@@ -264,8 +264,8 @@ class QCMInterface:
             print("Warning: PLLs did not lock within expected time. Check starting frequencies.")
         else:
             print("PLLs locked successfully at frequencies:")
-            print(f"  Oscillator 1: {self.getFreq(1)} Hz    Phase: {self.getPhase(1)} ")
-            print(f"  Oscillator 2: {self.getFreq(2)} Hz    Phase: {self.getPhase(2)} ")
+            print(f"  Oscillator 1: {self.getFreq(1)} Hz    Phase: {self.getPhase(1)}    Amplitude: {self.getMag(1)}")
+            print(f"  Oscillator 2: {self.getFreq(2)} Hz    Phase: {self.getPhase(2)}    Amplitude: {self.getMag(2)}")
 
         # Settle to the configured (post-lock) integrator gain
         self.setInt(1, self._int_gain[1])

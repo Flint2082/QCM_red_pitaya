@@ -632,7 +632,9 @@ let _prevLockMass = null;
 let _prevLockTemp = null;
 let _prevOpcConnected = null;
 let _prevWsConnected = false;
-let _isRunning = false;
+let _isRunning = false;       // true while state === RUNNING (drops during a mid-run re-lock)
+let _runActive = false;       // true for the whole run, spanning RUNNING -> LOCKING -> RUNNING re-locks
+let _startRequested = false;  // set when the user presses START, consumed on the next RUNNING transition
 let _sweepRunning = false;
 let _runBuffer = [];
 let _runLog = [];
@@ -1300,19 +1302,25 @@ function onStateChange(state) {
 
   updateStartStopBtns(state);
 
-  // When run ends, offer CSV download if data was recorded
-  if (wasRunning && !_isRunning && _runBuffer.length > 0) {
-    const el = document.getElementById('csv-row-count');
-    if (el) el.textContent = _runBuffer.length;
-    document.getElementById('modal-save-csv').style.display = 'flex';
-  }
-  // Clear the buffer only on the transition INTO running (a fresh run start),
-  // not on every RUNNING state event. The server re-sends the current state on
-  // each WebSocket (re)connect, so clearing on every RUNNING event would wipe
-  // the whole run mid-flight after a brief WS drop.
-  if (!wasRunning && _isRunning) {
-    _runBuffer = [];
-    _runLog = [];
+  // Run lifecycle. A run spans re-locks, which move RUNNING -> LOCKING -> RUNNING,
+  // so it must NOT be treated as a stop+start. The buffer is cleared only on a
+  // user-initiated START (_startRequested) — never on a bare RUNNING event, so a
+  // WS reconnect (server re-sends the current state) or a re-lock can't wipe it.
+  if (_isRunning) {
+    if (_startRequested) {
+      _runBuffer = [];
+      _runLog = [];
+      _startRequested = false;
+    }
+    _runActive = true;  // covers fresh start, re-lock resume, and joining an in-progress run after a refresh
+  } else if (state === 'IDLE' && _runActive) {
+    // Genuine stop — a re-lock goes to LOCKING, not IDLE. Offer the CSV.
+    _runActive = false;
+    if (_runBuffer.length > 0) {
+      const el = document.getElementById('csv-row-count');
+      if (el) el.textContent = _runBuffer.length;
+      document.getElementById('modal-save-csv').style.display = 'flex';
+    }
   }
   updateDownloadBtn();
 }
@@ -1377,6 +1385,7 @@ async function sendCommand(action) {
   if (action === 'start') {
     const t = parseFloat(document.getElementById('input-amb-temp').value);
     if (isNaN(t)) { showToast('Enter a valid ambient temperature.', true); return; }
+    _startRequested = true;  // marks this RUNNING transition as a fresh run (clears the buffer)
     // Film material parameters from the Measurement settings (per-run values)
     const dens = parseFloat(document.getElementById('s-mat-dens')?.value);
     const zr   = parseFloat(document.getElementById('s-mat-zratio')?.value);

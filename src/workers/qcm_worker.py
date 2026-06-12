@@ -72,11 +72,16 @@ class QCMWorker(threading.Thread):
         # ============================
 
         if isinstance(command, StartupPLLCommand):
+            # Remember whether a measurement was running so the user can
+            # re-establish lock mid-run without stopping it. The measurement
+            # reference (fM_start/fT_start/T_start) is left untouched, so the
+            # deposition baseline — and the recorded data — carry through.
+            resume_measuring = (self.state == WorkerState.MEASURING)
             self._set_state(WorkerState.LOCKING)
             locked = self.qcm.startupPLL(command.start_freq_mass, command.start_freq_temp)
             if not locked:
                 self.event_queue.put(LockFailedEvent())
-            self._set_state(WorkerState.IDLE)
+            self._set_state(WorkerState.MEASURING if resume_measuring else WorkerState.IDLE)
 
         # Start measurement
         elif isinstance(command, StartMeasurementCommand) and self.state == WorkerState.IDLE:

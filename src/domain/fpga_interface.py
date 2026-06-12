@@ -14,6 +14,11 @@ class FPGAInterface:
         self.base_addr = base_addr
         self.map_size = map_size
         self.BITSTREAM_PATH = bitstream_path
+        # Rate the demodulator LPF runs at — used to convert an LPF cutoff
+        # frequency to the filter's gain coefficient. Refined from the .fpg
+        # clk_rate metadata in load_register_map(); adjust if the filter runs on
+        # a decimated clock rather than the full FPGA clock.
+        self.sample_rate = 125_000_000  # Hz
         
         with open("/dev/mem", "r+b") as f:
             self.mem = mmap.mmap(
@@ -69,6 +74,10 @@ class FPGAInterface:
                         if debug:
                             print("Successfully finished parsing")
                         break
+            # Pick up the actual processing clock for cutoff->gain conversion.
+            clk = self.get_clock_freq(register_map_dir)
+            if clk:
+                self.sample_rate = clk
             return True
         except Exception as e:
             print(f"Error loading register map: {e}")

@@ -134,8 +134,8 @@ class Application(threading.Thread):
             self.worker_command_queue.put(wc.SetIntegratorGainCommand(command.oscillator_idx, command.gain))
         elif isinstance(command, ac.SetInvertedCommand):
             self.worker_command_queue.put(wc.SetInvertedCommand(command.oscillator_idx, command.inverted))
-        elif isinstance(command, ac.SetLPFGainCommand):
-            self.worker_command_queue.put(wc.SetLPFGainCommand(command.oscillator_idx, command.gain))
+        elif isinstance(command, ac.SetLPFFreqCommand):
+            self.worker_command_queue.put(wc.SetLPFFreqCommand(command.oscillator_idx, command.freq))
         elif isinstance(command, ac.SetOutputModeCommand):
             self.worker_command_queue.put(wc.SetOutputModeCommand(command.oscillator_idx, command.mode))
         elif isinstance(command, ac.SetLockDetectCommand):

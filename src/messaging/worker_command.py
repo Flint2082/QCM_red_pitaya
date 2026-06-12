@@ -67,9 +67,9 @@ class SetInvertedCommand(WorkerCommand):
     inverted: bool
 
 @dataclass
-class SetLPFGainCommand(WorkerCommand):
+class SetLPFFreqCommand(WorkerCommand):
     oscillator_idx: int
-    gain: float
+    freq: float  # LPF cutoff frequency in Hz
     
 @dataclass
 class SetOutputModeCommand(WorkerCommand):

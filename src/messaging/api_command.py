@@ -67,9 +67,9 @@ class SetInvertedCommand(ApiCommand):
     inverted: bool
 
 @dataclass
-class SetLPFGainCommand(ApiCommand):
+class SetLPFFreqCommand(ApiCommand):
     oscillator_idx: int
-    gain: float
+    freq: float  # LPF cutoff frequency in Hz
     
 @dataclass
 class SetOutputModeCommand(ApiCommand):

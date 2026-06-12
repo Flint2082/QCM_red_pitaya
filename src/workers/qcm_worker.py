@@ -108,8 +108,8 @@ class QCMWorker(threading.Thread):
             self.qcm.setFreq(command.oscillator_idx, command.frequency)
         elif isinstance(command, SetIntegratorGainCommand):
             self.qcm.setOscConfig(command.oscillator_idx, int_gain=command.gain)
-        elif isinstance(command, SetLPFGainCommand):
-            self.qcm.setOscConfig(command.oscillator_idx, lpf_gain=command.gain)
+        elif isinstance(command, SetLPFFreqCommand):
+            self.qcm.setOscConfig(command.oscillator_idx, lpf_freq=command.freq)
         elif isinstance(command, SetInvertedCommand):
             self.qcm.setOscConfig(command.oscillator_idx, inverted=command.inverted)
         elif isinstance(command, SetOutputModeCommand):
@@ -131,8 +131,8 @@ class QCMWorker(threading.Thread):
     def _run_sweep(self, command: StartSweepCommand):
         self.qcm.standby(1)
         self.qcm.standby(2)
-        # make sure LPF filter gain is set to the default for sweeps to keep things consistent
-        self.qcm.setLPFGain(command.oscillator_idx, self.qcm.LPF_GAIN)
+        # make sure the LPF cutoff is set to the default for sweeps to keep things consistent
+        self.qcm.setLPFFreq(command.oscillator_idx, self.qcm.LPF_FREQ)
         n_points = int(math.floor((command.stop_freq - command.start_freq) / command.step_size)) + 1
         for i in range(n_points):
             # Check for abort between points

@@ -27,7 +27,7 @@ class QCMInterface:
         
         self.INT_GAIN_PRE_LOCK = 0.01
         self.INT_GAIN_POST_LOCK = 0.00001
-        self.LPF_GAIN = 0.00001
+        self.LPF_FREQ = 200.0  # Hz — default demodulator LPF cutoff frequency
 
         # Lock-detect conditions (configurable via settings). A channel counts
         # as locked when its amplitude exceeds the threshold AND its phase is
@@ -58,7 +58,7 @@ class QCMInterface:
         # defaults. Defaults match startupPLL's historical hard-coded values.
         self._inv = {1: True, 2: True}                                          # inverted feedback
         self._int_gain = {1: self.INT_GAIN_POST_LOCK, 2: self.INT_GAIN_POST_LOCK}  # post-lock integrator gain
-        self._lpf_gain = {1: self.LPF_GAIN, 2: self.LPF_GAIN}                   # LPF gain
+        self._lpf_freq = {1: self.LPF_FREQ, 2: self.LPF_FREQ}                   # LPF cutoff frequency (Hz)
 
 
         self.fpga = fpga
@@ -88,7 +88,8 @@ class QCMInterface:
     def setInt(self, osc_index, gain):
         self.fpga.write_register(register_name='integral_'+str(osc_index),value=int(gain*2**32)) # multiplication to account for fixed-point (32F32) representation in FPGA
 
-    def setLPFGain(self, osc_index, gain):
+    def setLPFFreq(self, osc_index, freq):
+        gain = ( 2 * np.pi * freq ) / ( self.fpga.sample_rate + ( 2 * np.pi * freq ) )
         self.fpga.write_register(register_name='lpf_gain_'+str(osc_index),value=int(gain*2**32)) # multiplication to account for fixed-point (32F32) representation in FPGA
 
     def setLockDetect(self, amp_threshold, phase_tolerance):
@@ -121,17 +122,17 @@ class QCMInterface:
         self.fpga.write_register(register_name='inv_fb_'+str(osc_index), value=inv)
         self._inv[osc_index] = bool(inv)
 
-    def setOscConfig(self, osc_index, int_gain=None, lpf_gain=None, inverted=None):
+    def setOscConfig(self, osc_index, int_gain=None, lpf_freq=None, inverted=None):
         """Apply and remember the configured per-oscillator loop settings. The
         cached values are reused by startupPLL so a lock uses the persisted
-        settings. Low-level setters (setInt/setLPFGain) stay uncached for the
+        settings. Low-level setters (setInt/setLPFFreq) stay uncached for the
         transient writes done during locking, sweeps and standby."""
         if int_gain is not None:
             self._int_gain[osc_index] = int_gain
             self.setInt(osc_index, int_gain)
-        if lpf_gain is not None:
-            self._lpf_gain[osc_index] = lpf_gain
-            self.setLPFGain(osc_index, lpf_gain)
+        if lpf_freq is not None:
+            self._lpf_freq[osc_index] = lpf_freq
+            self.setLPFFreq(osc_index, lpf_freq)
         if inverted is not None:
             self.setInv(osc_index, inverted)
         
@@ -198,7 +199,7 @@ class QCMInterface:
         self.standby(2)
         self.setFreq(1, 6000000)
         self.setInt(1, 0.00)
-        self.setLPFGain(1, self.LPF_GAIN)
+        self.setLPFFreq(1, self.LPF_FREQ)
 
         while True:
             try:
@@ -237,12 +238,12 @@ class QCMInterface:
         
         print(f"Starting up PLLs around frequencies {start_freq_mass} and {start_freq_temp}")
 
-        ## Apply the configured per-oscillator settings (inversion + LPF gain)
+        ## Apply the configured per-oscillator settings (inversion + LPF cutoff)
         self.setInv(1, self._inv[1])
-        self.setLPFGain(1, self._lpf_gain[1])
+        self.setLPFFreq(1, self._lpf_freq[1])
 
         self.setInv(2, self._inv[2])
-        self.setLPFGain(2, self._lpf_gain[2])
+        self.setLPFFreq(2, self._lpf_freq[2])
 
         for t in range(self.MAX_STARTUP_TRIES): # try to lock for up to MAX_STARTUP_TRIES
             self.reset()  # Ensure we're starting from a known state each time

@@ -80,7 +80,7 @@ class QCMWorker(threading.Thread):
 
         # Start measurement
         elif isinstance(command, StartMeasurementCommand) and self.state == WorkerState.IDLE:
-            self.qcm.setMeasurementReference(T=command.ambient_temp)
+            self.qcm.setMeasurementReference(T=command.ambient_temp, mat_dens=command.mat_dens, z_ratio=command.z_ratio)
             self._set_state(WorkerState.MEASURING)
 
         # Stop measurement
@@ -117,7 +117,7 @@ class QCMWorker(threading.Thread):
         elif isinstance(command, SetLockDetectCommand):
             self.qcm.setLockDetect(command.amp_threshold, command.phase_tolerance)
         elif isinstance(command, SetSensorParamsCommand):
-            self.qcm.setSensorParams(command.mass_sensitivity, command.sens_area)
+            self.qcm.setSensorParams(command.mass_sensitivity, command.sens_area, command.freq_virgin)
         elif isinstance(command, SetCoefficientsCommand):
             self.qcm.setCoefficients(
                 command.fM_0, command.fM_1, command.fM_2, command.fM_3,

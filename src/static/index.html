@@ -386,6 +386,7 @@ footer { height: 24px; background: var(--surface); border-top: 1px solid var(--b
           <div class="settings-group">
             <div class="settings-row"><div><div class="settings-row-label">Ambient Temperature</div><div class="settings-row-desc">Starting reference temperature</div></div><div></div><div style="display:flex;align-items:center;gap:6px"><input class="settings-input" type="number" id="s-amb-temp" value="23" step="0.5"><span class="settings-unit">°C</span></div></div>
             <div class="settings-row"><div><div class="settings-row-label">Material Density</div><div class="settings-row-desc">Deposited film material density</div></div><div></div><div style="display:flex;align-items:center;gap:6px"><input class="settings-input" type="number" id="s-mat-dens" value="19320" step="10"><span class="settings-unit">kg/m³</span></div></div>
+            <div class="settings-row"><div><div class="settings-row-label">Z-ratio</div><div class="settings-row-desc">Acoustic impedance ratio of the film (gold 0.381, 1.0 = plain Sauerbrey)</div></div><div></div><div style="display:flex;align-items:center;gap:6px"><input class="settings-input" type="number" id="s-mat-zratio" value="1.0" step="0.001" min="0.01"><span class="settings-unit"></span></div></div>
           </div>
 
           <div class="settings-section-title">LOCK DETECTION</div>
@@ -479,6 +480,7 @@ footer { height: 24px; background: var(--surface); border-top: 1px solid var(--b
           <div class="settings-group">
             <div class="settings-row"><div><div class="settings-row-label">Mass Lock Freq</div><div class="settings-row-desc">PLL start frequency — OSC 1</div></div><div></div><div style="display:flex;align-items:center;gap:6px"><input class="settings-input" type="number" id="s-crystal-freq-mass" value="5983000" step="1000"><span class="settings-unit">Hz</span></div></div>
             <div class="settings-row"><div><div class="settings-row-label">Temp Lock Freq</div><div class="settings-row-desc">PLL start frequency — OSC 2</div></div><div></div><div style="display:flex;align-items:center;gap:6px"><input class="settings-input" type="number" id="s-crystal-freq-temp" value="6570000" step="1000"><span class="settings-unit">Hz</span></div></div>
+            <div class="settings-row"><div><div class="settings-row-label">Virgin Frequency</div><div class="settings-row-desc">Pristine uncoated crystal frequency — Z-match reference, 0 = use run start</div></div><div></div><div style="display:flex;align-items:center;gap:6px"><input class="settings-input" type="number" id="s-crystal-freq-virgin" value="0" step="1000"><span class="settings-unit">Hz</span></div></div>
           </div>
 
           <div class="settings-section-title">SENSOR PARAMETERS</div>
@@ -1163,6 +1165,7 @@ async function loadCrystalForm(name) {
     document.getElementById('s-crystal-deposited').textContent = (p.total_deposited ?? 0).toFixed(2);
     document.getElementById('s-crystal-mass-sens').value = p.mass_sensitivity ?? -13.3e-8;
     document.getElementById('s-crystal-sens-area').value = p.sens_area ?? 5.25e-5;
+    document.getElementById('s-crystal-freq-virgin').value = p.freq_virgin ?? 0;
     const coeffMap = { fM0:'fM_0', fM1:'fM_1', fM2:'fM_2', fM3:'fM_3',
                        fT0:'fT_0', fT1:'fT_1', fT2:'fT_2', fT3:'fT_3' };
     for (const [id, key] of Object.entries(coeffMap)) {
@@ -1374,7 +1377,12 @@ async function sendCommand(action) {
   if (action === 'start') {
     const t = parseFloat(document.getElementById('input-amb-temp').value);
     if (isNaN(t)) { showToast('Enter a valid ambient temperature.', true); return; }
-    url = `${API_URL}/measurement/start?ambient_temp=${t}`;
+    // Film material parameters from the Measurement settings (per-run values)
+    const dens = parseFloat(document.getElementById('s-mat-dens')?.value);
+    const zr   = parseFloat(document.getElementById('s-mat-zratio')?.value);
+    url = `${API_URL}/measurement/start?ambient_temp=${t}`
+        + (isNaN(dens) ? '' : `&mat_dens=${dens}`)
+        + (isNaN(zr)   ? '' : `&z_ratio=${zr}`);
   } else if (action === 'stop') {
     url = `${API_URL}/measurement/stop`;
   } else if (action === 'lock') {
@@ -1411,6 +1419,7 @@ async function applyCrystal() {
     `fT_0=${g('s-coeff-fT0')}`, `fT_1=${g('s-coeff-fT1')}`,
     `fT_2=${g('s-coeff-fT2')}`, `fT_3=${g('s-coeff-fT3')}`,
     `mass_sensitivity=${g('s-crystal-mass-sens')}`, `sens_area=${g('s-crystal-sens-area')}`,
+    `freq_virgin=${g('s-crystal-freq-virgin')}`,
   ].join('&');
   try {
     const r = await fetch(`${API_URL}/crystals/${encodeURIComponent(name)}/apply?${params}`, { method: 'POST' });
@@ -1424,6 +1433,7 @@ async function applyCrystal() {
 const CRYSTAL_DEFAULTS = {
   's-crystal-freq-mass': 5983000,
   's-crystal-freq-temp': 6570000,
+  's-crystal-freq-virgin': 0,
   's-crystal-mass-sens': -13.3e-8,
   's-crystal-sens-area': 5.25e-5,
   's-coeff-fM0': 0, 's-coeff-fM1': 0, 's-coeff-fM2': 0, 's-coeff-fM3': 0,

@@ -11,7 +11,8 @@
       "PowerShell(if \\($?\\) { \"compile OK\" })",
       "PowerShell(python -m py_compile src\\\\processing\\\\TempCompAlgorithm.py src\\\\domain\\\\crystal.py src\\\\domain\\\\qcm_interface.py src\\\\messaging\\\\api_command.py src\\\\messaging\\\\worker_command.py src\\\\app\\\\application.py src\\\\workers\\\\qcm_worker.py src\\\\api\\\\server.py)",
       "Bash(python -c ' *)",
-      "Bash(python -m py_compile src/processing/TempCompAlgorithm.py src/domain/crystal.py src/domain/qcm_interface.py src/api/server.py)"
+      "Bash(python -m py_compile src/processing/TempCompAlgorithm.py src/domain/crystal.py src/domain/qcm_interface.py src/api/server.py)",
+      "Bash(python -m py_compile src/processing/TempCompAlgorithm.py src/domain/crystal.py src/domain/qcm_interface.py src/messaging/api_command.py src/messaging/worker_command.py src/app/application.py src/workers/qcm_worker.py src/api/server.py)"
     ]
   }
 }

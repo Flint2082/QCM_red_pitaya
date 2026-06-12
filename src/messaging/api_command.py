@@ -28,6 +28,8 @@ class SetCoefficientsCommand(ApiCommand):
 @dataclass
 class StartMeasurementCommand(ApiCommand):
     ambient_temp: float
+    mat_dens: float = 19320.0  # kg/m^3 — deposited film density
+    z_ratio: float = 1.0       # quartz/film acoustic impedance ratio
 
 @dataclass
 class StopMeasurementCommand(ApiCommand):
@@ -83,3 +85,4 @@ class SetLockDetectCommand(ApiCommand):
 class SetSensorParamsCommand(ApiCommand):
     mass_sensitivity: float
     sens_area: float
+    freq_virgin: float = 0.0  # Hz — pristine crystal frequency, 0 = unset

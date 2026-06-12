@@ -3,10 +3,12 @@ import numpy as np
 import matplotlib.pyplot as plt
 
 class TempCompAlgorithm:
-    def __init__(self, coefficients, T_start, fT_start, fM_start, 
+    def __init__(self, coefficients, T_start, fT_start, fM_start,
                  mat_dens=19320,            # kg/m^3 = Material density (e.g. gold)
                  sens_area=5.25e-5,         # m^2 = Sensor area (e.g. 5.25e-5 m^2 for 8.2 mm dia apature)
-                 mass_sensitivity=-13.3e-8  # kg/m^2/Hz = Mass sensitivity, negative: added mass lowers the frequency (-13.3 ng/(cm2*Hz) for ~6 MHz AT-cut)
+                 mass_sensitivity=-13.3e-8, # kg/m^2/Hz = Mass sensitivity, negative: added mass lowers the frequency (-13.3 ng/(cm2*Hz) for ~6 MHz AT-cut)
+                 z_ratio=1.0,               # acoustic impedance ratio quartz/film (gold 0.381); 1.0 ~ plain Sauerbrey
+                 freq_virgin=None           # Hz = pristine (uncoated) crystal frequency; None/0 = use fM_start
                  ):
         # Calibration coefficients are provided directly (e.g. from the active
         # crystal profile).
@@ -28,12 +30,28 @@ class TempCompAlgorithm:
         
         self.mat_dens = mat_dens        # kg/m^3 = Material density
         self.sens_area = sens_area      # m^2 = Sensor area
+        self.z_ratio = z_ratio          # quartz/film acoustic impedance ratio
+        self.f_virgin = freq_virgin or fM_start  # Hz = unloaded reference for the Z-match conversion
         
         # Coefficients for the cubic equation a*T_dif^3 + b*T_dif^2 + c*T_dif + d = 0
         # with d calculated later
         self.a = (self.fM_3*self.fT_0 - self.fT_3*self.fM_0)
         self.b = (self.fM_2*self.fT_0 - self.fT_2*self.fM_0)
-        self.c = (self.fM_1*self.fT_0 - self.fT_1*self.fM_0) 
+        self.c = (self.fM_1*self.fT_0 - self.fT_1*self.fM_0)
+
+    def _zmatch_areal_mass(self, f_loaded):
+        """Z-match (Lu-Lewis) areal mass [kg/m^2] of the film between the virgin
+        crystal frequency and f_loaded. The quartz constant Nq*rho_q is expressed
+        through the crystal's calibrated mass sensitivity: Nq*rho_q = |ms| * f_v^2.
+        Reduces to linear Sauerbrey for small loads and Z=1 (arctan(tan(x)) = x)."""
+        Nq_rho_q = abs(self.mass_sensitivity) * self.f_virgin**2  # kg*Hz/m^2
+        x = np.pi * (self.f_virgin - f_loaded) / self.f_virgin
+        return (Nq_rho_q / (np.pi * self.z_ratio * f_loaded)) * np.arctan(self.z_ratio * np.tan(x))
+
+    def freq_to_thickness(self, f_from, f_to):
+        """Film thickness [m] deposited while the (temperature-clean) mass-mode
+        frequency moved from f_from to f_to, via the Z-match equation."""
+        return (self._zmatch_areal_mass(f_to) - self._zmatch_areal_mass(f_from)) / self.mat_dens
         
         
          
@@ -58,17 +76,13 @@ class TempCompAlgorithm:
             # Calculate the compensated mass change using the found temperature difference
             M_dif = -(-fM_dif + (self.fM_3 * (T_dif[0])**3 + self.fM_2 * (T_dif[0])**2 + self.fM_1 * (T_dif[0])) - (self.fM_3 * (self.T_start)**3 + self.fM_2 * (self.T_start)**2 + self.fM_1 * (self.T_start)))/ self.fM_0
 
-            def mass_to_thickness(mass):
-                return (mass / self.mat_dens) / self.sens_area  # in meters
+            compensated_m_freq = self.fM_start + self.fM_0 * M_dif  # measured freq minus the thermal shift
 
-            # conversion from mass to thickness using the material density and sensor area
-            uncompensated_thickness = mass_to_thickness(fM_dif / self.fM_0)  # in meters
-            uncompensated_thickness_nm = uncompensated_thickness * 1e9  # convert m to nm
-            
-            compensated_thickness = mass_to_thickness(M_dif)  # in meters
-            compensated_thickness_nm = compensated_thickness * 1e9  # convert m to nm
-
-            compensated_m_freq = self.fM_start + self.fM_0 * M_dif 
+            # frequency -> thickness via the Z-match (Lu-Lewis) equation; the raw
+            # frequency gives the uncompensated value, the temperature-clean
+            # compensated frequency gives the compensated one.
+            uncompensated_thickness_nm = self.freq_to_thickness(self.fM_start, fM) * 1e9
+            compensated_thickness_nm = self.freq_to_thickness(self.fM_start, compensated_m_freq) * 1e9
 
             return T_dif[0], uncompensated_thickness_nm, compensated_thickness_nm, compensated_m_freq
         except Exception as e:

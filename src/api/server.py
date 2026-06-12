@@ -251,7 +251,7 @@ class RestServer:
             profile.fM_0, profile.fM_1, profile.fM_2, profile.fM_3,
             profile.fT_0, profile.fT_1, profile.fT_2, profile.fT_3,
         ))
-        self.command_queue.put(SetSensorParamsCommand(profile.mass_sensitivity, profile.sens_area))
+        self.command_queue.put(SetSensorParamsCommand(profile.mass_sensitivity, profile.sens_area, profile.freq_virgin))
 
     def _enqueue_boot_settings(self):
         """Push persisted settings to the hardware at startup so saved values take
@@ -430,8 +430,9 @@ class RestServer:
         # ---- Measurement control ----
 
         @app.post("/measurement/start")
-        def start_measurement(ambient_temp: float):
-            self.command_queue.put(StartMeasurementCommand(ambient_temp=ambient_temp))
+        def start_measurement(ambient_temp: float, mat_dens: float = 19320.0, z_ratio: float = 1.0):
+            self.command_queue.put(StartMeasurementCommand(
+                ambient_temp=ambient_temp, mat_dens=mat_dens, z_ratio=z_ratio))
             return {"status": "ok"}
         
         @app.post("/measurement/get_lock")
@@ -595,11 +596,13 @@ class RestServer:
             fM_0: float, fM_1: float, fM_2: float, fM_3: float,
             fT_0: float, fT_1: float, fT_2: float, fT_3: float,
             mass_sensitivity: float = -13.3e-8, sens_area: float = 5.25e-5,
+            freq_virgin: float = 0.0,
         ):
             """Save explicit crystal data from the settings form and apply it immediately."""
             profile = self._crystals.load(name) or CrystalProfile(name=name)
             profile.freq_mass = freq_mass
             profile.freq_temp = freq_temp
+            profile.freq_virgin = freq_virgin
             profile.fM_0, profile.fM_1, profile.fM_2, profile.fM_3 = fM_0, fM_1, fM_2, fM_3
             profile.fT_0, profile.fT_1, profile.fT_2, profile.fT_3 = fT_0, fT_1, fT_2, fT_3
             profile.mass_sensitivity = mass_sensitivity

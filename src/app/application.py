@@ -118,7 +118,8 @@ class Application(threading.Thread):
         Add any orchestration logic here before forwarding.
         """
         if isinstance(command, ac.StartMeasurementCommand):
-            self.worker_command_queue.put(wc.StartMeasurementCommand(ambient_temp=command.ambient_temp))
+            self.worker_command_queue.put(wc.StartMeasurementCommand(
+                ambient_temp=command.ambient_temp, mat_dens=command.mat_dens, z_ratio=command.z_ratio))
         elif isinstance(command, ac.StopMeasurementCommand):
             self.worker_command_queue.put(wc.StopMeasurementCommand())
         elif isinstance(command, ac.StartupPLLCommand):
@@ -140,7 +141,7 @@ class Application(threading.Thread):
         elif isinstance(command, ac.SetLockDetectCommand):
             self.worker_command_queue.put(wc.SetLockDetectCommand(command.amp_threshold, command.phase_tolerance))
         elif isinstance(command, ac.SetSensorParamsCommand):
-            self.worker_command_queue.put(wc.SetSensorParamsCommand(command.mass_sensitivity, command.sens_area))
+            self.worker_command_queue.put(wc.SetSensorParamsCommand(command.mass_sensitivity, command.sens_area, command.freq_virgin))
         elif isinstance(command, ac.SetCoefficientsCommand):
             self.worker_command_queue.put(wc.SetCoefficientsCommand(
                 command.fM_0, command.fM_1, command.fM_2, command.fM_3,

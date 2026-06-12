@@ -21,6 +21,8 @@ class CrystalProfile:
     # Lock start frequencies
     freq_mass: float = 5983000.0
     freq_temp: float = 6570000.0
+    # Pristine (uncoated) crystal frequency — Z-match reference; 0 = unset (use run start)
+    freq_virgin: float = 0.0
     # Calibration coefficients
     fM_0: float = 0.0
     fM_1: float = 0.0

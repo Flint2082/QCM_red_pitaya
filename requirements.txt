@@ -4,4 +4,8 @@ utils
 ipython
 uvicorn
 fastapi
-aiofiles 
+aiofiles
+
+# Python control client (tools/qcm_client.py, tools/qcm_demo.py) — client-side only
+requests
+websocket-client

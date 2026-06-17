@@ -67,6 +67,9 @@ def build_system(enable_opcua: bool = True):
         api_event_queue=api_event_queue,
         wago_client=wago if enable_opcua else None,
     )
+    # OPC-triggered actions take their parameters from the REST settings.
+    if opc_worker:
+        opc_worker.set_control(rest_server)
     rest_server.start()
 
     system = dict(

@@ -195,6 +195,25 @@ class QCMInterface:
         self.setInt(osc_index,0)
         self.reset()
 
+    def startCapAdjust(self, freq_mass, freq_temp):
+        """Emit two static (open-loop) tones for nulling the trim capacitor:
+        osc 1 at (Fm+Ft)/2 (between the modes) and osc 2 at Fm*0.9 (below the
+        mass mode) — both off-resonance, so the demodulator amplitude there is
+        dominated by the crystal's static capacitance C0. The integrators are
+        held at 0 so the NCOs stay parked; the user minimises both amplitudes by
+        tuning the PCB capacitor. Returns the two emitted frequencies."""
+        f1 = (freq_mass + freq_temp) / 2.0
+        f2 = freq_mass * 0.9
+        self.reset()
+        self.setInt(1, 0.0)
+        self.setInt(2, 0.0)
+        self.setLPFFreq(1, self._lpf_freq[1])
+        self.setLPFFreq(2, self._lpf_freq[2])
+        self.setFreq(1, f1)
+        self.setFreq(2, f2)
+        print(f"[QCM] Capacitor-adjust tones: osc1={f1:.0f} Hz, osc2={f2:.0f} Hz")
+        return f1, f2
+
     def capacitorAdjustment(self):
         self.standby(2)
         self.setFreq(1, 6000000)

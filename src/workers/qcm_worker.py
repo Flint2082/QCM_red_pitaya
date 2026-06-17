@@ -36,6 +36,11 @@ class QCMWorker(threading.Thread):
         self.LOCK_STATUS_HEARTBEAT = 1.0  # seconds
         self._last_lock_status: tuple | None = None
         self._last_lock_emit = 0.0
+        # Automatic re-lock: if both modes stay unlocked this long during a
+        # measurement, re-acquire around the last lock frequencies.
+        self.AUTO_RELOCK_AFTER = 1.0  # seconds
+        self._lock_freqs: tuple | None = None  # (mass, temp) from the last GET LOCK
+        self._lock_lost_since: float | None = None
         
     def stop(self):
         self.running = False
@@ -69,6 +74,24 @@ class QCMWorker(threading.Thread):
         self.state = new_state
         self.event_queue.put(StateEvent(state=new_state))
 
+    def _acquire_lock(self, mass: float, temp: float):
+        """Run the PLL startup around (mass, temp). If a measurement was running
+        this re-locks without stopping it (the measurement reference is left
+        untouched, so the deposition baseline and recorded data carry through);
+        otherwise it returns to IDLE. Used by GET LOCK and by the automatic
+        re-lock. Caches the frequencies for the auto re-lock to reuse."""
+        self._lock_freqs = (mass, temp)
+        resume_measuring = (self.state == WorkerState.MEASURING)
+        self._set_state(WorkerState.LOCKING)
+        locked = self.qcm.startupPLL(mass, temp)
+        if not locked:
+            self.event_queue.put(LockFailedEvent())
+        if resume_measuring:
+            self.logger.write_event("RELOCK", "lock re-established" if locked else "re-lock failed")
+        self._lock_lost_since = None  # reset the loss timer after any attempt
+        self._set_state(WorkerState.MEASURING if resume_measuring else WorkerState.IDLE)
+        return locked
+
     def handle_command(self, command: WorkerCommand):
 
         # ============================
@@ -76,19 +99,16 @@ class QCMWorker(threading.Thread):
         # ============================
 
         if isinstance(command, StartupPLLCommand):
-            # Remember whether a measurement was running so the user can
-            # re-establish lock mid-run without stopping it. The measurement
-            # reference (fM_start/fT_start/T_start) is left untouched, so the
-            # deposition baseline — and the recorded data — carry through.
-            resume_measuring = (self.state == WorkerState.MEASURING)
-            self._set_state(WorkerState.LOCKING)
-            locked = self.qcm.startupPLL(command.start_freq_mass, command.start_freq_temp)
-            if not locked:
-                self.event_queue.put(LockFailedEvent())
-            if resume_measuring:
-                # Mark the re-lock in the on-disk log so the gap is explained.
-                self.logger.write_event("RELOCK", "lock re-established" if locked else "re-lock failed")
-            self._set_state(WorkerState.MEASURING if resume_measuring else WorkerState.IDLE)
+            self._acquire_lock(command.start_freq_mass, command.start_freq_temp)
+
+        # Capacitor adjustment (open-loop tones for nulling the trim cap)
+        elif isinstance(command, StartCapAdjustCommand) and self.state == WorkerState.IDLE:
+            self.qcm.startCapAdjust(command.freq_mass, command.freq_temp)
+            self._set_state(WorkerState.CAP_ADJUST)
+        elif isinstance(command, StopCapAdjustCommand) and self.state == WorkerState.CAP_ADJUST:
+            self.qcm.standby(1)
+            self.qcm.standby(2)
+            self._set_state(WorkerState.IDLE)
 
         # Start measurement
         elif isinstance(command, StartMeasurementCommand) and self.state == WorkerState.IDLE:
@@ -181,8 +201,25 @@ class QCMWorker(threading.Thread):
             self._last_lock_status = status
             self._last_lock_emit = now
 
+        # Live amplitude feedback while adjusting the trim capacitor.
+        if self.state == WorkerState.CAP_ADJUST:
+            self.event_queue.put(CapAdjustEvent(amp_mass=self.qcm.getMag(1), amp_temp=self.qcm.getMag(2)))
+            return
+
         # Perform measurement acquisition if in measuring state
         if self.state == WorkerState.MEASURING:
+            # Automatic re-lock: if both modes stay unlocked past the threshold,
+            # re-acquire around the last lock frequencies (blocks until done).
+            if lock_mass and lock_temp:
+                self._lock_lost_since = None
+            elif self._lock_freqs is not None:
+                if self._lock_lost_since is None:
+                    self._lock_lost_since = now
+                elif now - self._lock_lost_since >= self.AUTO_RELOCK_AFTER:
+                    print("[QCM] Lock lost > 1 s — attempting automatic re-lock")
+                    self._acquire_lock(*self._lock_freqs)
+                    return  # state/timing changed during re-lock; resume next cycle
+
             data = self.qcm.getMeasurement()
             self.logger.write_measurement(data)  # durable on-disk record (WS-independent)
             self.event_queue.put(MeasurementEvent(data=data))

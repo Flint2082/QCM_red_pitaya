@@ -86,3 +86,12 @@ class SetSensorParamsCommand(WorkerCommand):
     mass_sensitivity: float
     sens_area: float
     freq_virgin: float = 0.0  # Hz — pristine crystal frequency, 0 = unset
+
+@dataclass
+class StartCapAdjustCommand(WorkerCommand):
+    freq_mass: float
+    freq_temp: float
+
+@dataclass
+class StopCapAdjustCommand(WorkerCommand):
+    pass

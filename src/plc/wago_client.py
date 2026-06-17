@@ -27,12 +27,14 @@ class WagoClient:
         password: str = "wago",
         namespace_url: str = DEFAULT_NAMESPACE_URL,
         namespace_idx: int | None = None,  # override URL lookup when index is known
+        base_node_path: str = BASE_NODE_PATH,  # user-editable node-id prefix
         auto_connect: bool = True,
     ):
         self.url = url
         self.user = user
         self.password = password
         self.namespace_url = namespace_url
+        self.base_node_path = base_node_path
         self._ns_idx_override = namespace_idx  # skip URL lookup when set
         self.client: Client | None = None
         self._ns_idx: int | None = namespace_idx  # pre-seed cache if override given
@@ -134,12 +136,16 @@ class WagoClient:
             return None
         return self._ns_idx
 
+    def set_base_node_path(self, base_node_path: str):
+        """Update the node-id prefix shared by all QCM nodes."""
+        self.base_node_path = base_node_path
+
     def build_node_id(self, key: str) -> str | None:
         """Build a full OPC-UA node ID string from a QCM key name."""
         idx = self._get_ns_idx()
         if idx is None:
             return None
-        return f"ns={idx};s={BASE_NODE_PATH}{key}"
+        return f"ns={idx};s={self.base_node_path}{key}"
 
     # --------------------------------------------------
     # Key-based read / write (convenient, one node at a time)

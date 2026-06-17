@@ -421,7 +421,15 @@ footer { height: 24px; background: var(--surface); border-top: 1px solid var(--b
             <div class="settings-row"><div><div class="settings-row-label">API Host</div><div class="settings-row-desc">Backend server address</div></div><div></div><input class="settings-input" type="text" id="s-api-host" style="width:200px;text-align:left" value=""></div>
             <div class="settings-row"><div><div class="settings-row-label">API Port</div><div class="settings-row-desc">Backend server port</div></div><div></div><div style="display:flex;align-items:center;gap:6px"><input class="settings-input" type="number" id="s-api-port" value="8000"><span class="settings-unit"></span></div></div>
           </div>
-          <button class="btn btn-blue" onclick="applySystemSettings()">APPLY SYSTEM</button>
+          <button class="btn btn-blue" onclick="applySystemSettings()" style="margin-bottom:28px">APPLY SYSTEM</button>
+
+          <div class="settings-section-title">CAPACITOR ADJUST</div>
+          <div class="settings-group">
+            <div class="settings-row"><div style="max-width:520px"><div class="settings-row-label">Trim Capacitor Tuning</div><div class="settings-row-desc">Emits two static off-resonance tones — osc 1 at (Fm+Ft)/2 and osc 2 at Fm×0.9. Turn the adjustable capacitor on the PCB to <b>minimise</b> both amplitudes below. Lower is better (green); high is bad (red).</div></div></div>
+            <div class="settings-row"><div><div class="settings-row-label">Osc 1 Amplitude</div><div class="settings-row-desc">at (Fm + Ft) / 2</div></div><div></div><div class="settings-value-lg" id="cap-amp-1" style="font-family:'DM Mono',monospace;font-size:18px;font-weight:600;color:var(--text-dim)">—</div></div>
+            <div class="settings-row"><div><div class="settings-row-label">Osc 2 Amplitude</div><div class="settings-row-desc">at Fm × 0.9</div></div><div></div><div class="settings-value-lg" id="cap-amp-2" style="font-family:'DM Mono',monospace;font-size:18px;font-weight:600;color:var(--text-dim)">—</div></div>
+          </div>
+          <button class="btn btn-blue" id="btn-cap-adjust" onclick="toggleCapAdjust()">START CAP ADJUST</button>
         </div>
 
         <div class="settings-panel" id="spanel-opc">
@@ -438,16 +446,12 @@ footer { height: 24px; background: var(--surface); border-top: 1px solid var(--b
             <div class="settings-row"><div><div class="settings-row-label">Server URL</div><div class="settings-row-desc">e.g. opc.tcp://localhost:4840</div></div><div></div><input class="settings-input" type="text" id="s-opc-url" style="width:240px;text-align:left" placeholder="opc.tcp://132.229.46.113:4840"></div>
             <div class="settings-row"><div><div class="settings-row-label">Username</div><div class="settings-row-desc">Leave blank for anonymous</div></div><div></div><input class="settings-input" type="text" id="s-opc-user" style="width:150px;text-align:left" placeholder="admin"></div>
             <div class="settings-row"><div><div class="settings-row-label">Password</div><div class="settings-row-desc"></div></div><div></div><input class="settings-input" type="password" id="s-opc-password" style="width:150px;text-align:left"></div>
+            <div class="settings-row"><div><div class="settings-row-label">Base Node Path</div><div class="settings-row-desc">Node-id prefix shared by all QCM nodes (the 's=' part before the key)</div></div><div></div><input class="settings-input" type="text" id="s-opc-base" style="width:300px;text-align:left" placeholder="|var|750-8000 ... .Application."></div>
           </div>
           <button class="btn btn-blue" onclick="connectOpc()" style="margin-bottom:28px">CONNECT</button>
-          <div class="settings-section-title">PLC SETTINGS <span style="font-size:9px;opacity:0.5;font-weight:normal">(read from PLC)</span></div>
-          <div class="settings-group">
-            <div class="settings-row"><div><div class="settings-row-label">Ambient Temperature</div></div><div></div><span id="opc-val-amb" style="font-family:'DM Mono',monospace;font-size:12px;color:var(--text-mid)">—</span></div>
-            <div class="settings-row"><div><div class="settings-row-label">Start Freq. Mass</div></div><div></div><span id="opc-val-fmass" style="font-family:'DM Mono',monospace;font-size:12px;color:var(--text-mid)">—</span></div>
-            <div class="settings-row"><div><div class="settings-row-label">Start Freq. Temp</div></div><div></div><span id="opc-val-ftemp" style="font-family:'DM Mono',monospace;font-size:12px;color:var(--text-mid)">—</span></div>
-            <div class="settings-row"><div><div class="settings-row-label">Material Density</div></div><div></div><span id="opc-val-dens" style="font-family:'DM Mono',monospace;font-size:12px;color:var(--text-mid)">—</span></div>
-            <div class="settings-row"><div><div class="settings-row-label">Z-ratio</div></div><div></div><span id="opc-val-zratio" style="font-family:'DM Mono',monospace;font-size:12px;color:var(--text-mid)">—</span></div>
-          </div>
+          <div class="settings-section-title">OPC NODES <span style="font-size:9px;opacity:0.5;font-weight:normal">(create these on your OPC server)</span></div>
+          <div class="settings-row-desc" style="margin-bottom:8px">Settings are REST-only and not exposed over OPC. The PLC reads the <b>QCM → PLC</b> nodes and pulses the <b>PLC → QCM</b> nodes to trigger actions (parameters come from the REST settings).</div>
+          <div id="opc-node-list" style="font-family:'DM Mono',monospace;font-size:10.5px;color:var(--text-mid);line-height:1.7;max-height:320px;overflow:auto;background:var(--surface-2);border:1px solid var(--border);border-radius:var(--radius);padding:8px 10px">—</div>
         </div>
 
         <!-- CRYSTALS -->
@@ -1011,6 +1015,7 @@ function connect() {
       if (ev.type === 'StateEvent')         onStateChange(ev.state);
       if (ev.type === 'SweepPointEvent')    onSweepPoint(ev);
       if (ev.type === 'SweepCompleteEvent') onSweepComplete();
+      if (ev.type === 'CapAdjustEvent')     onCapAdjust(ev);
       if (ev.type === 'OpcStatusEvent')     onOpcStatus(ev);
       if (ev.type === 'LockFailedEvent')    document.getElementById('modal-lock-failed').style.display = 'flex';
       if (ev.type === 'LockStatusEvent')    onLockStatus(ev);
@@ -1250,9 +1255,11 @@ async function loadInitialSettings() {
 
   try {
     const opc = await fetch(`${API_URL}/opc/settings`).then(r => r.json());
-    if (opc.url)  document.getElementById('s-opc-url').value  = opc.url;
-    if (opc.user) document.getElementById('s-opc-user').value = opc.user;
+    if (opc.url)       document.getElementById('s-opc-url').value  = opc.url;
+    if (opc.user)      document.getElementById('s-opc-user').value = opc.user;
+    if (opc.base_node) document.getElementById('s-opc-base').value = opc.base_node;
   } catch(e) { /* OPC bridge may not be enabled */ }
+  loadOpcNodes();
 }
 loadInitialSettings();
 
@@ -1260,13 +1267,51 @@ async function connectOpc() {
   const url      = document.getElementById('s-opc-url').value.trim();
   const user     = document.getElementById('s-opc-user').value.trim();
   const password = document.getElementById('s-opc-password').value;
+  const base     = document.getElementById('s-opc-base').value.trim();
   if (!url) { showToast('Enter a server URL', true); return; }
   try {
-    const params = `url=${encodeURIComponent(url)}&user=${encodeURIComponent(user)}&password=${encodeURIComponent(password)}`;
+    const params = `url=${encodeURIComponent(url)}&user=${encodeURIComponent(user)}&password=${encodeURIComponent(password)}&base_node=${encodeURIComponent(base)}`;
     const r = await fetch(`${API_URL}/opc/connect?${params}`, { method: 'POST' });
-    if (r.ok) showToast('Reconnecting…');
+    if (r.ok) { showToast('Reconnecting…'); loadOpcNodes(); }
     else showToast('Connect failed', true);
   } catch(e) { showToast('Connect failed', true); }
+}
+
+// Populate the OPC node list (item 6) so the tree can be replicated on the PLC.
+async function loadOpcNodes() {
+  const el = document.getElementById('opc-node-list');
+  if (!el) return;
+  try {
+    const d = await fetch(`${API_URL}/opc/nodes`).then(r => r.json());
+    const row = n => `<div><span style="color:var(--text-dim)">[${n.direction}]</span> ${n.node_id}</div>`;
+    el.innerHTML =
+      `<div style="color:var(--text-dim);margin-bottom:4px">base: ${d.base_node_path || '(unset)'}</div>` +
+      (d.read || []).map(row).join('') +
+      (d.ctrl || []).map(row).join('');
+  } catch(e) { el.textContent = 'OPC bridge not available'; }
+}
+
+// ---- Capacitor adjust ----
+function toggleCapAdjust() {
+  const btn = document.getElementById('btn-cap-adjust');
+  const active = btn && btn.classList.contains('btn-red');
+  fetch(`${API_URL}/cap_adjust/${active ? 'stop' : 'start'}`, { method: 'POST' })
+    .catch(e => showToast('Cap-adjust command failed', true));
+}
+
+function onCapAdjust(ev) {
+  setCapAmp('cap-amp-1', ev.amp_mass);
+  setCapAmp('cap-amp-2', ev.amp_temp);
+}
+
+function setCapAmp(id, amp) {
+  const el = document.getElementById(id);
+  if (!el) return;
+  if (amp == null) { el.textContent = '—'; el.style.color = 'var(--text-dim)'; return; }
+  el.textContent = Number(amp).toFixed(5);
+  // Lower amplitude is better: green (low) → red (high).
+  const a = Math.max(0, Math.min(1, Math.abs(amp)));
+  el.style.color = `hsl(${(120 * (1 - a)).toFixed(0)}, 70%, 55%)`;
 }
 
 function updateStartStopBtns(state) {
@@ -1288,6 +1333,23 @@ function updateStartStopBtns(state) {
       btn.disabled = true;
     }
   });
+}
+
+function updateCapAdjustBtn(state) {
+  const btn = document.getElementById('btn-cap-adjust');
+  if (!btn) return;
+  if (state === 'CAP_ADJUST') {
+    btn.className = 'btn btn-red';
+    btn.textContent = 'STOP CAP ADJUST';
+    btn.disabled = false;
+  } else {
+    btn.className = 'btn btn-blue';
+    btn.textContent = 'START CAP ADJUST';
+    // Only startable from idle (a lock must exist so Fm/Ft are meaningful).
+    btn.disabled = (state !== 'IDLE');
+    setCapAmp('cap-amp-1', null);   // clear stale readouts when leaving the mode
+    setCapAmp('cap-amp-2', null);
+  }
 }
 
 const _lockSvg = '<svg viewBox="0 0 12 12"><path d="M6 1a3 3 0 0 0-3 3v1H2v6h8V5H9V4a3 3 0 0 0-3-3zm0 1.5a1.5 1.5 0 0 1 1.5 1.5v1h-3V4A1.5 1.5 0 0 1 6 2.5z"/></svg>';
@@ -1329,6 +1391,7 @@ function onStateChange(state) {
   setLockBtnState(state === 'LOCKING');
 
   updateStartStopBtns(state);
+  updateCapAdjustBtn(state);
 
   // Run lifecycle. A run spans re-locks, which move RUNNING -> LOCKING -> RUNNING,
   // so it must NOT be treated as a stop+start. The buffer is cleared only on a
@@ -1399,12 +1462,6 @@ function onOpcStatus(ev) {
   document.getElementById('opc-dot').className       = 'ws-dot ' + (connected ? 'connected' : 'error');
   document.getElementById('opc-panel-dot').className = 'ws-dot ' + (connected ? 'connected' : 'error');
   document.getElementById('opc-panel-label').textContent = connected ? 'CONNECTED' : 'DISCONNECTED';
-  const fmtv = (v, unit) => v != null ? `${v} ${unit}`.trim() : '—';
-  document.getElementById('opc-val-amb').textContent    = fmtv(ev.ambient_temp,    '°C');
-  document.getElementById('opc-val-fmass').textContent  = fmtv(ev.start_freq_mass, 'Hz');
-  document.getElementById('opc-val-ftemp').textContent  = fmtv(ev.start_freq_temp, 'Hz');
-  document.getElementById('opc-val-dens').textContent   = fmtv(ev.density,         'kg/m³');
-  document.getElementById('opc-val-zratio').textContent = fmtv(ev.z_ratio,         '');
 }
 
 // ---- Commands ----

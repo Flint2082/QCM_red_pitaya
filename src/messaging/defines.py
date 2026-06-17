@@ -6,6 +6,7 @@ class WorkerState(Enum):
     MEASURING = auto()
     SWEEPING = auto()
     CALIBRATING = auto()
+    CAP_ADJUST = auto()
     
 class OutputMode(Enum):
     DELTA = 0

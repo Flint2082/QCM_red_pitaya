@@ -42,6 +42,11 @@ class LockStatusEvent(Event):
     lock_temp: bool
 
 @dataclass
+class CapAdjustEvent(Event):
+    amp_mass: float
+    amp_temp: float
+
+@dataclass
 class StartFreqAutoUpdatedEvent(Event):
     freq_mass: float
     freq_temp: float

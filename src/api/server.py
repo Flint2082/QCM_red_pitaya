@@ -25,6 +25,7 @@ from fastapi.staticfiles import StaticFiles
 
 from domain.crystal import CrystalManager, CrystalProfile, sanitize_name
 from domain.run_logger import RUNS_DIR
+from plc.opc_worker import _READ_KEYS as OPC_READ_KEYS, _CTRL_KEYS as OPC_CTRL_KEYS
 from messaging.api_command import *
 from messaging.api_event import LogEvent
 from messaging.defines import OutputMode
@@ -171,6 +172,11 @@ class RestServer:
         # Lock-detect conditions (defaults match QCMInterface)
         self._lock_amp_threshold: float = 0.1
         self._lock_phase_tolerance: float = 0.05
+        # Per-run measurement params — last values from a REST start, reused for
+        # OPC-triggered starts (so OPC needs no settings of its own).
+        self._ambient_temp: float = 23.0
+        self._mat_dens: float = 19320.0
+        self._z_ratio: float = 1.0
         # Coefficient cache — reflects the active crystal (no standalone CSV)
         self._coefficients: dict | None = None
         # Crystal profiles
@@ -211,11 +217,19 @@ class RestServer:
             self._lock_phase_tolerance = float(d["lock_phase_tolerance"])
         if "active_crystal" in d:
             self._active_crystal = d["active_crystal"]
+        if "ambient_temp" in d:
+            self._ambient_temp = float(d["ambient_temp"])
+        if "mat_dens" in d:
+            self._mat_dens = float(d["mat_dens"])
+        if "z_ratio" in d:
+            self._z_ratio = float(d["z_ratio"])
         # Restore OPC connection parameters without triggering a reconnect
         if self._wago_client and "opc_url" in d:
             self._wago_client.url      = d["opc_url"]
             self._wago_client.user     = d.get("opc_user", "")
             self._wago_client.password = d.get("opc_password", "")
+            if d.get("opc_base_node"):
+                self._wago_client.set_base_node_path(d["opc_base_node"])
 
     def _save_settings(self):
         data = {
@@ -224,17 +238,35 @@ class RestServer:
             "lock_amp_threshold":   self._lock_amp_threshold,
             "lock_phase_tolerance": self._lock_phase_tolerance,
             "active_crystal": self._active_crystal,
+            "ambient_temp": self._ambient_temp,
+            "mat_dens": self._mat_dens,
+            "z_ratio": self._z_ratio,
         }
         if self._wago_client:
-            data["opc_url"]      = self._wago_client.url
-            data["opc_user"]     = self._wago_client.user
-            data["opc_password"] = self._wago_client.password
+            data["opc_url"]       = self._wago_client.url
+            data["opc_user"]      = self._wago_client.user
+            data["opc_password"]  = self._wago_client.password
+            data["opc_base_node"] = self._wago_client.base_node_path
         try:
             os.makedirs(os.path.dirname(self._settings_file), exist_ok=True)
             with open(self._settings_file, "w") as f:
                 json.dump(data, f, indent=2)
         except Exception as e:
             print(f"[Settings] Save failed: {e}")
+
+    # --------------------------------------------------
+    # Control parameters (consumed by the OPC bridge for triggered actions)
+    # --------------------------------------------------
+
+    def get_control_params(self) -> dict:
+        """Current REST-owned parameters used when OPC triggers an action."""
+        return {
+            "ambient_temp":   self._ambient_temp,
+            "mat_dens":       self._mat_dens,
+            "z_ratio":        self._z_ratio,
+            "lock_freq_mass": self._lock_freq_mass,
+            "lock_freq_temp": self._lock_freq_temp,
+        }
 
     def _apply_crystal(self, profile: CrystalProfile):
         """Push a crystal's settings into server state and the command queue.
@@ -438,8 +470,22 @@ class RestServer:
 
         @app.post("/measurement/start")
         def start_measurement(ambient_temp: float, mat_dens: float = 19320.0, z_ratio: float = 1.0):
+            # Remember the params so OPC-triggered starts reuse them, and persist.
+            self._ambient_temp, self._mat_dens, self._z_ratio = ambient_temp, mat_dens, z_ratio
+            self._save_settings()
             self.command_queue.put(StartMeasurementCommand(
                 ambient_temp=ambient_temp, mat_dens=mat_dens, z_ratio=z_ratio))
+            return {"status": "ok"}
+
+        @app.post("/cap_adjust/start")
+        def cap_adjust_start():
+            self.command_queue.put(StartCapAdjustCommand(
+                freq_mass=self._lock_freq_mass, freq_temp=self._lock_freq_temp))
+            return {"status": "ok"}
+
+        @app.post("/cap_adjust/stop")
+        def cap_adjust_stop():
+            self.command_queue.put(StopCapAdjustCommand())
             return {"status": "ok"}
         
         @app.post("/measurement/get_lock")
@@ -711,16 +757,34 @@ class RestServer:
             return {
                 "url":       c.url       if c else "",
                 "user":      c.user      if c else "",
+                "base_node": c.base_node_path if c else "",
                 "connected": c.is_connected if c else False,
             }
 
         @app.post("/opc/connect")
-        def opc_connect(url: str, user: str = "", password: str = ""):
+        def opc_connect(url: str, user: str = "", password: str = "", base_node: str | None = None):
             if not self._wago_client:
                 raise HTTPException(503, "OPC-UA bridge not enabled")
+            if base_node is not None:
+                self._wago_client.set_base_node_path(base_node)
             self._wago_client.set_connection(url, user, password)
             self._save_settings()
             return {"status": "ok", "url": url}
+
+        @app.get("/opc/nodes")
+        def opc_nodes():
+            """The OPC-UA node tree this system uses, so it can be replicated on
+            the PLC's OPC server. node_id is the string identifier (the 's=' part)."""
+            base = self._wago_client.base_node_path if self._wago_client else ""
+            def entries(keys, direction):
+                return [{"key": k, "direction": direction, "node_id": base + k} for k in keys]
+            return {
+                "base_node_path": base,
+                # READ = published by the QCM (PLC reads). CTRL = PLC writes a
+                # rising edge to trigger the action (params come from REST).
+                "read": entries(OPC_READ_KEYS, "QCM → PLC"),
+                "ctrl": entries(OPC_CTRL_KEYS, "PLC → QCM"),
+            }
 
         # ---- Health ----
 

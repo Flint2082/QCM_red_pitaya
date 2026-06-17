@@ -22,6 +22,7 @@ _STATE_MAP = {
     WorkerState.MEASURING:   "RUNNING",
     WorkerState.SWEEPING:    "SWEEPING",
     WorkerState.CALIBRATING: "IDLE",
+    WorkerState.CAP_ADJUST:  "CAP_ADJUST",
 }
 
 
@@ -142,6 +143,10 @@ class Application(threading.Thread):
             self.worker_command_queue.put(wc.SetLockDetectCommand(command.amp_threshold, command.phase_tolerance))
         elif isinstance(command, ac.SetSensorParamsCommand):
             self.worker_command_queue.put(wc.SetSensorParamsCommand(command.mass_sensitivity, command.sens_area, command.freq_virgin))
+        elif isinstance(command, ac.StartCapAdjustCommand):
+            self.worker_command_queue.put(wc.StartCapAdjustCommand(command.freq_mass, command.freq_temp))
+        elif isinstance(command, ac.StopCapAdjustCommand):
+            self.worker_command_queue.put(wc.StopCapAdjustCommand())
         elif isinstance(command, ac.SetCoefficientsCommand):
             self.worker_command_queue.put(wc.SetCoefficientsCommand(
                 command.fM_0, command.fM_1, command.fM_2, command.fM_3,
@@ -192,6 +197,9 @@ class Application(threading.Thread):
 
         elif isinstance(event, we.LockStatusEvent):
             self._emit(ae.LockStatusEvent(lock_mass=event.lock_mass, lock_temp=event.lock_temp))
+
+        elif isinstance(event, we.CapAdjustEvent):
+            self._emit(ae.CapAdjustEvent(amp_mass=event.amp_mass, amp_temp=event.amp_temp))
 
         elif isinstance(event, we.StartFreqAutoUpdatedEvent):
             print(f"[Application] Auto-updated start freqs: mass={event.freq_mass:.0f} Hz, temp={event.freq_temp:.0f} Hz")

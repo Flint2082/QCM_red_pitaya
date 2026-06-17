@@ -40,9 +40,9 @@ To have the control software start automatically on every boot, install the
 provided systemd unit ([`deploy/qcm.service`](../deploy/qcm.service)):
 
 ```bash
-sudo cp /root/QCM_red_pitaya/deploy/qcm.service /etc/systemd/system/qcm.service
-sudo systemctl daemon-reload
-sudo systemctl enable --now qcm.service     # start now AND on every boot
+cp /root/QCM_red_pitaya/deploy/qcm.service /etc/systemd/system/qcm.service
+systemctl daemon-reload
+systemctl enable --now qcm.service     # start now AND on every boot
 ```
 
 Useful commands:
@@ -50,9 +50,9 @@ Useful commands:
 ```bash
 systemctl status qcm        # is it running?
 journalctl -u qcm -f        # live logs
-sudo systemctl restart qcm  # restart after a code update
-sudo systemctl stop qcm     # stop (e.g. to run manually / in --dev)
-sudo systemctl disable qcm  # stop launching on boot
+systemctl restart qcm  # restart after a code update
+systemctl stop qcm     # stop (e.g. to run manually / in --dev)
+systemctl disable qcm  # stop launching on boot
 ```
 
 The unit assumes the repo is at `/root/QCM_red_pitaya` with the venv at

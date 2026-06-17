@@ -29,8 +29,36 @@ numpy does not provide a wheel for this platform. To avoid building it from sour
 ```bash
 cd QCM_red_pitaya
 python3 -m venv --system-site-packages .venv
+.venv/bin/pip install -r requirements.txt
 ```
 
 ---
+
+## Run on boot (systemd)
+
+To have the control software start automatically on every boot, install the
+provided systemd unit ([`deploy/qcm.service`](../deploy/qcm.service)):
+
+```bash
+sudo cp /root/QCM_red_pitaya/deploy/qcm.service /etc/systemd/system/qcm.service
+sudo systemctl daemon-reload
+sudo systemctl enable --now qcm.service     # start now AND on every boot
+```
+
+Useful commands:
+
+```bash
+systemctl status qcm        # is it running?
+journalctl -u qcm -f        # live logs
+sudo systemctl restart qcm  # restart after a code update
+sudo systemctl stop qcm     # stop (e.g. to run manually / in --dev)
+sudo systemctl disable qcm  # stop launching on boot
+```
+
+The unit assumes the repo is at `/root/QCM_red_pitaya` with the venv at
+`.venv`. If your paths differ, edit `WorkingDirectory` and `ExecStart` in the
+unit accordingly. It runs as `root` (required for `/dev/mem` and the FPGA
+bitstream load), waits for the network, and restarts automatically if the
+process exits.
 
 ---

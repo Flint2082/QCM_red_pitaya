@@ -1,0 +1,27 @@
+[Unit]
+Description=QCM Red Pitaya measurement service
+# Wait for the network so the REST/WebSocket server and the OPC-UA bridge can bind/connect.
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+# Root is required: the program memory-maps /dev/mem and loads the FPGA bitstream via fpgautil.
+User=root
+# Must run from src/ — the bitstream is loaded via the relative path ../bitstream/top.bit.bin,
+# and src/ must be on sys.path for the package imports (domain, api, app, ...).
+WorkingDirectory=/root/QCM_red_pitaya/src
+ExecStart=/root/QCM_red_pitaya/.venv/bin/python main.py
+# Add --no-opcua to the line above if this unit runs without a WAGO PLC.
+
+# Keep it alive across crashes / hardware hiccups.
+Restart=always
+RestartSec=5
+
+# Logs go to the journal: view with `journalctl -u qcm -f`.
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=qcm
+
+[Install]
+WantedBy=multi-user.target

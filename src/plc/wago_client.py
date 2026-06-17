@@ -58,6 +58,7 @@ class WagoClient:
         self.disconnect()
 
     def connect(self) -> bool:
+        c = None
         try:
             c = Client(self.url)
             # Only send credentials if provided — test servers often have no user manager
@@ -73,6 +74,13 @@ class WagoClient:
             return True
         except Exception as e:
             print(f"[WAGO] Connection failed: {e}")
+            # connect() may fail after threads/socket were partially started —
+            # tear the half-open client down so nothing is left running.
+            if c is not None:
+                try:
+                    c.disconnect()
+                except Exception:
+                    pass
             self.client = None
             return False
 
@@ -90,6 +98,26 @@ class WagoClient:
     def reconnect(self) -> bool:
         self.disconnect()
         return self.connect()
+
+    def _drop_connection(self):
+        """Tear down the client after an I/O error.
+
+        Critically this calls the library's disconnect() instead of merely
+        nulling our reference. Orphaning the Client leaves its internal threads
+        running against the dead socket: the KeepAlive thread keeps calling
+        open_secure_channel(renew=True) and crashes with an uncaught
+        BrokenPipeError, and pending subscription-delete callbacks raise
+        CancelledError. disconnect() stops (and joins) the keepalive thread
+        before any network I/O, so those threads shut down cleanly."""
+        client = self.client
+        self.client = None
+        self._ns_idx = self._ns_idx_override
+        if client is None:
+            return
+        try:
+            client.disconnect()
+        except Exception:
+            pass  # socket already dead — we only care that the threads stop
 
     # --------------------------------------------------
     # Node ID helpers
@@ -127,7 +155,7 @@ class WagoClient:
             return self.client.get_node(node_id).get_value()
         except Exception as e:
             print(f"[WAGO] Read failed for '{key}': {e}")
-            self.client = None
+            self._drop_connection()
             return None
 
     def write_by_key(self, key: str, value) -> bool:
@@ -141,7 +169,7 @@ class WagoClient:
             return True
         except Exception as e:
             print(f"[WAGO] Write failed for '{key}': {e}")
-            self.client = None
+            self._drop_connection()
             return False
 
     # --------------------------------------------------
@@ -179,7 +207,7 @@ class WagoClient:
             }
         except Exception as e:
             print(f"[WAGO] Batch read failed: {e}")
-            self.client = None
+            self._drop_connection()
             return None
 
     def batch_write_by_keys(self, kv: dict[str, object]) -> bool:
@@ -208,7 +236,7 @@ class WagoClient:
             return True
         except Exception as e:
             print(f"[WAGO] Batch write failed: {e}")
-            self.client = None
+            self._drop_connection()
             return False
 
     # --------------------------------------------------

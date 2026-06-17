@@ -24,6 +24,7 @@ from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 
 from domain.crystal import CrystalManager, CrystalProfile, sanitize_name
+from domain.run_logger import RUNS_DIR
 from messaging.api_command import *
 from messaging.api_event import LogEvent
 from messaging.defines import OutputMode
@@ -329,6 +330,12 @@ class RestServer:
             port=8000,
             loop="asyncio",
             ws="websockets", # explicitly tell uvicorn which WS library to use
+            # Keepalive: ping every 20 s (keeps NAT/firewall mappings alive and
+            # detects dead peers) but tolerate up to 120 s without a pong before
+            # dropping, so a brief event-loop stall or network blip doesn't kill
+            # an otherwise-healthy connection. Default ws_ping_timeout is only 20 s.
+            ws_ping_interval=20.0,
+            ws_ping_timeout=120.0,
             log_level="info",
         )
         self._server = uvicorn.Server(config)
@@ -651,6 +658,34 @@ class RestServer:
             if not os.path.exists(path):
                 raise HTTPException(404, "Crystal not found")
             return FileResponse(path, filename=f"{name}.json", media_type="application/json")
+
+        # ---- Server-side run logs (written to disk by the worker) ----
+
+        @app.get("/runs")
+        def list_runs():
+            """Run CSVs saved on the Pitaya, newest first."""
+            out = []
+            try:
+                for f in os.listdir(RUNS_DIR):
+                    if not f.endswith(".csv"):
+                        continue
+                    try:
+                        st = os.stat(os.path.join(RUNS_DIR, f))
+                        out.append({"name": f, "size": st.st_size, "modified": st.st_mtime})
+                    except OSError:
+                        pass
+            except FileNotFoundError:
+                pass
+            out.sort(key=lambda r: r["modified"], reverse=True)
+            return {"runs": out}
+
+        @app.get("/runs/{name}/download")
+        def download_run(name: str):
+            safe = os.path.basename(name)  # strip any path components (no traversal)
+            path = os.path.join(RUNS_DIR, safe)
+            if not safe.endswith(".csv") or not os.path.exists(path):
+                raise HTTPException(404, "Run not found")
+            return FileResponse(path, filename=safe, media_type="text/csv")
 
         # ---- Sweep ----
 

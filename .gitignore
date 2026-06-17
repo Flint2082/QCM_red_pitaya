@@ -6,6 +6,9 @@
 *.Xil*
 *.egg*
 
+# Server-side run logs written at runtime
+data/runs/
+
 !model_composer/qcm_rp
 !model_composer/qcm_rp/outputs
 !model_composer/qcm_rp/outputs/*.fpg

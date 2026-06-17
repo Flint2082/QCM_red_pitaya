@@ -220,12 +220,19 @@ class OPCUAWorker(threading.Thread):
             self._subscription = None
 
     def _teardown_ctrl_subscription(self):
-        if self._subscription is not None:
+        if self._subscription is None:
+            return
+        # Only actively delete the subscription while still connected. If the
+        # connection already dropped, WagoClient._drop_connection() has called
+        # the library's disconnect(), which cleans the subscription up
+        # server-side. Calling delete() over the dead socket would only spawn a
+        # noisy CancelledError traceback from python-opcua's async layer.
+        if self.client.is_connected:
             try:
                 self._subscription.delete()
             except Exception:
                 pass
-            self._subscription = None
+        self._subscription = None
 
     # --------------------------------------------------
     # Status events → status_queue

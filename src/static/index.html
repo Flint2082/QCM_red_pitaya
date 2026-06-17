@@ -480,7 +480,7 @@ footer { height: 24px; background: var(--surface); border-top: 1px solid var(--b
           <div class="settings-group">
             <div class="settings-row"><div><div class="settings-row-label">Mass Lock Freq</div><div class="settings-row-desc">PLL start frequency — OSC 1</div></div><div></div><div style="display:flex;align-items:center;gap:6px"><input class="settings-input" type="number" id="s-crystal-freq-mass" value="5983000" step="1000"><span class="settings-unit">Hz</span></div></div>
             <div class="settings-row"><div><div class="settings-row-label">Temp Lock Freq</div><div class="settings-row-desc">PLL start frequency — OSC 2</div></div><div></div><div style="display:flex;align-items:center;gap:6px"><input class="settings-input" type="number" id="s-crystal-freq-temp" value="6570000" step="1000"><span class="settings-unit">Hz</span></div></div>
-            <div class="settings-row"><div><div class="settings-row-label">Virgin Frequency</div><div class="settings-row-desc">Pristine uncoated crystal frequency — Z-match reference, 0 = use run start</div></div><div></div><div style="display:flex;align-items:center;gap:6px"><input class="settings-input" type="number" id="s-crystal-freq-virgin" value="0" step="1000"><span class="settings-unit">Hz</span></div></div>
+            <div class="settings-row"><div><div class="settings-row-label">Virgin Frequency</div><div class="settings-row-desc">Pristine uncoated crystal mass-mode frequency — Z-match reference, 0 = use run start</div></div><div></div><div style="display:flex;align-items:center;gap:6px"><input class="settings-input" type="number" id="s-crystal-freq-virgin" value="0" step="1000"><span class="settings-unit">Hz</span></div></div>
           </div>
 
           <div class="settings-section-title">SENSOR PARAMETERS</div>
@@ -968,19 +968,36 @@ function setWsStatus(s) {
   document.getElementById('ws-label').textContent = s === 'connected' ? 'CONNECTED' : s === 'error' ? 'ERROR' : 'DISCONNECTED';
 }
 let _wsOpenedAt = 0;
+let _wsNotifyTimer = null;     // pending "connection lost" alert (debounced)
+let _wsLostNotified = false;   // whether the lost-alert actually fired this outage
+const WS_NOTIFY_DELAY_MS = 12000;  // only alert if still offline after this long
 function connect() {
   ws = new WebSocket(WS_URL);
-  ws.onopen  = () => { setWsStatus('connected'); _prevWsConnected = true; _wsOpenedAt = Date.now(); };
+  ws.onopen  = () => {
+    setWsStatus('connected'); _prevWsConnected = true; _wsOpenedAt = Date.now();
+    // Reconnected: cancel the pending alert; if we already alerted, say it's back.
+    if (_wsNotifyTimer) { clearTimeout(_wsNotifyTimer); _wsNotifyTimer = null; }
+    if (_wsLostNotified) { showToast('Backend reconnected'); _wsLostNotified = false; }
+  };
   ws.onclose = (ev) => {
     // Diagnostics for the frequent WS drops: log close code, reason and how
     // long the socket survived. Code 1006 = abnormal (no close frame: network
     // drop or ping timeout); 1011 = server error; 1001 = going away; 1000 = clean.
     const upMs = _wsOpenedAt ? Date.now() - _wsOpenedAt : 0;
     const detail = `code=${ev.code} reason="${ev.reason || ''}" clean=${ev.wasClean} up=${(upMs/1000).toFixed(1)}s`;
+    // Log line + run-log marker fire immediately (they're quiet and the marker
+    // records the data gap), but the user-facing toast/sound is debounced so a
+    // quick auto-reconnect doesn't nag.
     onLogEvent({ level: 'WARN', message: `[WS] closed — ${detail}`, timestamp: Date.now() / 1000 });
     if (_prevWsConnected) {
-      sendNotif('QCM — WebSocket Lost', 'Connection to backend lost', 'wsLost');
       if (_isRunning) _runLog.push({ timestamp: Date.now() / 1000, type: 'WS_LOST', detail });
+      if (!_wsNotifyTimer) {
+        _wsNotifyTimer = setTimeout(() => {
+          _wsNotifyTimer = null;
+          _wsLostNotified = true;
+          sendNotif('QCM — WebSocket Lost', 'Connection to backend lost', 'wsLost');
+        }, WS_NOTIFY_DELAY_MS);
+      }
     }
     _prevWsConnected = false;
     setWsStatus('');
@@ -1141,6 +1158,17 @@ function buildRunCsv(buffer, log) {
 function downloadRunCsv() {
   document.getElementById('modal-save-csv').style.display = 'none';
   buildRunCsv(_runBuffer, _runLog);
+}
+
+// Download the complete, gap-free run that the Pitaya logged to disk (the newest
+// server-side run = the one that just finished).
+async function downloadServerRun() {
+  try {
+    const { runs } = await fetch(`${API_URL}/runs`).then(r => r.json());
+    if (!runs || !runs.length) { showToast('No server-side run found', true); return; }
+    document.getElementById('modal-save-csv').style.display = 'none';
+    window.location.href = `${API_URL}/runs/${encodeURIComponent(runs[0].name)}/download`;
+  } catch(e) { showToast('Server download failed', true); }
 }
 
 // Always-on download button: saves the latest run (the live buffer, which holds
@@ -1644,10 +1672,12 @@ function clearLogs() {
     <div class="modal-title green">RUN COMPLETE</div>
     <div class="modal-body">
       Run finished — <span id="csv-row-count">0</span> measurement points recorded.<br><br>
-      Save the data as a CSV file? The export includes all measurement channels and any logged events (lock lost, disconnections).
+      <b>Browser copy</b> is what this tab captured (may have gaps if the connection dropped).
+      <b>Server copy</b> is the complete record logged on the Red Pitaya — prefer it for the final data.
     </div>
     <div class="modal-footer">
-      <button class="btn btn-green" onclick="downloadRunCsv()">DOWNLOAD CSV</button>
+      <button class="btn btn-green" onclick="downloadServerRun()">DOWNLOAD SERVER COPY</button>
+      <button class="btn" onclick="downloadRunCsv()">DOWNLOAD BROWSER COPY</button>
       <button class="btn" onclick="document.getElementById('modal-save-csv').style.display='none'">DISMISS</button>
     </div>
   </div>

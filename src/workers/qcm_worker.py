@@ -15,6 +15,7 @@ import threading
 import queue
 
 from domain.qcm_interface import QCMInterface
+from domain.run_logger import RunLogger
 from messaging.defines import WorkerState
 from messaging.worker_event import *
 from messaging.worker_command import *
@@ -27,6 +28,8 @@ class QCMWorker(threading.Thread):
         self.event_queue = event_queue
         self.running = True
         self.state = WorkerState.IDLE
+        # Durable server-side CSV log of each run, independent of the WebSocket.
+        self.logger = RunLogger()
         # Lock-status emission throttle: send on change, plus a periodic
         # heartbeat so new WS clients converge. Unthrottled this produced
         # ~10 events/sec of WS traffic even when idle.
@@ -59,6 +62,7 @@ class QCMWorker(threading.Thread):
                     ErrorEvent(str(e))
                 )
 
+        self.logger.stop()  # flush & close any open run log on shutdown
         print("QCM worker stopped")
 
     def _set_state(self, new_state: WorkerState):
@@ -81,11 +85,16 @@ class QCMWorker(threading.Thread):
             locked = self.qcm.startupPLL(command.start_freq_mass, command.start_freq_temp)
             if not locked:
                 self.event_queue.put(LockFailedEvent())
+            if resume_measuring:
+                # Mark the re-lock in the on-disk log so the gap is explained.
+                self.logger.write_event("RELOCK", "lock re-established" if locked else "re-lock failed")
             self._set_state(WorkerState.MEASURING if resume_measuring else WorkerState.IDLE)
 
         # Start measurement
         elif isinstance(command, StartMeasurementCommand) and self.state == WorkerState.IDLE:
             self.qcm.setMeasurementReference(T=command.ambient_temp, mat_dens=command.mat_dens, z_ratio=command.z_ratio)
+            self.logger.start()
+            self.logger.write_event("RUN_START", f"T={command.ambient_temp} mat_dens={command.mat_dens} z_ratio={command.z_ratio}")
             self._set_state(WorkerState.MEASURING)
 
         # Stop measurement
@@ -97,6 +106,8 @@ class QCMWorker(threading.Thread):
                 freq_mass = round(self.qcm.getFreq(1) / 1000) * 1000
                 freq_temp = round(self.qcm.getFreq(2) / 1000) * 1000
                 self.event_queue.put(StartFreqAutoUpdatedEvent(freq_mass=freq_mass, freq_temp=freq_temp))
+            self.logger.write_event("RUN_STOP")
+            self.logger.stop()
             self._set_state(WorkerState.IDLE)
 
         # Sweep
@@ -172,5 +183,7 @@ class QCMWorker(threading.Thread):
 
         # Perform measurement acquisition if in measuring state
         if self.state == WorkerState.MEASURING:
-            self.event_queue.put(MeasurementEvent(data=self.qcm.getMeasurement()))
+            data = self.qcm.getMeasurement()
+            self.logger.write_measurement(data)  # durable on-disk record (WS-independent)
+            self.event_queue.put(MeasurementEvent(data=data))
             # self.qcm.moveWindow(fM, fT)

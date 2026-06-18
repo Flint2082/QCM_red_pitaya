@@ -649,7 +649,7 @@ class RestServer:
             fM_0: float, fM_1: float, fM_2: float, fM_3: float,
             fT_0: float, fT_1: float, fT_2: float, fT_3: float,
             mass_sensitivity: float = -13.3e-8, sens_area: float = 5.25e-5,
-            freq_virgin: float = 0.0,
+            freq_virgin: float = 6000000.0,
         ):
             """Save explicit crystal data from the settings form and apply it immediately."""
             profile = self._crystals.load(name) or CrystalProfile(name=name)

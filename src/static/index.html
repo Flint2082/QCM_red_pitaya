@@ -147,7 +147,7 @@ footer { height: 24px; background: var(--surface); border-top: 1px solid var(--b
 .modal-body ul { margin: 8px 0 0 18px; }
 .modal-body li { margin-bottom: 4px; }
 .modal-footer { display:flex; gap:8px; justify-content:flex-end; flex-wrap:wrap; }
-.crystal-stat-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 20px; }
+.crystal-stat-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-bottom: 20px; }
 .crystal-stat-cell { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 8px 12px; }
 .crystal-stat-label { font-family: 'DM Mono', monospace; font-size: 9px; color: var(--text-dim); letter-spacing: 0.1em; text-transform: uppercase; }
 .crystal-stat-value { font-family: 'DM Mono', monospace; font-size: 15px; color: var(--text); margin-top: 3px; }
@@ -470,13 +470,17 @@ footer { height: 24px; background: var(--surface); border-top: 1px solid var(--b
               <div class="crystal-stat-label">Total Deposited</div>
               <div class="crystal-stat-value"><span id="s-crystal-deposited">—</span> <span style="font-size:10px;color:var(--text-dim)">nm</span></div>
             </div>
+            <div class="crystal-stat-cell">
+              <div class="crystal-stat-label">Usage</div>
+              <div class="crystal-stat-value"><span id="s-crystal-usage">—</span> <span style="font-size:10px;color:var(--text-dim)">%</span></div>
+            </div>
           </div>
 
           <div class="settings-section-title">START FREQUENCIES</div>
           <div class="settings-group">
             <div class="settings-row"><div><div class="settings-row-label">Mass Lock Freq</div><div class="settings-row-desc">PLL start frequency — OSC 1</div></div><div></div><div style="display:flex;align-items:center;gap:6px"><input class="settings-input" type="number" id="s-crystal-freq-mass" value="5983000" step="1000"><span class="settings-unit">Hz</span></div></div>
             <div class="settings-row"><div><div class="settings-row-label">Temp Lock Freq</div><div class="settings-row-desc">PLL start frequency — OSC 2</div></div><div></div><div style="display:flex;align-items:center;gap:6px"><input class="settings-input" type="number" id="s-crystal-freq-temp" value="6570000" step="1000"><span class="settings-unit">Hz</span></div></div>
-            <div class="settings-row"><div><div class="settings-row-label">Virgin Frequency</div><div class="settings-row-desc">Pristine uncoated crystal mass-mode frequency — Z-match reference, 0 = use run start</div></div><div></div><div style="display:flex;align-items:center;gap:6px"><input class="settings-input" type="number" id="s-crystal-freq-virgin" value="0" step="1000"><span class="settings-unit">Hz</span></div></div>
+            <div class="settings-row"><div><div class="settings-row-label">Virgin Frequency</div><div class="settings-row-desc">Pristine uncoated crystal mass-mode frequency — Z-match &amp; usage reference (default 6 MHz; set 0 to use run start)</div></div><div></div><div style="display:flex;align-items:center;gap:6px"><input class="settings-input" type="number" id="s-crystal-freq-virgin" value="6000000" step="1000"><span class="settings-unit">Hz</span></div></div>
           </div>
 
           <button class="btn" id="btn-crystal-advanced" onclick="toggleCrystalAdvanced(this)" style="margin-bottom:24px"><span id="crystal-advanced-caret">▸</span>&nbsp; ADVANCED — SENSOR &amp; CALIBRATION</button>
@@ -489,14 +493,14 @@ footer { height: 24px; background: var(--surface); border-top: 1px solid var(--b
 
           <div class="settings-section-title">CALIBRATION COEFFICIENTS</div>
           <div class="settings-group">
-            <div class="settings-row"><div><div class="settings-row-label">fM_3</div><div class="settings-row-desc">Mass mode cubic term</div></div><div></div><div style="display:flex;align-items:center;gap:6px"><input class="settings-input" type="number" id="s-coeff-fM3" step="any" style="width:180px" oninput="updateCoeffCharts()"></div></div>
-            <div class="settings-row"><div><div class="settings-row-label">fM_2</div><div class="settings-row-desc">Mass mode quadratic term</div></div><div></div><div style="display:flex;align-items:center;gap:6px"><input class="settings-input" type="number" id="s-coeff-fM2" step="any" style="width:180px" oninput="updateCoeffCharts()"></div></div>
-            <div class="settings-row"><div><div class="settings-row-label">fM_1</div><div class="settings-row-desc">Mass mode linear term</div></div><div></div><div style="display:flex;align-items:center;gap:6px"><input class="settings-input" type="number" id="s-coeff-fM1" step="any" style="width:180px" oninput="updateCoeffCharts()"></div></div>
-            <div class="settings-row"><div><div class="settings-row-label">fM_0</div><div class="settings-row-desc">Mass mode constant term</div></div><div></div><div style="display:flex;align-items:center;gap:6px"><input class="settings-input" type="number" id="s-coeff-fM0" step="any" style="width:180px"></div></div>
-            <div class="settings-row"><div><div class="settings-row-label">fT_3</div><div class="settings-row-desc">Temp mode cubic term</div></div><div></div><div style="display:flex;align-items:center;gap:6px"><input class="settings-input" type="number" id="s-coeff-fT3" step="any" style="width:180px" oninput="updateCoeffCharts()"></div></div>
-            <div class="settings-row"><div><div class="settings-row-label">fT_2</div><div class="settings-row-desc">Temp mode quadratic term</div></div><div></div><div style="display:flex;align-items:center;gap:6px"><input class="settings-input" type="number" id="s-coeff-fT2" step="any" style="width:180px" oninput="updateCoeffCharts()"></div></div>
-            <div class="settings-row"><div><div class="settings-row-label">fT_1</div><div class="settings-row-desc">Temp mode linear term</div></div><div></div><div style="display:flex;align-items:center;gap:6px"><input class="settings-input" type="number" id="s-coeff-fT1" step="any" style="width:180px" oninput="updateCoeffCharts()"></div></div>
-            <div class="settings-row"><div><div class="settings-row-label">fT_0</div><div class="settings-row-desc">Temp mode constant term</div></div><div></div><div style="display:flex;align-items:center;gap:6px"><input class="settings-input" type="number" id="s-coeff-fT0" step="any" style="width:180px"></div></div>
+            <div class="settings-row"><div><div class="settings-row-label">fM_3</div><div class="settings-row-desc">Mass mode cubic term</div></div><div></div><div style="display:flex;align-items:center;gap:6px"><input class="settings-input" type="number" id="s-coeff-fM3" value="0.00037590534093399105" step="any" style="width:180px" oninput="updateCoeffCharts()"></div></div>
+            <div class="settings-row"><div><div class="settings-row-label">fM_2</div><div class="settings-row-desc">Mass mode quadratic term</div></div><div></div><div style="display:flex;align-items:center;gap:6px"><input class="settings-input" type="number" id="s-coeff-fM2" value="-0.10904938259265566" step="any" style="width:180px" oninput="updateCoeffCharts()"></div></div>
+            <div class="settings-row"><div><div class="settings-row-label">fM_1</div><div class="settings-row-desc">Mass mode linear term</div></div><div></div><div style="display:flex;align-items:center;gap:6px"><input class="settings-input" type="number" id="s-coeff-fM1" value="9.159340464734298" step="any" style="width:180px" oninput="updateCoeffCharts()"></div></div>
+            <div class="settings-row"><div><div class="settings-row-label">fM_0</div><div class="settings-row-desc">Mass mode constant term</div></div><div></div><div style="display:flex;align-items:center;gap:6px"><input class="settings-input" type="number" id="s-coeff-fM0" value="5982438.448062406" step="any" style="width:180px"></div></div>
+            <div class="settings-row"><div><div class="settings-row-label">fT_3</div><div class="settings-row-desc">Temp mode cubic term</div></div><div></div><div style="display:flex;align-items:center;gap:6px"><input class="settings-input" type="number" id="s-coeff-fT3" value="-0.0025499455088113026" step="any" style="width:180px" oninput="updateCoeffCharts()"></div></div>
+            <div class="settings-row"><div><div class="settings-row-label">fT_2</div><div class="settings-row-desc">Temp mode quadratic term</div></div><div></div><div style="display:flex;align-items:center;gap:6px"><input class="settings-input" type="number" id="s-coeff-fT2" value="1.2282423071087347" step="any" style="width:180px" oninput="updateCoeffCharts()"></div></div>
+            <div class="settings-row"><div><div class="settings-row-label">fT_1</div><div class="settings-row-desc">Temp mode linear term</div></div><div></div><div style="display:flex;align-items:center;gap:6px"><input class="settings-input" type="number" id="s-coeff-fT1" value="-231.43245120384452" step="any" style="width:180px" oninput="updateCoeffCharts()"></div></div>
+            <div class="settings-row"><div><div class="settings-row-label">fT_0</div><div class="settings-row-desc">Temp mode constant term</div></div><div></div><div style="display:flex;align-items:center;gap:6px"><input class="settings-input" type="number" id="s-coeff-fT0" value="6574158.7173102535" step="any" style="width:180px"></div></div>
           </div>
 
           <!-- Polynomial preview graphs (constant term excluded — shows Δf vs ΔT) -->
@@ -634,6 +638,7 @@ let _runActive = false;       // true for the whole run, spanning RUNNING -> LOC
 let _startRequested = false;  // set when the user presses START, consumed on the next RUNNING transition
 let _sweepRunning = false;
 let _runPoints = 0;  // measurement points received this run (drives the download button + row count)
+let _runStartFm = null;  // first mass-mode freq of the current run — virgin reference when Virgin Freq is 0
 
 // ---- Tab switching ----
 function switchTab(name, el) {
@@ -890,6 +895,16 @@ function fmt(v, d = 3) { return (v == null) ? '—' : Number(v).toFixed(d); }
 function setMeta(id, v, u) { const el = document.getElementById(id); if (el) el.textContent = v != null ? `${fmt(v,4)} ${u}` : '—'; }
 function setText(id, v) { const el = document.getElementById(id); if (el) el.textContent = v; }
 
+// Crystal usage = current Fm / virgin Fm × 100. Virgin Freq field is the reference;
+// when it's 0 ("use run start") fall back to the first Fm seen this run.
+function updateCrystalUsage(currentFm) {
+  const el = document.getElementById('s-crystal-usage');
+  if (!el || currentFm == null) return;
+  const virginInput = parseFloat(document.getElementById('s-crystal-freq-virgin')?.value);
+  const virgin = (virginInput > 0) ? virginInput : _runStartFm;
+  el.textContent = virgin ? (currentFm / virgin * 100).toFixed(2) : '—';
+}
+
 function onMeasurement(e) {
   const ts = e.timestamp ? new Date(e.timestamp * 1000).toLocaleTimeString() : '';
 
@@ -898,6 +913,8 @@ function onMeasurement(e) {
   setText('val-uncomp',  fmt(e.uncompensated_thickness, 4));
   setText('val-fM',      fmt(e.freq_mass_mode, 2));
   setText('val-fT',      fmt(e.freq_temp_mode, 2));
+  if (e.freq_mass_mode != null && _runStartFm == null) _runStartFm = e.freq_mass_mode;
+  updateCrystalUsage(e.freq_mass_mode);
   setText('val-comp-fM', fmt(e.compensated_freq, 2));
   setText('val-comp-a',  fmt(e.calculated_thickness, 4));
   setText('val-uncomp-a',fmt(e.uncompensated_thickness, 4));
@@ -1126,7 +1143,7 @@ async function loadCrystalForm(name) {
     document.getElementById('s-crystal-deposited').textContent = (p.total_deposited ?? 0).toFixed(2);
     document.getElementById('s-crystal-mass-sens').value = p.mass_sensitivity ?? -13.3e-8;
     document.getElementById('s-crystal-sens-area').value = p.sens_area ?? 5.25e-5;
-    document.getElementById('s-crystal-freq-virgin').value = p.freq_virgin ?? 0;
+    document.getElementById('s-crystal-freq-virgin').value = p.freq_virgin ?? 6000000;
     const coeffMap = { fM0:'fM_0', fM1:'fM_1', fM2:'fM_2', fM3:'fM_3',
                        fT0:'fT_0', fT1:'fT_1', fT2:'fT_2', fT3:'fT_3' };
     for (const [id, key] of Object.entries(coeffMap)) {
@@ -1328,6 +1345,7 @@ function onStateChange(state) {
   if (_isRunning) {
     if (_startRequested) {
       _runPoints = 0;
+      _runStartFm = null;
       _startRequested = false;
     }
     _runActive = true;  // covers fresh start, re-lock resume, and joining an in-progress run after a refresh
@@ -1453,11 +1471,11 @@ async function applyCrystal() {
 const CRYSTAL_DEFAULTS = {
   's-crystal-freq-mass': 5983000,
   's-crystal-freq-temp': 6570000,
-  's-crystal-freq-virgin': 0,
+  's-crystal-freq-virgin': 6000000,
   's-crystal-mass-sens': -13.3e-8,
   's-crystal-sens-area': 5.25e-5,
-  's-coeff-fM0': 0, 's-coeff-fM1': 0, 's-coeff-fM2': 0, 's-coeff-fM3': 0,
-  's-coeff-fT0': 0, 's-coeff-fT1': 0, 's-coeff-fT2': 0, 's-coeff-fT3': 0,
+  's-coeff-fM0': 5982438.448062406, 's-coeff-fM1': 9.159340464734298, 's-coeff-fM2': -0.10904938259265566, 's-coeff-fM3': 0.00037590534093399105,
+  's-coeff-fT0': 6574158.7173102535, 's-coeff-fT1': -231.43245120384452, 's-coeff-fT2': 1.2282423071087347, 's-coeff-fT3': -0.0025499455088113026,
 };
 
 function revertCrystalDefaults() {

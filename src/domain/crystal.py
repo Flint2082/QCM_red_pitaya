@@ -21,17 +21,17 @@ class CrystalProfile:
     # Lock start frequencies
     freq_mass: float = 5983000.0
     freq_temp: float = 6570000.0
-    # Pristine (uncoated) crystal frequency — Z-match reference; 0 = unset (use run start)
-    freq_virgin: float = 0.0
-    # Calibration coefficients
-    fM_0: float = 0.0
-    fM_1: float = 0.0
-    fM_2: float = 0.0
-    fM_3: float = 0.0
-    fT_0: float = 0.0
-    fT_1: float = 0.0
-    fT_2: float = 0.0
-    fT_3: float = 0.0
+    # Pristine (uncoated) crystal frequency — Z-match reference; default 6 MHz, 0 = use run start
+    freq_virgin: float = 6000000.0
+    # Calibration coefficients (default: reference AT-cut calibration)
+    fM_0: float = 5982438.448062406
+    fM_1: float = 9.159340464734298
+    fM_2: float = -0.10904938259265566
+    fM_3: float = 0.00037590534093399105
+    fT_0: float = 6574158.7173102535
+    fT_1: float = -231.43245120384452
+    fT_2: float = 1.2282423071087347
+    fT_3: float = -0.0025499455088113026
     # Sensor parameters
     mass_sensitivity: float = -13.3e-8  # kg/(m²·Hz) — negative: added mass lowers the frequency
     sens_area:        float = 5.25e-5  # m²

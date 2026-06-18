@@ -167,6 +167,8 @@ footer { height: 24px; background: var(--surface); border-top: 1px solid var(--b
 .notif-desc  { font-size: 11px; color: var(--text-dim); margin-top: 2px; }
 
 /* Coefficient polynomial graphs */
+#crystal-advanced { display: none; }
+#crystal-advanced.open { display: block; }
 .coeff-graphs { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin: 8px 0 24px; }
 .coeff-graph-card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); overflow: hidden; }
 .coeff-graph-header { padding: 5px 10px; border-bottom: 1px solid var(--border); font-family: 'DM Mono', monospace; font-size: 9px; letter-spacing: 0.1em; text-transform: uppercase; color: var(--text-dim); display: flex; align-items: center; gap: 6px; }
@@ -184,7 +186,7 @@ footer { height: 24px; background: var(--surface); border-top: 1px solid var(--b
   </div>
   <div class="logo-sep"></div>
   <div class="device-badge">RED PITAYA · ZYNQ 7010</div>
-  <button class="btn btn-green" id="btn-download-latest" onclick="downloadLatestRun()" disabled title="Download the latest run as CSV">
+  <button class="btn btn-green" id="btn-download-latest" onclick="downloadServerRun()" disabled title="Download the latest run (server copy) as CSV">
     <svg viewBox="0 0 12 12"><path d="M5.25 1h1.5v4h2L6 8 3.25 5h2z"/><path d="M2.5 9.5h7v1.2h-7z"/></svg>
     SAVE CSV
   </button>
@@ -344,18 +346,16 @@ footer { height: 24px; background: var(--surface); border-top: 1px solid var(--b
   <!-- SETTINGS -->
   <div class="tab-panel" id="panel-settings">
     <div class="toolbar">
-      <button class="btn btn-blue" onclick="applyAllSettings()">APPLY ALL</button>
+      <button class="btn btn-blue" id="btn-settings-apply" onclick="commitSettings()" disabled>APPLY</button>
+      <button class="btn" id="btn-settings-undo" onclick="undoSettings()" disabled>UNDO</button>
       <div class="toolbar-sep"></div>
-      <span style="font-family:'DM Mono',monospace;font-size:10px;color:var(--text-dim);letter-spacing:.06em">Changes take effect on next START</span>
+      <span id="settings-dirty-hint" style="font-family:'DM Mono',monospace;font-size:10px;color:var(--text-dim);letter-spacing:.06em">No pending changes</span>
     </div>
     <div class="settings-layout">
       <div class="settings-nav">
-        <div class="settings-nav-section">OSCILLATORS</div>
-        <div class="settings-nav-item active" onclick="switchSettings('osc',this)">OSC 1 &amp; 2</div>
-        <div class="settings-nav-section">MEASUREMENT</div>
-        <div class="settings-nav-item" onclick="switchSettings('meas',this)">Measurement</div>
-        <div class="settings-nav-section">CRYSTAL</div>
-        <div class="settings-nav-item" onclick="switchSettings('crystals',this)">Crystal Settings</div>
+        <div class="settings-nav-section">GENERAL</div>
+        <div class="settings-nav-item active" onclick="switchSettings('meas',this)">Measurement</div>
+        <div class="settings-nav-item" onclick="switchSettings('crystals',this)">Crystal</div>
         <div class="settings-nav-section">SYSTEM</div>
         <div class="settings-nav-item" onclick="switchSettings('system',this)">System</div>
         <div class="settings-nav-item" onclick="switchSettings('opc',this)">OPC-UA</div>
@@ -363,30 +363,32 @@ footer { height: 24px; background: var(--surface); border-top: 1px solid var(--b
       </div>
       <div class="settings-content">
 
-        <div class="settings-panel active" id="spanel-osc">
-          <div class="settings-section-title">OSCILLATOR 1 — MASS MODE</div>
+        <div class="settings-panel active" id="spanel-meas">
+          <div class="settings-section-title">MATERIAL PROPERTIES</div>
+          <div class="settings-group">
+            <div class="settings-row"><div><div class="settings-row-label">Material Density</div><div class="settings-row-desc">Deposited film material density</div></div><div></div><div style="display:flex;align-items:center;gap:6px"><input class="settings-input" type="number" id="s-mat-dens" value="19320" step="10"><span class="settings-unit">kg/m³</span></div></div>
+            <div class="settings-row"><div><div class="settings-row-label">Z-ratio</div><div class="settings-row-desc">Acoustic impedance ratio of the film (gold 0.381, 1.0 = plain Sauerbrey)</div></div><div></div><div style="display:flex;align-items:center;gap:6px"><input class="settings-input" type="number" id="s-mat-zratio" value="1.0" step="0.001" min="0.01"><span class="settings-unit"></span></div></div>
+          </div>
+
+          <div class="settings-section-title">TEMPERATURE</div>
+          <div class="settings-group">
+            <div class="settings-row"><div><div class="settings-row-label">Ambient Temperature</div><div class="settings-row-desc">Starting reference temperature</div></div><div></div><div style="display:flex;align-items:center;gap:6px"><input class="settings-input" type="number" id="s-amb-temp" value="23" step="0.5"><span class="settings-unit">°C</span></div></div>
+          </div>
+        </div>
+
+        <div class="settings-panel" id="spanel-system">
+          <div class="settings-section-title">PLL — OSCILLATOR 1 (MASS MODE)</div>
           <div class="settings-group">
             <div class="settings-row"><div><div class="settings-row-label">Integrator Gain</div><div class="settings-row-desc">PLL loop integrator coefficient</div></div><div></div><div style="display:flex;align-items:center;gap:6px"><input class="settings-input" type="number" id="s-osc1-int" value="0.00001" step="0.000001"><span class="settings-unit"></span></div></div>
             <div class="settings-row"><div><div class="settings-row-label">LPF Cutoff</div><div class="settings-row-desc">Demodulator low-pass cutoff frequency</div></div><div></div><div style="display:flex;align-items:center;gap:6px"><input class="settings-input" type="number" id="s-osc1-lpf" value="200" step="1" min="0"><span class="settings-unit">Hz</span></div></div>
             <div class="settings-row"><div><div class="settings-row-label">Invert Feedback</div><div class="settings-row-desc">Invert the feedback signal</div></div><div></div><div style="display:flex;align-items:center;gap:6px"><select class="settings-input" id="s-osc1-inv" style="width:150px;text-align:left"><option value="0">Disabled</option><option value="1">Enabled</option></select></div></div>
           </div>
-          <button class="btn btn-blue" onclick="applyOscSettings(1)" style="margin-bottom:28px">APPLY OSC 1</button>
 
-          <div class="settings-section-title">OSCILLATOR 2 — TEMP MODE</div>
+          <div class="settings-section-title">PLL — OSCILLATOR 2 (TEMP MODE)</div>
           <div class="settings-group">
             <div class="settings-row"><div><div class="settings-row-label">Integrator Gain</div><div class="settings-row-desc">PLL loop integrator coefficient</div></div><div></div><div style="display:flex;align-items:center;gap:6px"><input class="settings-input" type="number" id="s-osc2-int" value="0.00001" step="0.000001"><span class="settings-unit"></span></div></div>
             <div class="settings-row"><div><div class="settings-row-label">LPF Cutoff</div><div class="settings-row-desc">Demodulator low-pass cutoff frequency</div></div><div></div><div style="display:flex;align-items:center;gap:6px"><input class="settings-input" type="number" id="s-osc2-lpf" value="200" step="1" min="0"><span class="settings-unit">Hz</span></div></div>
             <div class="settings-row"><div><div class="settings-row-label">Invert Feedback</div><div class="settings-row-desc">Invert the feedback signal</div></div><div></div><div style="display:flex;align-items:center;gap:6px"><select class="settings-input" id="s-osc2-inv" style="width:150px;text-align:left"><option value="0">Disabled</option><option value="1">Enabled</option></select></div></div>
-          </div>
-          <button class="btn btn-blue" onclick="applyOscSettings(2)">APPLY OSC 2</button>
-        </div>
-
-        <div class="settings-panel" id="spanel-meas">
-          <div class="settings-section-title">MEASUREMENT</div>
-          <div class="settings-group">
-            <div class="settings-row"><div><div class="settings-row-label">Ambient Temperature</div><div class="settings-row-desc">Starting reference temperature</div></div><div></div><div style="display:flex;align-items:center;gap:6px"><input class="settings-input" type="number" id="s-amb-temp" value="23" step="0.5"><span class="settings-unit">°C</span></div></div>
-            <div class="settings-row"><div><div class="settings-row-label">Material Density</div><div class="settings-row-desc">Deposited film material density</div></div><div></div><div style="display:flex;align-items:center;gap:6px"><input class="settings-input" type="number" id="s-mat-dens" value="19320" step="10"><span class="settings-unit">kg/m³</span></div></div>
-            <div class="settings-row"><div><div class="settings-row-label">Z-ratio</div><div class="settings-row-desc">Acoustic impedance ratio of the film (gold 0.381, 1.0 = plain Sauerbrey)</div></div><div></div><div style="display:flex;align-items:center;gap:6px"><input class="settings-input" type="number" id="s-mat-zratio" value="1.0" step="0.001" min="0.01"><span class="settings-unit"></span></div></div>
           </div>
 
           <div class="settings-section-title">LOCK DETECTION</div>
@@ -394,10 +396,7 @@ footer { height: 24px; background: var(--surface); border-top: 1px solid var(--b
             <div class="settings-row"><div><div class="settings-row-label">Amplitude Threshold</div><div class="settings-row-desc">Minimum signal amplitude to count as locked</div></div><div></div><div style="display:flex;align-items:center;gap:6px"><input class="settings-input" type="number" id="s-lock-amp" value="0.1" step="0.01" min="0"><span class="settings-unit"></span></div></div>
             <div class="settings-row"><div><div class="settings-row-label">Phase Tolerance</div><div class="settings-row-desc">Maximum |phase| from zero to count as locked</div></div><div></div><div style="display:flex;align-items:center;gap:6px"><input class="settings-input" type="number" id="s-lock-phase" value="0.05" step="0.01" min="0"><span class="settings-unit"></span></div></div>
           </div>
-          <button class="btn btn-blue" onclick="applyLockDetect()">APPLY LOCK DETECTION</button>
-        </div>
 
-        <div class="settings-panel" id="spanel-system">
           <div class="settings-section-title">OUTPUT</div>
           <div class="settings-group">
             <div class="settings-row"><div><div class="settings-row-label">Output Mode</div><div class="settings-row-desc">Signal routed to analog output</div></div><div></div><div style="display:flex;align-items:center;gap:6px"><select class="settings-input" id="s-output-mode" style="width:200px;text-align:left">
@@ -415,13 +414,6 @@ footer { height: 24px; background: var(--surface); border-top: 1px solid var(--b
               <option value="11">OSC2 Q</option>
             </select></div></div>
           </div>
-          <button class="btn btn-blue" onclick="applyOutputMode()" style="margin-bottom:28px">APPLY OUTPUT</button>
-          <div class="settings-section-title">SYSTEM</div>
-          <div class="settings-group">
-            <div class="settings-row"><div><div class="settings-row-label">API Host</div><div class="settings-row-desc">Backend server address</div></div><div></div><input class="settings-input" type="text" id="s-api-host" style="width:200px;text-align:left" value=""></div>
-            <div class="settings-row"><div><div class="settings-row-label">API Port</div><div class="settings-row-desc">Backend server port</div></div><div></div><div style="display:flex;align-items:center;gap:6px"><input class="settings-input" type="number" id="s-api-port" value="8000"><span class="settings-unit"></span></div></div>
-          </div>
-          <button class="btn btn-blue" onclick="applySystemSettings()" style="margin-bottom:28px">APPLY SYSTEM</button>
 
           <div class="settings-section-title">CAPACITOR ADJUST</div>
           <div class="settings-group">
@@ -487,6 +479,8 @@ footer { height: 24px; background: var(--surface); border-top: 1px solid var(--b
             <div class="settings-row"><div><div class="settings-row-label">Virgin Frequency</div><div class="settings-row-desc">Pristine uncoated crystal mass-mode frequency — Z-match reference, 0 = use run start</div></div><div></div><div style="display:flex;align-items:center;gap:6px"><input class="settings-input" type="number" id="s-crystal-freq-virgin" value="0" step="1000"><span class="settings-unit">Hz</span></div></div>
           </div>
 
+          <button class="btn" id="btn-crystal-advanced" onclick="toggleCrystalAdvanced(this)" style="margin-bottom:24px"><span id="crystal-advanced-caret">▸</span>&nbsp; ADVANCED — SENSOR &amp; CALIBRATION</button>
+          <div id="crystal-advanced">
           <div class="settings-section-title">SENSOR PARAMETERS</div>
           <div class="settings-group">
             <div class="settings-row"><div><div class="settings-row-label">Mass Sensitivity</div><div class="settings-row-desc">Areal mass per unit frequency shift (Sauerbrey)</div></div><div></div><div style="display:flex;align-items:center;gap:6px"><input class="settings-input" type="number" id="s-crystal-mass-sens" value="-1.33e-7" step="any" style="width:180px"><span class="settings-unit">kg/m²/Hz</span></div></div>
@@ -518,8 +512,9 @@ footer { height: 24px; background: var(--surface); border-top: 1px solid var(--b
             </div>
           </div>
 
+          </div><!-- /crystal-advanced -->
+
           <div style="display:flex;gap:8px">
-            <button class="btn btn-blue" onclick="applyCrystal()">APPLY CRYSTAL</button>
             <button class="btn" onclick="revertCrystalDefaults()">REVERT TO DEFAULTS</button>
           </div>
         </div>
@@ -627,8 +622,6 @@ function syncAmbTemp(value, fromMonitor = false) {
   if (el) el.value = value;
 }
 
-document.getElementById('s-api-host').value = backendHost;
-
 // ---- State tracking ----
 let lockMass = false;
 let lockTemp = false;
@@ -640,8 +633,7 @@ let _isRunning = false;       // true while state === RUNNING (drops during a mi
 let _runActive = false;       // true for the whole run, spanning RUNNING -> LOCKING -> RUNNING re-locks
 let _startRequested = false;  // set when the user presses START, consumed on the next RUNNING transition
 let _sweepRunning = false;
-let _runBuffer = [];
-let _runLog = [];
+let _runPoints = 0;  // measurement points received this run (drives the download button + row count)
 
 // ---- Tab switching ----
 function switchTab(name, el) {
@@ -886,11 +878,9 @@ function setLock(mode, locked) {
 function checkLockLost(newMass, newTemp) {
   if (_prevLockMass === true && newMass === false) {
     sendNotif('QCM — Lock Lost', 'Mass mode PLL has lost lock', 'lockLost');
-    if (_isRunning) _runLog.push({ timestamp: Date.now() / 1000, type: 'LOCK_LOST_MASS', detail: 'Mass PLL lost lock' });
   }
   if (_prevLockTemp === true && newTemp === false) {
     sendNotif('QCM — Lock Lost', 'Temp mode PLL has lost lock', 'lockLost');
-    if (_isRunning) _runLog.push({ timestamp: Date.now() / 1000, type: 'LOCK_LOST_TEMP', detail: 'Temp PLL lost lock' });
   }
   _prevLockMass = newMass;
   _prevLockTemp = newTemp;
@@ -935,23 +925,8 @@ function onMeasurement(e) {
   setMeta('meta-temp-a', e.calculated_temp,  '°C');
 
   if (_isRunning && e.timestamp != null) {
-    _runBuffer.push({
-      ts_iso:           new Date(e.timestamp * 1000).toISOString(),
-      ts_s:             e.timestamp,
-      freq_mass_hz:     e.freq_mass_mode,
-      freq_temp_hz:     e.freq_temp_mode,
-      comp_mass_freq_hz: e.compensated_freq,
-      thickness_comp_nm:   e.calculated_thickness,
-      thickness_uncomp_nm: e.uncompensated_thickness,
-      temperature_c:    e.calculated_temp,
-      amp_mass:         e.amp_mass,
-      phase_mass:       e.phase_mass,
-      amp_temp:         e.amp_temp,
-      phase_temp:       e.phase_temp,
-      lock_mass:        e.lock_mass ? 1 : 0,
-      lock_temp:        e.lock_temp ? 1 : 0,
-    });
-    if (_runBuffer.length === 1) updateDownloadBtn();  // first point of a run: enable the button
+    _runPoints++;
+    if (_runPoints === 1) updateDownloadBtn();  // first point of a run: enable the button
   }
 
   sampleCount++;
@@ -969,7 +944,7 @@ function clearCharts() {
 let ws = null;
 function setWsStatus(s) {
   document.getElementById('ws-dot').className = 'ws-dot ' + s;
-  document.getElementById('ws-label').textContent = s === 'connected' ? 'CONNECTED' : s === 'error' ? 'ERROR' : 'DISCONNECTED';
+  document.getElementById('ws-label').textContent = 'WEBSOCKET';
 }
 let _wsOpenedAt = 0;
 let _wsNotifyTimer = null;     // pending "connection lost" alert (debounced)
@@ -989,12 +964,10 @@ function connect() {
     // drop or ping timeout); 1011 = server error; 1001 = going away; 1000 = clean.
     const upMs = _wsOpenedAt ? Date.now() - _wsOpenedAt : 0;
     const detail = `code=${ev.code} reason="${ev.reason || ''}" clean=${ev.wasClean} up=${(upMs/1000).toFixed(1)}s`;
-    // Log line + run-log marker fire immediately (they're quiet and the marker
-    // records the data gap), but the user-facing toast/sound is debounced so a
-    // quick auto-reconnect doesn't nag.
+    // The log line fires immediately (it's quiet); the user-facing toast/sound is
+    // debounced so a quick auto-reconnect doesn't nag.
     onLogEvent({ level: 'WARN', message: `[WS] closed — ${detail}`, timestamp: Date.now() / 1000 });
     if (_prevWsConnected) {
-      if (_isRunning) _runLog.push({ timestamp: Date.now() / 1000, type: 'WS_LOST', detail });
       if (!_wsNotifyTimer) {
         _wsNotifyTimer = setTimeout(() => {
           _wsNotifyTimer = null;
@@ -1124,49 +1097,9 @@ function onNotifBrowserToggle(checked) {
 }
 
 // ---- CSV export ----
-function buildRunCsv(buffer, log) {
-  const headers = ['timestamp_iso','timestamp_s','freq_mass_hz','freq_temp_hz','comp_mass_freq_hz','thickness_comp_nm','thickness_uncomp_nm','temperature_c','amp_mass','phase_mass','amp_temp','phase_temp','lock_mass','lock_temp','event_type','event_detail'];
-
-  const dataRows = buffer.map(r => ({
-    timestamp_iso: r.ts_iso, timestamp_s: r.ts_s,
-    freq_mass_hz: r.freq_mass_hz, freq_temp_hz: r.freq_temp_hz,
-    comp_mass_freq_hz: r.comp_mass_freq_hz,
-    thickness_comp_nm: r.thickness_comp_nm, thickness_uncomp_nm: r.thickness_uncomp_nm,
-    temperature_c: r.temperature_c, amp_mass: r.amp_mass, phase_mass: r.phase_mass,
-    amp_temp: r.amp_temp, phase_temp: r.phase_temp,
-    lock_mass: r.lock_mass, lock_temp: r.lock_temp,
-    event_type: '', event_detail: '',
-  }));
-
-  const eventRows = log.map(e => ({
-    timestamp_iso: new Date(e.timestamp * 1000).toISOString(), timestamp_s: e.timestamp,
-    freq_mass_hz: '', freq_temp_hz: '', comp_mass_freq_hz: '', thickness_comp_nm: '', thickness_uncomp_nm: '',
-    temperature_c: '', amp_mass: '', phase_mass: '', amp_temp: '', phase_temp: '',
-    lock_mass: '', lock_temp: '', event_type: e.type, event_detail: e.detail || '',
-  }));
-
-  const allRows = [...dataRows, ...eventRows].sort((a, b) => (a.timestamp_s || 0) - (b.timestamp_s || 0));
-  const esc = v => (v == null || v === '') ? '' : String(v).includes(',') ? `"${v}"` : v;
-  const csv = [headers.join(','), ...allRows.map(r => headers.map(h => esc(r[h])).join(','))].join('\n');
-
-  const blob = new Blob([csv], { type: 'text/csv' });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement('a');
-  a.href = url;
-  a.download = `qcm_${new Date().toISOString().slice(0,19).replace(/[T:]/g,'-')}.csv`;
-  document.body.appendChild(a);
-  a.click();
-  document.body.removeChild(a);
-  URL.revokeObjectURL(url);
-}
-
-function downloadRunCsv() {
-  document.getElementById('modal-save-csv').style.display = 'none';
-  buildRunCsv(_runBuffer, _runLog);
-}
-
 // Download the complete, gap-free run that the Pitaya logged to disk (the newest
-// server-side run = the one that just finished).
+// server-side run = the current/just-finished one). Used by both the run-complete
+// popup and the always-on header button — there is no browser-side copy.
 async function downloadServerRun() {
   try {
     const { runs } = await fetch(`${API_URL}/runs`).then(r => r.json());
@@ -1176,17 +1109,10 @@ async function downloadServerRun() {
   } catch(e) { showToast('Server download failed', true); }
 }
 
-// Always-on download button: saves the latest run (the live buffer, which holds
-// the current run while measuring or the most recent run until the next start).
-function downloadLatestRun() {
-  if (!_runBuffer.length) return;
-  buildRunCsv(_runBuffer, _runLog);
-}
-
-// Enable the download button whenever there is run data to save, grey it out otherwise.
+// Enable the download button once a run has produced data, grey it out otherwise.
 function updateDownloadBtn() {
   const btn = document.getElementById('btn-download-latest');
-  if (btn) btn.disabled = _runBuffer.length === 0;
+  if (btn) btn.disabled = _runPoints === 0;
 }
 
 // ---- Initial settings load from backend ----
@@ -1208,6 +1134,7 @@ async function loadCrystalForm(name) {
       if (el && p[key] != null) el.value = p[key];
     }
     updateCoeffCharts();
+    updateDirtyState();
   } catch(e) { console.warn('Could not load crystal form', e); }
 }
 
@@ -1260,6 +1187,7 @@ async function loadInitialSettings() {
     if (opc.base_node) document.getElementById('s-opc-base').value = opc.base_node;
   } catch(e) { /* OPC bridge may not be enabled */ }
   loadOpcNodes();
+  snapshotBaseline();   // everything just loaded is the clean baseline
 }
 loadInitialSettings();
 
@@ -1394,22 +1322,21 @@ function onStateChange(state) {
   updateCapAdjustBtn(state);
 
   // Run lifecycle. A run spans re-locks, which move RUNNING -> LOCKING -> RUNNING,
-  // so it must NOT be treated as a stop+start. The buffer is cleared only on a
+  // so it must NOT be treated as a stop+start. The counter is reset only on a
   // user-initiated START (_startRequested) — never on a bare RUNNING event, so a
   // WS reconnect (server re-sends the current state) or a re-lock can't wipe it.
   if (_isRunning) {
     if (_startRequested) {
-      _runBuffer = [];
-      _runLog = [];
+      _runPoints = 0;
       _startRequested = false;
     }
     _runActive = true;  // covers fresh start, re-lock resume, and joining an in-progress run after a refresh
   } else if (state === 'IDLE' && _runActive) {
     // Genuine stop — a re-lock goes to LOCKING, not IDLE. Offer the CSV.
     _runActive = false;
-    if (_runBuffer.length > 0) {
+    if (_runPoints > 0) {
       const el = document.getElementById('csv-row-count');
-      if (el) el.textContent = _runBuffer.length;
+      if (el) el.textContent = _runPoints;
       document.getElementById('modal-save-csv').style.display = 'flex';
     }
   }
@@ -1455,7 +1382,6 @@ function onOpcStatus(ev) {
 
   if (_prevOpcConnected === true && !connected) {
     sendNotif('QCM — OPC Disconnected', 'Connection to WAGO PLC lost', 'opcLost');
-    if (_isRunning) _runLog.push({ timestamp: Date.now() / 1000, type: 'OPC_LOST', detail: '' });
   }
   _prevOpcConnected = connected;
 
@@ -1523,7 +1449,7 @@ async function applyCrystal() {
 }
 
 // Default values for the crystal form (matches the CrystalProfile dataclass
-// defaults on the backend). Resets the form only — APPLY CRYSTAL saves it.
+// defaults on the backend). Resets the form only — APPLY saves it.
 const CRYSTAL_DEFAULTS = {
   's-crystal-freq-mass': 5983000,
   's-crystal-freq-temp': 6570000,
@@ -1540,7 +1466,8 @@ function revertCrystalDefaults() {
     if (el) el.value = v;
   }
   updateCoeffCharts();
-  showToast('Crystal form reset to defaults — click APPLY CRYSTAL to save');
+  updateDirtyState();
+  showToast('Crystal form reset to defaults — click APPLY to save');
 }
 
 async function downloadCrystal() {
@@ -1593,15 +1520,79 @@ async function applyLockDetect() {
   await fetch(`${API_URL}/settings/lock_detect?amp_threshold=${amp}&phase_tolerance=${phase}`, { method: 'POST' });
 }
 
-function applySystemSettings() {
-  const host = document.getElementById('s-api-host').value;
-  const port = document.getElementById('s-api-port').value;
-  API_URL = `http://${host}:${port}`;
-  WS_URL  = `ws://${host}:${port}/ws`;
-  if (ws) ws.close();
+async function applyAllSettings() { await applyOscSettings(1); await applyOscSettings(2); await applyOutputMode(); await applyLockDetect(); await applyCrystal(); }
+
+// ---- Dirty-state tracking for the unified APPLY / UNDO buttons ----
+// Every settings input that APPLY commits. OPC fields are excluded (they have
+// their own CONNECT action).
+const SETTING_IDS = [
+  's-mat-dens', 's-mat-zratio', 's-amb-temp',
+  's-osc1-int', 's-osc1-lpf', 's-osc1-inv',
+  's-osc2-int', 's-osc2-lpf', 's-osc2-inv',
+  's-lock-amp', 's-lock-phase', 's-output-mode',
+  's-crystal-name', 's-crystal-freq-mass', 's-crystal-freq-temp', 's-crystal-freq-virgin',
+  's-crystal-mass-sens', 's-crystal-sens-area',
+  's-coeff-fM0', 's-coeff-fM1', 's-coeff-fM2', 's-coeff-fM3',
+  's-coeff-fT0', 's-coeff-fT1', 's-coeff-fT2', 's-coeff-fT3',
+];
+let _baseline = {};            // last applied / loaded values
+let _baselineReady = false;
+
+function snapshotBaseline() {
+  _baseline = {};
+  for (const id of SETTING_IDS) {
+    const el = document.getElementById(id);
+    if (el) _baseline[id] = el.value;
+  }
+  _baselineReady = true;
+  updateDirtyState();
 }
 
-async function applyAllSettings() { await applyOscSettings(1); await applyOscSettings(2); await applyOutputMode(); await applyLockDetect(); await applyCrystal(); applySystemSettings(); }
+function updateDirtyState() {
+  if (!_baselineReady) return;
+  let dirty = false;
+  for (const id of SETTING_IDS) {
+    const el = document.getElementById(id);
+    if (el && String(el.value) !== String(_baseline[id] ?? '')) { dirty = true; break; }
+  }
+  document.getElementById('btn-settings-apply').disabled = !dirty;
+  document.getElementById('btn-settings-undo').disabled  = !dirty;
+  const hint = document.getElementById('settings-dirty-hint');
+  if (hint) hint.textContent = dirty ? 'Pending changes — APPLY takes effect on next START' : 'No pending changes';
+}
+
+async function commitSettings() {
+  document.getElementById('btn-settings-apply').disabled = true;
+  try {
+    await applyAllSettings();
+    snapshotBaseline();
+    showToast('Settings applied');
+  } catch (e) {
+    updateDirtyState();   // re-enable so the change can be retried
+    showToast('Apply failed', true);
+  }
+}
+
+function undoSettings() {
+  for (const id of SETTING_IDS) {
+    const el = document.getElementById(id);
+    if (el && id in _baseline) el.value = _baseline[id];
+  }
+  updateCoeffCharts();
+  updateDirtyState();
+  showToast('Changes reverted');
+}
+
+// Recompute dirtiness whenever any settings field is edited.
+document.querySelector('.settings-content')?.addEventListener('input', updateDirtyState);
+document.querySelector('.settings-content')?.addEventListener('change', updateDirtyState);
+
+function toggleCrystalAdvanced(btn) {
+  const adv = document.getElementById('crystal-advanced');
+  const open = adv.classList.toggle('open');
+  document.getElementById('crystal-advanced-caret').textContent = open ? '▾' : '▸';
+  if (open) initCoeffChartsIfNeeded();
+}
 
 // ---- Coefficient polynomial charts ----
 let _coeffCharts = { fM: null, fT: null };
@@ -1729,12 +1720,11 @@ function clearLogs() {
     <div class="modal-title green">RUN COMPLETE</div>
     <div class="modal-body">
       Run finished — <span id="csv-row-count">0</span> measurement points recorded.<br><br>
-      <b>Browser copy</b> is what this tab captured (may have gaps if the connection dropped).
-      <b>Server copy</b> is the complete record logged on the Red Pitaya — prefer it for the final data.
+      Download the complete run logged on the Red Pitaya. It is the full record —
+      no gaps, even if the connection dropped during the run.
     </div>
     <div class="modal-footer">
-      <button class="btn btn-green" onclick="downloadServerRun()">DOWNLOAD SERVER COPY</button>
-      <button class="btn" onclick="downloadRunCsv()">DOWNLOAD BROWSER COPY</button>
+      <button class="btn btn-green" onclick="downloadServerRun()">DOWNLOAD CSV</button>
       <button class="btn" onclick="document.getElementById('modal-save-csv').style.display='none'">DISMISS</button>
     </div>
   </div>

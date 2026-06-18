@@ -7,6 +7,12 @@ made using the CASPER toolflow.
 ## Setup
 Red Pitaya setup instructions are available in the [Red Pitaya documentation](src/README.md).
 
+## Controlling the system
+Once the control software is running on the Red Pitaya, the instrument can be
+driven from a script over its HTTP + WebSocket API. See
+[tools/README.md](tools/README.md) for a Python control guide
+([`qcm_client.py`](tools/qcm_client.py)).
+
 ## Block diagram
 
 <img width="940" height="690" alt="image" src="https://github.com/user-attachments/assets/5986d6df-943e-458a-be10-527f9ac0927c" />

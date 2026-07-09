@@ -4,6 +4,9 @@ FPGA code for a quartz crystal microbalance measurement system.
 Designed to run on the Red Pitaya FPGA.
 made using the CASPER toolflow.
 
+The design and theory behind this system are described in detail in the accompanying thesis:
+[Scriptie_V1.0_Flint_Wardenaar.pdf](docs/Scriptie_V1.0_Flint_Wardenaar.pdf).
+
 ## Setup
 Red Pitaya setup instructions are available in the [Red Pitaya documentation](src/README.md).
 

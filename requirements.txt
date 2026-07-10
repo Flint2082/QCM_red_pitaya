@@ -5,6 +5,8 @@ ipython
 uvicorn
 fastapi
 aiofiles
+websockets
+python-multipart
 
 # Python control client (tools/qcm_client.py, tools/qcm_demo.py) — client-side only
 requests

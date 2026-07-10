@@ -59,6 +59,9 @@ class QCMClient:
     def set_integrator_gain(self, oscillator_idx: int, gain: float):
         return self._post("/settings/integrator_gain", oscillator_idx=oscillator_idx, gain=gain)
 
+    def set_proportional_gain(self, oscillator_idx: int, gain: float):
+        return self._post("/settings/proportional_gain", oscillator_idx=oscillator_idx, gain=gain)
+
     def set_lpf_freq(self, oscillator_idx: int, freq: float):
         """Demodulator low-pass cutoff frequency in Hz."""
         return self._post("/settings/lpf_freq", oscillator_idx=oscillator_idx, freq=freq)

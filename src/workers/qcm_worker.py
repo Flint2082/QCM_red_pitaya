@@ -144,6 +144,8 @@ class QCMWorker(threading.Thread):
             self.qcm.setFreq(command.oscillator_idx, command.frequency)
         elif isinstance(command, SetIntegratorGainCommand):
             self.qcm.setOscConfig(command.oscillator_idx, int_gain=command.gain)
+        elif isinstance(command, SetProportionalGainCommand):
+            self.qcm.setOscConfig(command.oscillator_idx, prop_gain=command.gain)
         elif isinstance(command, SetLPFFreqCommand):
             self.qcm.setOscConfig(command.oscillator_idx, lpf_freq=command.freq)
         elif isinstance(command, SetInvertedCommand):

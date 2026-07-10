@@ -60,7 +60,12 @@ class SetFrequencyCommand(ApiCommand):
 class SetIntegratorGainCommand(ApiCommand):
     oscillator_idx: int
     gain: float
-    
+
+@dataclass
+class SetProportionalGainCommand(ApiCommand):
+    oscillator_idx: int
+    gain: float
+
 @dataclass
 class SetInvertedCommand(ApiCommand):
     oscillator_idx: int

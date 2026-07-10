@@ -165,8 +165,8 @@ class RestServer:
         self._lock_freq_temp: float = 6570000.0
         # Oscillator settings cache — defaults match QCMInterface post-lock state
         self._osc_settings: dict = {
-            1: {"int_gain": 0.00001, "lpf_freq": 200.0, "inverted": True},
-            2: {"int_gain": 0.00001, "lpf_freq": 200.0, "inverted": True},
+            1: {"int_gain": 0.00001, "prop_gain": 0.0, "lpf_freq": 200.0, "inverted": True},
+            2: {"int_gain": 0.00001, "prop_gain": 0.0, "lpf_freq": 200.0, "inverted": True},
         }
         self._output_mode: int = 0
         # Lock-detect conditions (defaults match QCMInterface)
@@ -298,6 +298,8 @@ class RestServer:
         for osc, s in self._osc_settings.items():
             if "int_gain" in s:
                 self.command_queue.put(SetIntegratorGainCommand(osc, s["int_gain"]))
+            if "prop_gain" in s:
+                self.command_queue.put(SetProportionalGainCommand(osc, s["prop_gain"]))
             if "lpf_freq" in s:
                 self.command_queue.put(SetLPFFreqCommand(osc, s["lpf_freq"]))
             if "inverted" in s:
@@ -509,6 +511,13 @@ class RestServer:
         def set_integrator_gain(oscillator_idx: int, gain: float):
             self._osc_settings.setdefault(oscillator_idx, {})["int_gain"] = gain
             self.command_queue.put(SetIntegratorGainCommand(oscillator_idx, gain))
+            self._save_settings()
+            return {"status": "ok"}
+
+        @app.post("/settings/proportional_gain")
+        def set_proportional_gain(oscillator_idx: int, gain: float):
+            self._osc_settings.setdefault(oscillator_idx, {})["prop_gain"] = gain
+            self.command_queue.put(SetProportionalGainCommand(oscillator_idx, gain))
             self._save_settings()
             return {"status": "ok"}
 

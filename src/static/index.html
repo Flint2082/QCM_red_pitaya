@@ -380,6 +380,7 @@ footer { height: 24px; background: var(--surface); border-top: 1px solid var(--b
           <div class="settings-section-title">PLL — OSCILLATOR 1 (MASS MODE)</div>
           <div class="settings-group">
             <div class="settings-row"><div><div class="settings-row-label">Integrator Gain</div><div class="settings-row-desc">PLL loop integrator coefficient</div></div><div></div><div style="display:flex;align-items:center;gap:6px"><input class="settings-input" type="number" id="s-osc1-int" value="0.00001" step="0.000001"><span class="settings-unit"></span></div></div>
+            <div class="settings-row"><div><div class="settings-row-label">Proportional Gain</div><div class="settings-row-desc">PLL loop proportional coefficient</div></div><div></div><div style="display:flex;align-items:center;gap:6px"><input class="settings-input" type="number" id="s-osc1-prop" value="0" step="0.000001"><span class="settings-unit"></span></div></div>
             <div class="settings-row"><div><div class="settings-row-label">LPF Cutoff</div><div class="settings-row-desc">Demodulator low-pass cutoff frequency</div></div><div></div><div style="display:flex;align-items:center;gap:6px"><input class="settings-input" type="number" id="s-osc1-lpf" value="200" step="1" min="0"><span class="settings-unit">Hz</span></div></div>
             <div class="settings-row"><div><div class="settings-row-label">Invert Feedback</div><div class="settings-row-desc">Invert the feedback signal</div></div><div></div><div style="display:flex;align-items:center;gap:6px"><select class="settings-input" id="s-osc1-inv" style="width:150px;text-align:left"><option value="0">Disabled</option><option value="1">Enabled</option></select></div></div>
           </div>
@@ -387,6 +388,7 @@ footer { height: 24px; background: var(--surface); border-top: 1px solid var(--b
           <div class="settings-section-title">PLL — OSCILLATOR 2 (TEMP MODE)</div>
           <div class="settings-group">
             <div class="settings-row"><div><div class="settings-row-label">Integrator Gain</div><div class="settings-row-desc">PLL loop integrator coefficient</div></div><div></div><div style="display:flex;align-items:center;gap:6px"><input class="settings-input" type="number" id="s-osc2-int" value="0.00001" step="0.000001"><span class="settings-unit"></span></div></div>
+            <div class="settings-row"><div><div class="settings-row-label">Proportional Gain</div><div class="settings-row-desc">PLL loop proportional coefficient</div></div><div></div><div style="display:flex;align-items:center;gap:6px"><input class="settings-input" type="number" id="s-osc2-prop" value="0" step="0.000001"><span class="settings-unit"></span></div></div>
             <div class="settings-row"><div><div class="settings-row-label">LPF Cutoff</div><div class="settings-row-desc">Demodulator low-pass cutoff frequency</div></div><div></div><div style="display:flex;align-items:center;gap:6px"><input class="settings-input" type="number" id="s-osc2-lpf" value="200" step="1" min="0"><span class="settings-unit">Hz</span></div></div>
             <div class="settings-row"><div><div class="settings-row-label">Invert Feedback</div><div class="settings-row-desc">Invert the feedback signal</div></div><div></div><div style="display:flex;align-items:center;gap:6px"><select class="settings-input" id="s-osc2-inv" style="width:150px;text-align:left"><option value="0">Disabled</option><option value="1">Enabled</option></select></div></div>
           </div>
@@ -1163,6 +1165,7 @@ async function loadInitialSettings() {
       const os = s.oscillators?.[osc];
       if (!os) continue;
       document.getElementById(`s-osc${osc}-int`).value = os.int_gain ?? '';
+      document.getElementById(`s-osc${osc}-prop`).value = os.prop_gain ?? '';
       document.getElementById(`s-osc${osc}-lpf`).value  = os.lpf_freq  ?? '';
       document.getElementById(`s-osc${osc}-inv`).value = os.inverted ? '1' : '0';
     }
@@ -1438,10 +1441,12 @@ async function sendCommand(action) {
 }
 
 async function applyOscSettings(osc) {
-  const intGain = parseFloat(document.getElementById(`s-osc${osc}-int`).value);
-  const lpfFreq = parseFloat(document.getElementById(`s-osc${osc}-lpf`).value);
-  const inv     = document.getElementById(`s-osc${osc}-inv`).value === '1';
+  const intGain  = parseFloat(document.getElementById(`s-osc${osc}-int`).value);
+  const propGain = parseFloat(document.getElementById(`s-osc${osc}-prop`).value);
+  const lpfFreq  = parseFloat(document.getElementById(`s-osc${osc}-lpf`).value);
+  const inv      = document.getElementById(`s-osc${osc}-inv`).value === '1';
   await fetch(`${API_URL}/settings/integrator_gain?oscillator_idx=${osc}&gain=${intGain}`, { method: 'POST' });
+  await fetch(`${API_URL}/settings/proportional_gain?oscillator_idx=${osc}&gain=${propGain}`, { method: 'POST' });
   await fetch(`${API_URL}/settings/lpf_freq?oscillator_idx=${osc}&freq=${lpfFreq}`, { method: 'POST' });
   await fetch(`${API_URL}/settings/inverted?oscillator_idx=${osc}&inverted=${inv}`, { method: 'POST' });
 }
@@ -1545,8 +1550,8 @@ async function applyAllSettings() { await applyOscSettings(1); await applyOscSet
 // their own CONNECT action).
 const SETTING_IDS = [
   's-mat-dens', 's-mat-zratio', 's-amb-temp',
-  's-osc1-int', 's-osc1-lpf', 's-osc1-inv',
-  's-osc2-int', 's-osc2-lpf', 's-osc2-inv',
+  's-osc1-int', 's-osc1-prop', 's-osc1-lpf', 's-osc1-inv',
+  's-osc2-int', 's-osc2-prop', 's-osc2-lpf', 's-osc2-inv',
   's-lock-amp', 's-lock-phase', 's-output-mode',
   's-crystal-name', 's-crystal-freq-mass', 's-crystal-freq-temp', 's-crystal-freq-virgin',
   's-crystal-mass-sens', 's-crystal-sens-area',

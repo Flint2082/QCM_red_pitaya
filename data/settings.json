@@ -2,12 +2,14 @@
   "osc_settings": {
     "1": {
       "int_gain": 1e-05,
+      "prop_gain": 0.0,
       "iq_gain": 1e-05,
       "inverted": true,
       "lpf_gain": 1e-05
     },
     "2": {
       "int_gain": 1e-05,
+      "prop_gain": 0.0,
       "iq_gain": 1e-05,
       "inverted": true,
       "lpf_gain": 1e-05

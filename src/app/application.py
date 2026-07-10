@@ -133,6 +133,8 @@ class Application(threading.Thread):
             self.worker_command_queue.put(wc.SetFrequencyCommand(command.oscillator_idx, command.frequency))
         elif isinstance(command, ac.SetIntegratorGainCommand):
             self.worker_command_queue.put(wc.SetIntegratorGainCommand(command.oscillator_idx, command.gain))
+        elif isinstance(command, ac.SetProportionalGainCommand):
+            self.worker_command_queue.put(wc.SetProportionalGainCommand(command.oscillator_idx, command.gain))
         elif isinstance(command, ac.SetInvertedCommand):
             self.worker_command_queue.put(wc.SetInvertedCommand(command.oscillator_idx, command.inverted))
         elif isinstance(command, ac.SetLPFFreqCommand):

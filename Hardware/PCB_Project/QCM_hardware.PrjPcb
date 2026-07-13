@@ -45,6 +45,7 @@ CrossRefPorts=3
 CrossRefCrossSheets=1
 CrossRefSheetEntries=0
 CrossRefFollowFromMainSettings=1
+CurrentVariant=QCM_hardware_without_summing_amp
 
 [Preferences]
 PrefsVaultGUID=
@@ -134,6 +135,59 @@ ClassGenNCAutoScope=None
 DItemRevisionGUID=
 GenerateClassCluster=0
 DocumentUniqueId=
+
+[ProjectVariant1]
+UniqueId=6df64ba3-627e-4410-97c8-c6de020e2c5d
+Description=QCM_hardware_with_summing_amp
+AllowFabrication=0
+ParameterCount=0
+VariationCount=1
+Variation1=Designator=R7|UniqueId=\SMFUTNZH|Kind=1|AlternatePart=
+ParamVariationCount=0
+
+[ProjectVariant2]
+UniqueId=1dcc728f-cb9e-4b50-8d5f-882aeabac6ca
+Description=QCM_hardware_without_summing_amp
+AllowFabrication=0
+ParameterCount=0
+VariationCount=10
+Variation1=Designator=U2|UniqueId=\NSDYKAKZ|Kind=1|AlternatePart=
+Variation2=Designator=J3|UniqueId=\CXYRMYTO|Kind=1|AlternatePart=
+Variation3=Designator=R17|UniqueId=\AERZXWNL|Kind=1|AlternatePart=
+Variation4=Designator=C2|UniqueId=\EQECSGMG|Kind=1|AlternatePart=
+Variation5=Designator=R1|UniqueId=\XHSCUYVO|Kind=1|AlternatePart=
+Variation6=Designator=R3|UniqueId=\ZWVPFZNL|Kind=0|AlternatePart=0
+ParamVariation1=ParameterName=Comment|VariantValue=0
+ParamDesignator1=R3
+Variation7=Designator=R4|UniqueId=\IPMIOCLT|Kind=1|AlternatePart=
+Variation8=Designator=C6|UniqueId=\IZDQEXEE|Kind=1|AlternatePart=
+Variation9=Designator=R2|UniqueId=\CVYHHWDK|Kind=2|AlternatePart=0|AltLibLink_LibIdentifierKind=Library Full Path|AltLibLink_LibraryIdentifier=O:\Altium\Library\SchLib\ELD-RESISTOR.SchLib|AltLibLink_SymbolReference=|AltLibLink_DesignItemID=R_0805|AltLibLink_UseLibraryName=True|AltLibLink_SourceLibraryName=ELD-RESISTOR.SchLib|AltLibLink_UseDBTableName=False|AltLibLink_DatabaseTableName=|AltLibLink_VaultGUID=|AltLibLink_ItemGUID=|AltLibLink_RevisionGUID=|AltLibLink_Footprint=R_0805|AltLibLink_IsSameFootprint=True
+ParamVariation2=ParameterName=Comment|VariantValue=0
+ParamDesignator2=R2
+ParamVariation3=ParameterName=Component Kind|VariantValue=Standard
+ParamDesignator3=R2
+ParamVariation4=ParameterName=Description|VariantValue=
+ParamDesignator4=R2
+ParamVariation5=ParameterName=Filename|VariantValue=
+ParamDesignator5=R2
+ParamVariation6=ParameterName=Footprint|VariantValue=R_0805
+ParamDesignator6=R2
+ParamVariation7=ParameterName=Ibis Model|VariantValue=
+ParamDesignator7=R2
+ParamVariation8=ParameterName=Library Reference|VariantValue=R_0805
+ParamDesignator8=R2
+ParamVariation9=ParameterName=PCB3D|VariantValue=
+ParamDesignator9=R2
+ParamVariation10=ParameterName=Pin Info|VariantValue=
+ParamDesignator10=R2
+ParamVariation11=ParameterName=Signal Integrity|VariantValue=
+ParamDesignator11=R2
+ParamVariation12=ParameterName=Simulation|VariantValue=
+ParamDesignator12=R2
+Variation10=Designator=R7|UniqueId=\SMFUTNZH|Kind=0|AlternatePart=0
+ParamVariation13=ParameterName=Comment|VariantValue=0
+ParamDesignator13=R7
+ParamVariationCount=13
 
 [GeneratedDocument1]
 DocumentPath=Project Outputs for QCM_hardware\Design Rule Check - QCM_circuit.html

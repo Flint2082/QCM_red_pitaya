@@ -218,12 +218,6 @@ footer { height: 24px; background: var(--surface); border-top: 1px solid var(--b
   <!-- MAIN -->
   <div class="tab-panel active" id="panel-main">
     <div class="toolbar">
-      <span class="toolbar-label">AMB TEMP</span>
-      <div class="num-input-wrap">
-        <input id="input-amb-temp" type="number" value="23" min="-40" max="100" step="0.5" oninput="syncAmbTemp(this.value)">
-        <span class="num-input-unit">°C</span>
-      </div>
-      <div class="toolbar-sep"></div>
       <span class="toolbar-label">WINDOW</span>
       <div class="num-input-wrap">
         <input id="input-window-main" type="number" value="3000" min="50" max="50000" step="50" onchange="setWindowMain(this.value)">
@@ -256,12 +250,6 @@ footer { height: 24px; background: var(--surface); border-top: 1px solid var(--b
   <!-- MONITOR — toolbar matches main -->
   <div class="tab-panel" id="panel-monitor">
     <div class="toolbar">
-      <span class="toolbar-label">AMB TEMP</span>
-      <div class="num-input-wrap">
-        <input id="input-amb-temp-2" type="number" value="23" min="-40" max="100" step="0.5" oninput="syncAmbTemp(this.value, true)">
-        <span class="num-input-unit">°C</span>
-      </div>
-      <div class="toolbar-sep"></div>
       <span class="toolbar-label">WINDOW</span>
       <div class="num-input-wrap">
         <input id="input-window-monitor" type="number" value="300" min="50" max="50000" step="50" onchange="setWindowMonitor(this.value)">
@@ -622,12 +610,6 @@ function setWindowMonitor(v) {
   MAX_PTS_MONITOR = Math.max(50, parseInt(v) || 300);
   document.getElementById('input-window-monitor').value = MAX_PTS_MONITOR;
 }
-function syncAmbTemp(value, fromMonitor = false) {
-  const other = fromMonitor ? 'input-amb-temp' : 'input-amb-temp-2';
-  const el = document.getElementById(other);
-  if (el) el.value = value;
-}
-
 // ---- State tracking ----
 let lockMass = false;
 let lockTemp = false;
@@ -1415,8 +1397,8 @@ function onOpcStatus(ev) {
 async function sendCommand(action) {
   let url;
   if (action === 'start') {
-    const t = parseFloat(document.getElementById('input-amb-temp').value);
-    if (isNaN(t)) { showToast('Enter a valid ambient temperature.', true); return; }
+    const t = parseFloat(document.getElementById('s-amb-temp').value);
+    if (isNaN(t)) { showToast('Set a valid ambient temperature in Settings.', true); return; }
     _startRequested = true;  // marks this RUNNING transition as a fresh run (clears the buffer)
     // Film material parameters from the Measurement settings (per-run values)
     const dens = parseFloat(document.getElementById('s-mat-dens')?.value);

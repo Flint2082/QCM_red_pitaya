@@ -3,16 +3,14 @@
     "1": {
       "int_gain": 1e-05,
       "prop_gain": 0.0,
-      "iq_gain": 1e-05,
-      "inverted": true,
-      "lpf_gain": 1e-05
+      "lpf_freq": 200.0,
+      "inverted": true
     },
     "2": {
       "int_gain": 1e-05,
       "prop_gain": 0.0,
-      "iq_gain": 1e-05,
-      "inverted": true,
-      "lpf_gain": 1e-05
+      "lpf_freq": 200.0,
+      "inverted": true
     }
   },
   "output_mode": 0,

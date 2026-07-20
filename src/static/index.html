@@ -1503,6 +1503,12 @@ async function uploadCrystal(input) {
   input.value = '';
 }
 
+function stopFromLockFailed() {
+  // Lock failed during a measurement leaves the worker back in MEASURING; stop it outright.
+  document.getElementById('modal-lock-failed').style.display = 'none';
+  sendCommand('stop');
+}
+
 function goToCrystalSettings() {
   document.getElementById('modal-lock-failed').style.display = 'none';
   document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
@@ -1694,6 +1700,7 @@ function clearLogs() {
       </ul>
     </div>
     <div class="modal-footer">
+      <button class="btn btn-red" onclick="stopFromLockFailed()">STOP</button>
       <button class="btn btn-orange" onclick="goToCrystalSettings()">OPEN CRYSTAL SETTINGS</button>
       <button class="btn" onclick="document.getElementById('modal-lock-failed').style.display='none'">DISMISS</button>
     </div>

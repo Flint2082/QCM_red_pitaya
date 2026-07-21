@@ -371,6 +371,7 @@ footer { height: 24px; background: var(--surface); border-top: 1px solid var(--b
             <div class="settings-row"><div><div class="settings-row-label">Proportional Gain</div><div class="settings-row-desc">PLL loop proportional coefficient</div></div><div></div><div style="display:flex;align-items:center;gap:6px"><input class="settings-input" type="number" id="s-osc1-prop" value="0" step="0.000001"><span class="settings-unit"></span></div></div>
             <div class="settings-row"><div><div class="settings-row-label">LPF Cutoff</div><div class="settings-row-desc">Demodulator low-pass cutoff frequency</div></div><div></div><div style="display:flex;align-items:center;gap:6px"><input class="settings-input" type="number" id="s-osc1-lpf" value="200" step="1" min="0"><span class="settings-unit">Hz</span></div></div>
             <div class="settings-row"><div><div class="settings-row-label">Invert Feedback</div><div class="settings-row-desc">Invert the feedback signal</div></div><div></div><div style="display:flex;align-items:center;gap:6px"><select class="settings-input" id="s-osc1-inv" style="width:150px;text-align:left"><option value="0">Disabled</option><option value="1">Enabled</option></select></div></div>
+            <div class="settings-row"><div><div class="settings-row-label">Phase Detection</div><div class="settings-row-desc">Phase-detector type (FPGA mult_sel)</div></div><div></div><div style="display:flex;align-items:center;gap:6px"><select class="settings-input" id="s-osc1-phase" style="width:150px;text-align:left"><option value="0">ATAN (default)</option><option value="1">Multiplier</option></select></div></div>
           </div>
 
           <div class="settings-section-title">PLL — OSCILLATOR 2 (TEMP MODE)</div>
@@ -379,6 +380,7 @@ footer { height: 24px; background: var(--surface); border-top: 1px solid var(--b
             <div class="settings-row"><div><div class="settings-row-label">Proportional Gain</div><div class="settings-row-desc">PLL loop proportional coefficient</div></div><div></div><div style="display:flex;align-items:center;gap:6px"><input class="settings-input" type="number" id="s-osc2-prop" value="0" step="0.000001"><span class="settings-unit"></span></div></div>
             <div class="settings-row"><div><div class="settings-row-label">LPF Cutoff</div><div class="settings-row-desc">Demodulator low-pass cutoff frequency</div></div><div></div><div style="display:flex;align-items:center;gap:6px"><input class="settings-input" type="number" id="s-osc2-lpf" value="200" step="1" min="0"><span class="settings-unit">Hz</span></div></div>
             <div class="settings-row"><div><div class="settings-row-label">Invert Feedback</div><div class="settings-row-desc">Invert the feedback signal</div></div><div></div><div style="display:flex;align-items:center;gap:6px"><select class="settings-input" id="s-osc2-inv" style="width:150px;text-align:left"><option value="0">Disabled</option><option value="1">Enabled</option></select></div></div>
+            <div class="settings-row"><div><div class="settings-row-label">Phase Detection</div><div class="settings-row-desc">Phase-detector type (FPGA mult_sel)</div></div><div></div><div style="display:flex;align-items:center;gap:6px"><select class="settings-input" id="s-osc2-phase" style="width:150px;text-align:left"><option value="0">ATAN (default)</option><option value="1">Multiplier</option></select></div></div>
           </div>
 
           <div class="settings-section-title">LOCK DETECTION</div>
@@ -1150,6 +1152,7 @@ async function loadInitialSettings() {
       document.getElementById(`s-osc${osc}-prop`).value = os.prop_gain ?? '';
       document.getElementById(`s-osc${osc}-lpf`).value  = os.lpf_freq  ?? '';
       document.getElementById(`s-osc${osc}-inv`).value = os.inverted ? '1' : '0';
+      document.getElementById(`s-osc${osc}-phase`).value = String(os.phase_detect ?? 0);
     }
     if (s.output_mode != null) document.getElementById('s-output-mode').value = s.output_mode;
     if (s.lock_detect) {
@@ -1427,10 +1430,12 @@ async function applyOscSettings(osc) {
   const propGain = parseFloat(document.getElementById(`s-osc${osc}-prop`).value);
   const lpfFreq  = parseFloat(document.getElementById(`s-osc${osc}-lpf`).value);
   const inv      = document.getElementById(`s-osc${osc}-inv`).value === '1';
+  const phase    = parseInt(document.getElementById(`s-osc${osc}-phase`).value) || 0;
   await fetch(`${API_URL}/settings/integrator_gain?oscillator_idx=${osc}&gain=${intGain}`, { method: 'POST' });
   await fetch(`${API_URL}/settings/proportional_gain?oscillator_idx=${osc}&gain=${propGain}`, { method: 'POST' });
   await fetch(`${API_URL}/settings/lpf_freq?oscillator_idx=${osc}&freq=${lpfFreq}`, { method: 'POST' });
   await fetch(`${API_URL}/settings/inverted?oscillator_idx=${osc}&inverted=${inv}`, { method: 'POST' });
+  await fetch(`${API_URL}/settings/phase_detect?oscillator_idx=${osc}&mode=${phase}`, { method: 'POST' });
 }
 
 async function applyCrystal() {
@@ -1538,8 +1543,8 @@ async function applyAllSettings() { await applyOscSettings(1); await applyOscSet
 // their own CONNECT action).
 const SETTING_IDS = [
   's-mat-dens', 's-mat-zratio', 's-amb-temp',
-  's-osc1-int', 's-osc1-prop', 's-osc1-lpf', 's-osc1-inv',
-  's-osc2-int', 's-osc2-prop', 's-osc2-lpf', 's-osc2-inv',
+  's-osc1-int', 's-osc1-prop', 's-osc1-lpf', 's-osc1-inv', 's-osc1-phase',
+  's-osc2-int', 's-osc2-prop', 's-osc2-lpf', 's-osc2-inv', 's-osc2-phase',
   's-lock-amp', 's-lock-phase', 's-output-mode',
   's-crystal-name', 's-crystal-freq-mass', 's-crystal-freq-temp', 's-crystal-freq-virgin',
   's-crystal-mass-sens', 's-crystal-sens-area',
@@ -1694,7 +1699,7 @@ function clearLogs() {
       The oscillators did not lock within the expected time.<br><br>
       Please check the following:
       <ul>
-        <li><strong>Start Frequencies</strong> — must be within ~8 kHz of the crystal's resonant frequency</li>
+        <li><strong>Start Frequencies</strong> — must be within ~500 Hz of the crystal's resonant frequency</li>
         <li><strong>Lock Conditions</strong> — ensure the lock thresholds are appropriate for the crystal</li>
         <li><strong>RF Cabling</strong> — check all connections between the Red Pitaya outputs and the crystal oscillator circuit inputs</li>
       </ul>

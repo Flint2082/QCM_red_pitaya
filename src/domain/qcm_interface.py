@@ -21,7 +21,9 @@ class QCMInterface:
         )
         
         # constants
-        self.WINDOW_SIZE = 2**14
+        # Frequency capture window (Hz). Must match the FPGA's scan window so the
+        # PLL start point (target - WINDOW_SIZE/2) lines up with the hardware sweep.
+        self.WINDOW_SIZE = 2**10
         self.MASS_MODE = 1
         self.TEMP_MODE = 2
         
@@ -29,6 +31,7 @@ class QCMInterface:
         self.INT_GAIN_POST_LOCK = 0.00001
         self.PROP_GAIN_DEFAULT = 0.0  # proportional path off by default (pure-I loop)
         self.LPF_FREQ = 200.0  # Hz — default demodulator LPF cutoff frequency
+        self.PHASE_DETECT_DEFAULT = 0  # mult_sel: FPGA phase-detector type (0 = ATAN, 1 = multiplier)
 
         # Lock-detect conditions (configurable via settings). A channel counts
         # as locked when its amplitude exceeds the threshold AND its phase is
@@ -61,6 +64,7 @@ class QCMInterface:
         self._int_gain = {1: self.INT_GAIN_POST_LOCK, 2: self.INT_GAIN_POST_LOCK}  # post-lock integrator gain
         self._prop_gain = {1: self.PROP_GAIN_DEFAULT, 2: self.PROP_GAIN_DEFAULT}   # proportional gain
         self._lpf_freq = {1: self.LPF_FREQ, 2: self.LPF_FREQ}                   # LPF cutoff frequency (Hz)
+        self._phase_detect = {1: self.PHASE_DETECT_DEFAULT, 2: self.PHASE_DETECT_DEFAULT}  # mult_sel: phase-detector type
 
 
         self.fpga = fpga
@@ -127,7 +131,14 @@ class QCMInterface:
         self.fpga.write_register(register_name='inv_fb_'+str(osc_index), value=inv)
         self._inv[osc_index] = bool(inv)
 
-    def setOscConfig(self, osc_index, int_gain=None, prop_gain=None, lpf_freq=None, inverted=None):
+    def setPhaseDetect(self, osc_index, mode):
+        # mult_sel is a 1-bit FPGA register selecting the phase-detector type
+        # (0 = ATAN, 1 = multiplier), so coerce to a single bit.
+        value = 1 if int(mode) else 0
+        self.fpga.write_register(register_name='mult_sel_'+str(osc_index), value=value)
+        self._phase_detect[osc_index] = value
+
+    def setOscConfig(self, osc_index, int_gain=None, prop_gain=None, lpf_freq=None, inverted=None, phase_detect=None):
         """Apply and remember the configured per-oscillator loop settings. The
         cached values are reused by startupPLL so a lock uses the persisted
         settings. Low-level setters (setInt/setProp/setLPFFreq) stay uncached for
@@ -143,7 +154,9 @@ class QCMInterface:
             self.setLPFFreq(osc_index, lpf_freq)
         if inverted is not None:
             self.setInv(osc_index, inverted)
-        
+        if phase_detect is not None:
+            self.setPhaseDetect(osc_index, phase_detect)
+
     def setOutputMode(self, mode = -1):
         if mode == -1:
             print("Output mode not set. These are the available modes:")
@@ -269,14 +282,16 @@ class QCMInterface:
         
         print(f"Starting up PLLs around frequencies {start_freq_mass} and {start_freq_temp}")
 
-        ## Apply the configured per-oscillator settings (inversion + proportional gain + LPF cutoff)
+        ## Apply the configured per-oscillator settings (inversion + proportional gain + LPF cutoff + phase-detector type)
         self.setInv(1, self._inv[1])
         self.setProp(1, self._prop_gain[1])
         self.setLPFFreq(1, self._lpf_freq[1])
+        self.setPhaseDetect(1, self._phase_detect[1])
 
         self.setInv(2, self._inv[2])
         self.setProp(2, self._prop_gain[2])
         self.setLPFFreq(2, self._lpf_freq[2])
+        self.setPhaseDetect(2, self._phase_detect[2])
 
         for t in range(self.MAX_STARTUP_TRIES): # try to lock for up to MAX_STARTUP_TRIES
             self.reset()  # Ensure we're starting from a known state each time

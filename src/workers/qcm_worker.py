@@ -150,6 +150,8 @@ class QCMWorker(threading.Thread):
             self.qcm.setOscConfig(command.oscillator_idx, lpf_freq=command.freq)
         elif isinstance(command, SetInvertedCommand):
             self.qcm.setOscConfig(command.oscillator_idx, inverted=command.inverted)
+        elif isinstance(command, SetPhaseDetectCommand):
+            self.qcm.setOscConfig(command.oscillator_idx, phase_detect=command.mode)
         elif isinstance(command, SetOutputModeCommand):
             self.qcm.setOutputMode(command.mode.value)
         elif isinstance(command, SetLockDetectCommand):

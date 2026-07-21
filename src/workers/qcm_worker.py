@@ -227,4 +227,4 @@ class QCMWorker(threading.Thread):
             data = self.qcm.getMeasurement()
             self.logger.write_measurement(data)  # durable on-disk record (WS-independent)
             self.event_queue.put(MeasurementEvent(data=data))
-            # self.qcm.moveWindow(fM, fT)
+            self.qcm.moveWindow(data.freq_mass_mode, data.freq_temp_mode)  # keep the PLL capture window centered on the current frequencies

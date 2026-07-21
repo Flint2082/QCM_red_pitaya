@@ -180,12 +180,12 @@ class QCMInterface:
         return freq
 
     def getMag(self, osc_index):
-        magnitude = self.to_signed(self.fpga.read_register(f'mag_out_{osc_index}'),20)
-        return magnitude/2**15       # FIX_20_15
+        magnitude = self.to_signed(self.fpga.read_register(f'mag_out_{osc_index}'),32)
+        return magnitude/2**14       # FIX_32_14
         
     def getPhase(self, osc_index):
-        phase = self.to_signed(self.fpga.read_register(f'phase_out_{osc_index}'),20)
-        return phase/2**15           # FIX_20_15
+        phase = self.to_signed(self.fpga.read_register(f'phase_out_{osc_index}'),32)
+        return phase/2**14           # FIX_32_14
 
     def getLockDetect(self, osc_index, amp=None, phase=None):
         if amp is None or phase is None:

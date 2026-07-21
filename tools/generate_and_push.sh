@@ -8,11 +8,20 @@
 # and push to the remote.
 #
 # Usage:
-#   ./generate_and_push.sh
+#   ./generate_and_push.sh "<commit message>"
 #
+# A commit message is mandatory.
 # Paths can be overridden via environment variables (see "SETTINGS" below).
 
 set -euo pipefail
+
+# === ARGUMENTS ===
+COMMIT_MSG="${1:-}"
+[ -n "$COMMIT_MSG" ] || {
+    printf 'Error: a commit message is required.\n' >&2
+    printf 'Usage: %s "<commit message>"\n' "$0" >&2
+    exit 1
+}
 
 # === SETTINGS ===
 PROJECT_DIR="${PROJECT_DIR:-$HOME/work/CASPER_repos/qcm_red_pitaya}"
@@ -76,7 +85,8 @@ git add -f -- "$OUTPUT_BIN" "$FPG_FILE"
 if git diff --cached --quiet; then
     log "ℹ️  Nothing to commit — bitstream and .fpg are already up to date."
 else
-    git commit -m "build: update bitstream and fpg ($(basename "$OUTPUT_BIN"), $(basename "$FPG_FILE"))" \
+    git commit -m "$COMMIT_MSG" \
+        -m "build: update bitstream and fpg ($(basename "$OUTPUT_BIN"), $(basename "$FPG_FILE"))" \
         || die "git commit failed"
     log "✅ Committed $(basename "$OUTPUT_BIN") and $(basename "$FPG_FILE")."
 fi

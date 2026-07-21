@@ -1155,6 +1155,11 @@ async function loadInitialSettings() {
       document.getElementById(`s-osc${osc}-phase`).value = String(os.phase_detect ?? 0);
     }
     if (s.output_mode != null) document.getElementById('s-output-mode').value = s.output_mode;
+    if (s.measurement) {
+      if (s.measurement.ambient_temp != null) document.getElementById('s-amb-temp').value   = s.measurement.ambient_temp;
+      if (s.measurement.mat_dens != null)     document.getElementById('s-mat-dens').value   = s.measurement.mat_dens;
+      if (s.measurement.z_ratio != null)      document.getElementById('s-mat-zratio').value = s.measurement.z_ratio;
+    }
     if (s.lock_detect) {
       if (s.lock_detect.amp_threshold != null)   document.getElementById('s-lock-amp').value   = s.lock_detect.amp_threshold;
       if (s.lock_detect.phase_tolerance != null) document.getElementById('s-lock-phase').value = s.lock_detect.phase_tolerance;
@@ -1536,7 +1541,15 @@ async function applyLockDetect() {
   await fetch(`${API_URL}/settings/lock_detect?amp_threshold=${amp}&phase_tolerance=${phase}`, { method: 'POST' });
 }
 
-async function applyAllSettings() { await applyOscSettings(1); await applyOscSettings(2); await applyOutputMode(); await applyLockDetect(); await applyCrystal(); }
+async function applyMeasurementParams() {
+  const t    = parseFloat(document.getElementById('s-amb-temp').value);
+  const dens = parseFloat(document.getElementById('s-mat-dens').value);
+  const zr   = parseFloat(document.getElementById('s-mat-zratio').value);
+  if ([t, dens, zr].some(isNaN)) return;
+  await fetch(`${API_URL}/settings/measurement_params?ambient_temp=${t}&mat_dens=${dens}&z_ratio=${zr}`, { method: 'POST' });
+}
+
+async function applyAllSettings() { await applyOscSettings(1); await applyOscSettings(2); await applyMeasurementParams(); await applyOutputMode(); await applyLockDetect(); await applyCrystal(); }
 
 // ---- Dirty-state tracking for the unified APPLY / UNDO buttons ----
 // Every settings input that APPLY commits. OPC fields are excluded (they have

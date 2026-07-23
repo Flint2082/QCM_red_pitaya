@@ -31,7 +31,7 @@ class QCMInterface:
         self.MASS_MODE = 1
         self.TEMP_MODE = 2
         
-        self.INT_GAIN_PRE_LOCK = 0.01
+        self.INT_GAIN_PRE_LOCK = 0.1
         self.INT_GAIN_POST_LOCK = 0.00001
         self.PROP_GAIN_DEFAULT = 0.0  # proportional path off by default (pure-I loop)
         self.LPF_FREQ = 200.0  # Hz — default demodulator LPF cutoff frequency

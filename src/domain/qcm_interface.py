@@ -23,7 +23,7 @@ class QCMInterface:
         # constants
         # Frequency capture window (Hz). Must match the FPGA's scan window so the
         # PLL start point (target - WINDOW_SIZE/2) lines up with the hardware sweep.
-        self.WINDOW_SIZE = 2**10
+        self.WINDOW_SIZE = 2**12
         self.MASS_MODE = 1
         self.TEMP_MODE = 2
         
@@ -35,9 +35,14 @@ class QCMInterface:
 
         # Lock-detect conditions (configurable via settings). A channel counts
         # as locked when its amplitude exceeds the threshold AND its phase is
-        # within the tolerance of zero.
+        # within the tolerance of that phase detector's lock point.
         self.LOCK_AMP_THRESHOLD = 0.1     # minimum amplitude
-        self.LOCK_PHASE_TOLERANCE = 0.05  # maximum |phase|
+        self.LOCK_PHASE_TOLERANCE = 0.05  # maximum |phase - lock point|
+        # Phase (radians) each detector type settles at once locked, for the
+        # default inverted feedback: the ATAN detector drives the phase to zero,
+        # while the multiplier (mixer) detector locks in quadrature at -pi/2.
+        # Non-inverted feedback flips the quadrature sign — see getPhaseLockTarget.
+        self.PHASE_LOCK_TARGET = {0: 0.0, 1: -np.pi / 2}
         
         # variables
         # Calibration coefficients, pushed in from the active crystal profile via
@@ -200,12 +205,25 @@ class QCMInterface:
         phase = self.to_signed(self.fpga.read_register(f'phase_out_{osc_index}'),30)
         return phase/2**12           # FIX_30_12
 
+    def getPhaseLockTarget(self, osc_index):
+        """Phase (radians) this channel settles at once locked. The ATAN detector
+        drives the phase to zero; the multiplier (mixer) detector locks in
+        quadrature, and inverting the feedback flips which of the two quadrature
+        points (-pi/2 / +pi/2) is the stable one."""
+        target = self.PHASE_LOCK_TARGET.get(self._phase_detect.get(osc_index, 0), 0.0)
+        if not self._inv.get(osc_index, True):
+            target = -target
+        return target
+
     def getLockDetect(self, osc_index, amp=None, phase=None):
         if amp is None or phase is None:
             amp = self.getMag(osc_index)
             phase = self.getPhase(osc_index)
-        # Amplitude above threshold and phase close to 0 indicates lock. The phase is the most important factor, but the amplitude check helps avoid false positives when the signal is very weak.
-        return amp > self.LOCK_AMP_THRESHOLD and abs(phase) < self.LOCK_PHASE_TOLERANCE
+        # Amplitude above threshold and phase close to this channel's lock point
+        # indicates lock. The phase is the most important factor, but the amplitude check helps avoid false positives when the signal is very weak.
+        target = self.getPhaseLockTarget(osc_index)
+        error = (phase - target + np.pi) % (2 * np.pi) - np.pi  # shortest angular distance, handles wrap
+        return amp > self.LOCK_AMP_THRESHOLD and abs(error) < self.LOCK_PHASE_TOLERANCE
     
     # ===========================
     # Control methods
@@ -278,7 +296,7 @@ class QCMInterface:
              
     def startupPLL(self, start_freq_mass: float, start_freq_temp: float):
         self.bothLocked = False
-        self.MAX_STARTUP_TRIES = 100  # seconds
+        self.MAX_STARTUP_TRIES = 20  
         
         print(f"Starting up PLLs around frequencies {start_freq_mass} and {start_freq_temp}")
 
@@ -301,7 +319,7 @@ class QCMInterface:
             self.setFreq(2,start_freq_temp-self.WINDOW_SIZE/2)
             self.setInt(2,self.INT_GAIN_PRE_LOCK)
             
-            time.sleep(0.1)  # wait a bit for PLL to respond
+            time.sleep(0.5)  # wait a bit for PLL to respond
         
             bothLocked = self.getLockDetect(1) and self.getLockDetect(2)
             if bothLocked:

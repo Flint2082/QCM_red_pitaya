@@ -172,6 +172,7 @@ All methods are on `QCMClient`. Frequencies are in Hz unless noted.
 | `set_phase_detect(oscillator_idx, mode)` | `POST /settings/phase_detect` (FPGA `mult_sel`, 0 = ATAN, 1 = multiplier) |
 | `set_output_mode(mode)` | `POST /settings/output_mode` (DAC debug tap, int 0–11) |
 | `set_lock_detect(amp_threshold, phase_tolerance)` | `POST /settings/lock_detect` |
+| `set_auto_relock(enabled)` | `POST /settings/auto_relock` (auto re-acquire on lost lock, default on) |
 | `set_lock_frequencies(mass, temp)` | `POST /settings/lock_frequencies` (transient, feeds `get_lock`) |
 | `get_lock_frequencies()` | `GET /settings/lock_frequencies` |
 | `set_coefficients(fM_0..fM_3, fT_0..fT_3)` | `POST /settings/coefficients` (compensation polynomial) |

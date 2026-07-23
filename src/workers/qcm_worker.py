@@ -39,6 +39,7 @@ class QCMWorker(threading.Thread):
         # Automatic re-lock: if both modes stay unlocked this long during a
         # measurement, re-acquire around the last lock frequencies.
         self.AUTO_RELOCK_AFTER = 1.0  # seconds
+        self.auto_relock = True  # configurable; when off a lost lock is left alone
         self._lock_freqs: tuple | None = None  # (mass, temp) from the last GET LOCK
         self._lock_lost_since: float | None = None
         
@@ -156,6 +157,9 @@ class QCMWorker(threading.Thread):
             self.qcm.setOutputMode(command.mode.value)
         elif isinstance(command, SetLockDetectCommand):
             self.qcm.setLockDetect(command.amp_threshold, command.phase_tolerance)
+        elif isinstance(command, SetAutoRelockCommand):
+            self.auto_relock = bool(command.enabled)
+            self._lock_lost_since = None  # drop any in-flight timer so toggling can't fire a stale re-lock
         elif isinstance(command, SetSensorParamsCommand):
             self.qcm.setSensorParams(command.mass_sensitivity, command.sens_area, command.freq_virgin)
         elif isinstance(command, SetCoefficientsCommand):
@@ -216,7 +220,7 @@ class QCMWorker(threading.Thread):
             # re-acquire around the last lock frequencies (blocks until done).
             if lock_mass and lock_temp:
                 self._lock_lost_since = None
-            elif self._lock_freqs is not None:
+            elif self.auto_relock and self._lock_freqs is not None:
                 if self._lock_lost_since is None:
                     self._lock_lost_since = now
                 elif now - self._lock_lost_since >= self.AUTO_RELOCK_AFTER:

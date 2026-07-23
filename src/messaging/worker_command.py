@@ -92,6 +92,10 @@ class SetLockDetectCommand(WorkerCommand):
     phase_tolerance: float
 
 @dataclass
+class SetAutoRelockCommand(WorkerCommand):
+    enabled: bool  # re-acquire automatically when lock is lost mid-measurement
+
+@dataclass
 class SetSensorParamsCommand(WorkerCommand):
     mass_sensitivity: float
     sens_area: float

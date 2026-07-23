@@ -173,6 +173,8 @@ class RestServer:
         # Lock-detect conditions (defaults match QCMInterface)
         self._lock_amp_threshold: float = 0.1
         self._lock_phase_tolerance: float = 0.05
+        # Automatic re-lock when lock is lost mid-measurement (default on)
+        self._auto_relock: bool = True
         # Per-run measurement params — last values from a REST start, reused for
         # OPC-triggered starts (so OPC needs no settings of its own).
         self._ambient_temp: float = 23.0
@@ -216,6 +218,8 @@ class RestServer:
             self._lock_amp_threshold = float(d["lock_amp_threshold"])
         if "lock_phase_tolerance" in d:
             self._lock_phase_tolerance = float(d["lock_phase_tolerance"])
+        if "auto_relock" in d:
+            self._auto_relock = bool(d["auto_relock"])
         if "active_crystal" in d:
             self._active_crystal = d["active_crystal"]
         if "ambient_temp" in d:
@@ -238,6 +242,7 @@ class RestServer:
             "output_mode":    self._output_mode,
             "lock_amp_threshold":   self._lock_amp_threshold,
             "lock_phase_tolerance": self._lock_phase_tolerance,
+            "auto_relock":    self._auto_relock,
             "active_crystal": self._active_crystal,
             "ambient_temp": self._ambient_temp,
             "mat_dens": self._mat_dens,
@@ -314,6 +319,7 @@ class RestServer:
             print(f"[Settings] Skipping invalid persisted output_mode={self._output_mode} on boot")
 
         self.command_queue.put(SetLockDetectCommand(self._lock_amp_threshold, self._lock_phase_tolerance))
+        self.command_queue.put(SetAutoRelockCommand(self._auto_relock))
 
         # Apply the active crystal's coefficients + lock frequencies, if any.
         if self._active_crystal:
@@ -593,6 +599,13 @@ class RestServer:
             self._save_settings()
             return {"status": "ok"}
 
+        @app.post("/settings/auto_relock")
+        def set_auto_relock(enabled: bool):
+            self._auto_relock = enabled
+            self.command_queue.put(SetAutoRelockCommand(enabled))
+            self._save_settings()
+            return {"status": "ok"}
+
         @app.post("/settings/measurement_params")
         def set_measurement_params(ambient_temp: float, mat_dens: float, z_ratio: float):
             # Film/run parameters shown in the settings panel. /measurement/start
@@ -624,6 +637,7 @@ class RestServer:
                     "amp_threshold":   self._lock_amp_threshold,
                     "phase_tolerance": self._lock_phase_tolerance,
                 },
+                "auto_relock": self._auto_relock,
                 "lock_frequencies": {
                     "mass": _finite(self._lock_freq_mass),
                     "temp": _finite(self._lock_freq_temp),

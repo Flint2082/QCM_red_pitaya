@@ -92,6 +92,10 @@ class SetLockDetectCommand(ApiCommand):
     phase_tolerance: float
 
 @dataclass
+class SetAutoRelockCommand(ApiCommand):
+    enabled: bool  # re-acquire automatically when lock is lost mid-measurement
+
+@dataclass
 class SetSensorParamsCommand(ApiCommand):
     mass_sensitivity: float
     sens_area: float

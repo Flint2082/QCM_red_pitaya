@@ -299,7 +299,7 @@ class QCMInterface:
              
     def startupPLL(self, start_freq_mass: float, start_freq_temp: float):
         self.bothLocked = False
-        self.MAX_STARTUP_TRIES = 20  
+        self.MAX_STARTUP_TRIES = 10  
         
         print(f"Starting up PLLs around frequencies {start_freq_mass} and {start_freq_temp}")
 
@@ -315,14 +315,15 @@ class QCMInterface:
         self.setPhaseDetect(2, self._phase_detect[2])
 
         for t in range(self.MAX_STARTUP_TRIES): # try to lock for up to MAX_STARTUP_TRIES
-            self.reset()  # Ensure we're starting from a known state each time
             self.setFreq(1,start_freq_mass-self.WINDOW_SIZE/2)
             self.setInt(1,self.INT_GAIN_PRE_LOCK)
             
             self.setFreq(2,start_freq_temp-self.WINDOW_SIZE/2)
             self.setInt(2,self.INT_GAIN_PRE_LOCK)
             
-            time.sleep(0.5)  # wait a bit for PLL to respond
+            self.reset()  # Ensure we're starting from a known state each time
+            
+            time.sleep(1)  # wait a bit for PLL to respond
         
             bothLocked = self.getLockDetect(1) and self.getLockDetect(2)
             if bothLocked:

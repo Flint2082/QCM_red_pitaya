@@ -97,6 +97,20 @@ class QCMWorker(threading.Thread):
         self._set_state(WorkerState.MEASURING if resume_measuring else WorkerState.IDLE)
         return locked
 
+    def _settings_snapshot(self, command) -> dict:
+        """Everything that affects how a run is acquired: the loop/lock config the
+        QCM owns, plus the worker's own automation flags and this run's material
+        parameters. Recorded once at run start."""
+        snapshot = self.qcm.getSettingsSnapshot()
+        snapshot["auto_relock"] = self.auto_relock
+        snapshot["auto_amp_threshold"] = self.auto_amp_threshold
+        snapshot["measurement"] = {
+            "ambient_temp": command.ambient_temp,
+            "mat_dens":     command.mat_dens,
+            "z_ratio":      command.z_ratio,
+        }
+        return snapshot
+
     def handle_command(self, command: WorkerCommand):
 
         # ============================
@@ -119,6 +133,7 @@ class QCMWorker(threading.Thread):
         elif isinstance(command, StartMeasurementCommand) and self.state == WorkerState.IDLE:
             self.qcm.setMeasurementReference(T=command.ambient_temp, mat_dens=command.mat_dens, z_ratio=command.z_ratio)
             self.logger.start()
+            self.logger.write_settings(self._settings_snapshot(command))
             self.logger.write_event("RUN_START", f"T={command.ambient_temp} mat_dens={command.mat_dens} z_ratio={command.z_ratio}")
             self._set_state(WorkerState.MEASURING)
 
@@ -128,14 +143,14 @@ class QCMWorker(threading.Thread):
             lock_mass = self.qcm.getLockDetect(1)
             lock_temp = self.qcm.getLockDetect(2)
             if lock_mass and lock_temp:
-                freq_mass = round(self.qcm.getFreq(1) / 1000) * 1000
-                freq_temp = round(self.qcm.getFreq(2) / 1000) * 1000
+                freq_mass = round(self.qcm.getFreq(1) / 100) * 100
+                freq_temp = round(self.qcm.getFreq(2) / 100) * 100
                 self.event_queue.put(StartFreqAutoUpdatedEvent(freq_mass=freq_mass, freq_temp=freq_temp))
                 # Auto-calibrate the lock amplitude threshold from this run's final
                 # amplitudes. One global threshold is compared against both channels,
                 # so scale off the weaker one to keep both comfortably above it.
                 if self.auto_amp_threshold:
-                    amp = min(self.qcm.getMag(1), self.qcm.getMag(2))
+                    amp = round(min(self.qcm.getMag(1), self.qcm.getMag(2)))
                     if amp > 0:  # a non-positive threshold would make everything "locked"
                         threshold = self.AMP_THRESHOLD_FRACTION * amp
                         self.qcm.setLockDetect(threshold, self.qcm.LOCK_PHASE_TOLERANCE)

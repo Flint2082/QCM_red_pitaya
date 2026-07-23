@@ -343,6 +343,28 @@ class QCMInterface:
         self.setInt(2, self._int_gain[2])
         return bothLocked
         
+    def getSettingsSnapshot(self) -> dict:
+        """Loop/lock configuration as plain data, for recording alongside a run so
+        a CSV can be interpreted later without guessing how it was acquired."""
+        return {
+            "oscillators": {
+                str(i): {
+                    "int_gain":          self._int_gain.get(i),
+                    "prop_gain":         self._prop_gain.get(i),
+                    "lpf_freq":          self._lpf_freq.get(i),
+                    "inverted":          self._inv.get(i),
+                    "phase_detect":      self._phase_detect.get(i),
+                    "phase_lock_target": self.getPhaseLockTarget(i),
+                }
+                for i in (1, 2)
+            },
+            "lock_detect": {
+                "amp_threshold":   self.LOCK_AMP_THRESHOLD,
+                "phase_tolerance": self.LOCK_PHASE_TOLERANCE,
+            },
+            "window_size": self.WINDOW_SIZE,
+        }
+
     def getCoefficients(self) -> dict:
         return dict(self.coefficients)
 

@@ -5,12 +5,16 @@ recording is independent of the browser/WebSocket (a WS drop, a browser refresh,
 or closing the laptop no longer punches holes in the data). The column layout
 matches the UI export exactly, so tools/csv_plotter.py reads both kinds of file.
 
+Each run also records the settings it was acquired with as a single SETTINGS
+event row (JSON in event_detail) — see write_settings.
+
 All writes happen on the worker thread (the only caller), so no locking is
 needed. Writes are flushed immediately and failures are swallowed with a warning
 so logging can never interrupt the measurement loop.
 """
 
 import csv
+import json
 import os
 import time
 from datetime import datetime, timezone
@@ -78,6 +82,16 @@ class RunLogger:
             self._file.flush()
         except Exception as e:
             print(f"[RunLogger] Measurement write failed: {e}")
+
+    def write_settings(self, settings: dict) -> None:
+        """Record the settings a run was acquired with as a single SETTINGS event
+        row, with the nested dict JSON-encoded into event_detail. Deliberately an
+        event row rather than new columns or a header block, so the layout is
+        unchanged and existing readers keep working."""
+        try:
+            self.write_event("SETTINGS", json.dumps(settings, sort_keys=True, separators=(",", ":")))
+        except Exception as e:
+            print(f"[RunLogger] Settings write failed: {e}")
 
     def write_event(self, event_type: str, detail: str = "") -> None:
         if self._writer is None:

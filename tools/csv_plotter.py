@@ -5,6 +5,10 @@ The exported file (qcm_YYYY-MM-DD-HH-MM-SS.csv) mixes two kinds of rows:
   * event rows        - only event_type / event_detail are filled (lock lost,
                         disconnections, ...) and show up as vertical markers.
 
+One event row is special: SETTINGS carries a JSON blob of the settings the run
+was acquired with. It is not drawn as a marker — tick "Show settings" to overlay
+it on the plot (it is also printed to the console on load).
+
 Usage:
     python tools/csv_plotter.py [path/to/qcm_run.csv]
 
@@ -16,6 +20,7 @@ channels span very different units (nm, Hz, °C, 0-1), tick "Normalize" to scale
 every selected series to its own 0-1 range so any combination is comparable.
 """
 
+import json
 import sys
 from pathlib import Path
 
@@ -88,8 +93,27 @@ def to_numeric(series, column):
     return pd.to_numeric(series, errors="coerce")
 
 
+def format_settings(settings):
+    """Flatten the nested settings dict into aligned 'a.b.c: value' lines."""
+    if not settings:
+        return "No settings recorded in this file."
+    lines = []
+
+    def walk(node, prefix=""):
+        for key in sorted(node):
+            value = node[key]
+            if isinstance(value, dict):
+                walk(value, f"{prefix}{key}.")
+            else:
+                lines.append((f"{prefix}{key}", value))
+
+    walk(settings)
+    width = max(len(k) for k, _ in lines)
+    return "\n".join(f"{k.ljust(width)} : {v}" for k, v in lines)
+
+
 def load(path):
-    """Split the CSV into measurement data and event markers."""
+    """Split the CSV into measurement data, event markers, and the run settings."""
     df = pd.read_csv(path)
 
     et = df.get("event_type")
@@ -98,12 +122,24 @@ def load(path):
     data = df[~is_event].copy()
     events = df[is_event].copy()
 
+    # SETTINGS rows are run metadata, not timeline events — pull them out so they
+    # don't clutter the plot with a marker at t=0.
+    settings = {}
+    if not events.empty:
+        is_settings = events["event_type"].astype(str).str.strip() == "SETTINGS"
+        for detail in events.loc[is_settings, "event_detail"].dropna():
+            try:
+                settings = json.loads(detail)
+            except (ValueError, TypeError):
+                pass  # unparseable / older file — just show nothing
+        events = events[~is_settings].copy()
+
     t0 = pd.to_numeric(data["timestamp_s"], errors="coerce").min()
     data["t_rel"] = pd.to_numeric(data["timestamp_s"], errors="coerce") - t0
     if not events.empty:
         events["t_rel"] = pd.to_numeric(events["timestamp_s"], errors="coerce") - t0
 
-    return data, events, t0
+    return data, events, t0, settings
 
 
 def main():
@@ -112,8 +148,11 @@ def main():
         print("No CSV found. Pass one explicitly:\n    python tools/csv_plotter.py path/to/qcm_run.csv")
         sys.exit(1)
 
-    data, events, _ = load(path)
+    data, events, _, settings = load(path)
     t = data["t_rel"].to_numpy()
+
+    settings_text = format_settings(settings)
+    print(f"\n=== Run settings — {Path(path).name} ===\n{settings_text}\n")
 
     fig, ax = plt.subplots(figsize=(12, 7))
     fig.canvas.manager.set_window_title(f"QCM Plotter — {Path(path).name}")
@@ -143,6 +182,14 @@ def main():
     ax.set_title(Path(path).name)
     ax.grid(True, alpha=0.3)
 
+    # Run settings, overlaid on request (hidden by default so it never obscures data).
+    settings_box = ax.text(
+        0.995, 0.985, settings_text, transform=ax.transAxes,
+        ha="right", va="top", fontsize=6.5, family="monospace", zorder=5,
+        bbox=dict(boxstyle="round", facecolor="lightyellow", edgecolor="gray", alpha=0.9),
+    )
+    settings_box.set_visible(False)
+
     # --- channel check boxes -------------------------------------------------
     labels = [label for _, label, _ in available]
     states = [c[0] in DEFAULT_ON for c in available]
@@ -154,14 +201,18 @@ def main():
         text.set_fontsize(9)
 
     # --- options check boxes -------------------------------------------------
-    ax_opts = fig.add_axes([0.02, 0.10, 0.22, 0.14])
+    ax_opts = fig.add_axes([0.02, 0.06, 0.22, 0.18])
     ax_opts.set_title("Options", fontsize=10)
-    options_check = CheckButtons(ax_opts, ["Normalize", "Show events"], [False, bool(event_artists)])
+    options_check = CheckButtons(
+        ax_opts, ["Normalize", "Show events", "Show settings"],
+        [False, bool(event_artists), False],
+    )
 
     label_to_column = {label: column for column, label, _ in available}
 
     def redraw(_=None):
-        normalize, show_events = options_check.get_status()
+        normalize, show_events, show_settings = options_check.get_status()
+        settings_box.set_visible(show_settings)
         channel_status = dict(zip(labels, channel_check.get_status()))
 
         for label, on in channel_status.items():

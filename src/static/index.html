@@ -386,7 +386,7 @@ footer { height: 24px; background: var(--surface); border-top: 1px solid var(--b
           <div class="settings-section-title">LOCK DETECTION</div>
           <div class="settings-group">
             <div class="settings-row"><div><div class="settings-row-label">Amplitude Threshold</div><div class="settings-row-desc">Minimum signal amplitude to count as locked</div></div><div></div><div style="display:flex;align-items:center;gap:6px"><input class="settings-input" type="number" id="s-lock-amp" value="0.1" step="0.01" min="0"><span class="settings-unit"></span></div></div>
-            <div class="settings-row"><div><div class="settings-row-label">Phase Tolerance</div><div class="settings-row-desc">Maximum phase deviation from the detector's lock point (0 for ATAN, ∓π/2 for multiplier depending on feedback inversion) to count as locked</div></div><div></div><div style="display:flex;align-items:center;gap:6px"><input class="settings-input" type="number" id="s-lock-phase" value="0.05" step="0.01" min="0"><span class="settings-unit"></span></div></div>
+            <div class="settings-row"><div><div class="settings-row-label">Phase Tolerance</div><div class="settings-row-desc">Maximum phase deviation from the lock point (∓π/2 depending on feedback inversion) to count as locked</div></div><div></div><div style="display:flex;align-items:center;gap:6px"><input class="settings-input" type="number" id="s-lock-phase" value="0.05" step="0.01" min="0"><span class="settings-unit"></span></div></div>
           </div>
 
           <div class="settings-section-title">OUTPUT</div>
@@ -878,6 +878,12 @@ function checkLockLost(newMass, newTemp) {
 }
 
 function fmt(v, d = 3) { return (v == null) ? '—' : Number(v).toFixed(d); }
+// Frequency spans as a readable Hz/kHz string, e.g. 2048 -> "2.0 kHz", 512 -> "512 Hz".
+function fmtHz(hz) {
+  if (hz == null) return '—';
+  const k = hz / 1000;
+  return hz >= 1000 ? `${Number.isInteger(k) ? k : k.toFixed(1)} kHz` : `${Math.round(hz)} Hz`;
+}
 function setMeta(id, v, u) { const el = document.getElementById(id); if (el) el.textContent = v != null ? `${fmt(v,4)} ${u}` : '—'; }
 function setText(id, v) { const el = document.getElementById(id); if (el) el.textContent = v; }
 
@@ -1159,6 +1165,11 @@ async function loadInitialSettings() {
       if (s.measurement.ambient_temp != null) document.getElementById('s-amb-temp').value   = s.measurement.ambient_temp;
       if (s.measurement.mat_dens != null)     document.getElementById('s-mat-dens').value   = s.measurement.mat_dens;
       if (s.measurement.z_ratio != null)      document.getElementById('s-mat-zratio').value = s.measurement.z_ratio;
+    }
+    // Lock-failed hint tracks the PLL capture window rather than a fixed number.
+    if (s.pll?.capture_range != null) {
+      const el = document.getElementById('lock-capture-range');
+      if (el) el.textContent = fmtHz(s.pll.capture_range);
     }
     if (s.lock_detect) {
       if (s.lock_detect.amp_threshold != null)   document.getElementById('s-lock-amp').value   = s.lock_detect.amp_threshold;
@@ -1712,7 +1723,7 @@ function clearLogs() {
       The oscillators did not lock within the expected time.<br><br>
       Please check the following:
       <ul>
-        <li><strong>Start Frequencies</strong> — must be within ~500 Hz of the crystal's resonant frequency</li>
+        <li><strong>Start Frequencies</strong> — must be within ~<span id="lock-capture-range">2 kHz</span> of the crystal's resonant frequency</li>
         <li><strong>Lock Conditions</strong> — ensure the lock thresholds are appropriate for the crystal</li>
         <li><strong>RF Cabling</strong> — check all connections between the Red Pitaya outputs and the crystal oscillator circuit inputs</li>
       </ul>

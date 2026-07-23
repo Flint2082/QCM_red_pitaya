@@ -10,6 +10,12 @@ import numpy as np
 from domain.measurement import MeasurementData
 
 
+# Frequency capture window (Hz). Must match the FPGA's scan window so the PLL
+# start point (target - WINDOW_SIZE/2) lines up with the hardware sweep. Kept at
+# module level so other layers (e.g. the REST API) can report the resulting
+# capture range without needing a QCMInterface instance.
+WINDOW_SIZE = 2**12
+
 
 class QCMInterface:
     def __init__(self, fpga):
@@ -21,9 +27,7 @@ class QCMInterface:
         )
         
         # constants
-        # Frequency capture window (Hz). Must match the FPGA's scan window so the
-        # PLL start point (target - WINDOW_SIZE/2) lines up with the hardware sweep.
-        self.WINDOW_SIZE = 2**12
+        self.WINDOW_SIZE = WINDOW_SIZE  # see the module-level constant
         self.MASS_MODE = 1
         self.TEMP_MODE = 2
         
@@ -35,14 +39,14 @@ class QCMInterface:
 
         # Lock-detect conditions (configurable via settings). A channel counts
         # as locked when its amplitude exceeds the threshold AND its phase is
-        # within the tolerance of that phase detector's lock point.
+        # within the tolerance of the loop's lock point.
         self.LOCK_AMP_THRESHOLD = 0.1     # minimum amplitude
         self.LOCK_PHASE_TOLERANCE = 0.05  # maximum |phase - lock point|
-        # Phase (radians) each detector type settles at once locked, for the
-        # default inverted feedback: the ATAN detector drives the phase to zero,
-        # while the multiplier (mixer) detector locks in quadrature at -pi/2.
-        # Non-inverted feedback flips the quadrature sign — see getPhaseLockTarget.
-        self.PHASE_LOCK_TARGET = {0: 0.0, 1: -np.pi / 2}
+        # Phase (radians) the loop settles at once locked, for the default
+        # inverted feedback. Both phase detectors (ATAN and multiplier) lock in
+        # quadrature at -pi/2; non-inverted feedback flips the sign — see
+        # getPhaseLockTarget.
+        self.PHASE_LOCK_TARGET = -np.pi / 2
         
         # variables
         # Calibration coefficients, pushed in from the active crystal profile via
@@ -206,11 +210,10 @@ class QCMInterface:
         return phase/2**12           # FIX_30_12
 
     def getPhaseLockTarget(self, osc_index):
-        """Phase (radians) this channel settles at once locked. The ATAN detector
-        drives the phase to zero; the multiplier (mixer) detector locks in
-        quadrature, and inverting the feedback flips which of the two quadrature
-        points (-pi/2 / +pi/2) is the stable one."""
-        target = self.PHASE_LOCK_TARGET.get(self._phase_detect.get(osc_index, 0), 0.0)
+        """Phase (radians) this channel settles at once locked. Both phase
+        detectors lock in quadrature, and inverting the feedback flips which of
+        the two quadrature points (-pi/2 / +pi/2) is the stable one."""
+        target = self.PHASE_LOCK_TARGET
         if not self._inv.get(osc_index, True):
             target = -target
         return target

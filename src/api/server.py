@@ -24,6 +24,7 @@ from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 
 from domain.crystal import CrystalManager, CrystalProfile, sanitize_name
+from domain.qcm_interface import WINDOW_SIZE
 from domain.run_logger import RUNS_DIR
 from plc.opc_worker import _READ_KEYS as OPC_READ_KEYS, _CTRL_KEYS as OPC_CTRL_KEYS
 from messaging.api_command import *
@@ -613,6 +614,11 @@ class RestServer:
                     "ambient_temp": self._ambient_temp,
                     "mat_dens":     self._mat_dens,
                     "z_ratio":      self._z_ratio,
+                },
+                # Derived from the PLL capture window so the UI never hard-codes it.
+                "pll": {
+                    "window_size":   WINDOW_SIZE,
+                    "capture_range": WINDOW_SIZE / 2,
                 },
                 "lock_detect": {
                     "amp_threshold":   self._lock_amp_threshold,

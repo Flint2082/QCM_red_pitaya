@@ -186,6 +186,7 @@ class QCMInterface:
 
     def reset(self):
         self.fpga.write_register(register_name='reset', value=1)
+        time.sleep(0.001)  # small delay to ensure reset is registered
         self.fpga.write_register(register_name='reset', value=0)
         
     def getFreq(self, osc_index):
@@ -296,7 +297,7 @@ class QCMInterface:
              
     def startupPLL(self, start_freq_mass: float, start_freq_temp: float):
         self.bothLocked = False
-        self.MAX_STARTUP_TRIES = 100  # seconds
+        self.MAX_STARTUP_TRIES = 100  
         
         print(f"Starting up PLLs around frequencies {start_freq_mass} and {start_freq_temp}")
 

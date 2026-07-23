@@ -186,7 +186,6 @@ class QCMInterface:
 
     def reset(self):
         self.fpga.write_register(register_name='reset', value=1)
-        time.sleep(0.001)  # small delay to ensure reset is registered
         self.fpga.write_register(register_name='reset', value=0)
         
     def getFreq(self, osc_index):
@@ -297,7 +296,7 @@ class QCMInterface:
              
     def startupPLL(self, start_freq_mass: float, start_freq_temp: float):
         self.bothLocked = False
-        self.MAX_STARTUP_TRIES = 100  
+        self.MAX_STARTUP_TRIES = 20  
         
         print(f"Starting up PLLs around frequencies {start_freq_mass} and {start_freq_temp}")
 
@@ -320,7 +319,7 @@ class QCMInterface:
             self.setFreq(2,start_freq_temp-self.WINDOW_SIZE/2)
             self.setInt(2,self.INT_GAIN_PRE_LOCK)
             
-            time.sleep(0.1)  # wait a bit for PLL to respond
+            time.sleep(0.5)  # wait a bit for PLL to respond
         
             bothLocked = self.getLockDetect(1) and self.getLockDetect(2)
             if bothLocked:

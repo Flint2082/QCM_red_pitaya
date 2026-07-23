@@ -72,6 +72,11 @@ class SetInvertedCommand(ApiCommand):
     inverted: bool
 
 @dataclass
+class SetPhaseDetectCommand(ApiCommand):
+    oscillator_idx: int
+    mode: int  # mult_sel: phase-detector type (0 = ATAN, 1 = multiplier)
+
+@dataclass
 class SetLPFFreqCommand(ApiCommand):
     oscillator_idx: int
     freq: float  # LPF cutoff frequency in Hz

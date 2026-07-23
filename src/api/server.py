@@ -165,8 +165,8 @@ class RestServer:
         self._lock_freq_temp: float = 6570000.0
         # Oscillator settings cache — defaults match QCMInterface post-lock state
         self._osc_settings: dict = {
-            1: {"int_gain": 0.00001, "prop_gain": 0.0, "lpf_freq": 200.0, "inverted": True},
-            2: {"int_gain": 0.00001, "prop_gain": 0.0, "lpf_freq": 200.0, "inverted": True},
+            1: {"int_gain": 0.00001, "prop_gain": 0.0, "lpf_freq": 200.0, "inverted": True, "phase_detect": 0},
+            2: {"int_gain": 0.00001, "prop_gain": 0.0, "lpf_freq": 200.0, "inverted": True, "phase_detect": 0},
         }
         self._output_mode: int = 0
         # Lock-detect conditions (defaults match QCMInterface)
@@ -304,6 +304,8 @@ class RestServer:
                 self.command_queue.put(SetLPFFreqCommand(osc, s["lpf_freq"]))
             if "inverted" in s:
                 self.command_queue.put(SetInvertedCommand(osc, bool(s["inverted"])))
+            if "phase_detect" in s:
+                self.command_queue.put(SetPhaseDetectCommand(osc, int(s["phase_detect"])))
 
         try:
             self.command_queue.put(SetOutputModeCommand(1, OutputMode(self._output_mode)))
@@ -535,6 +537,15 @@ class RestServer:
             self._save_settings()
             return {"status": "ok"}
 
+        @app.post("/settings/phase_detect")
+        def set_phase_detect(oscillator_idx: int, mode: int):
+            # mult_sel: FPGA phase-detector type (1-bit register, 0 = ATAN, 1 = multiplier)
+            mode = 1 if mode else 0
+            self._osc_settings.setdefault(oscillator_idx, {})["phase_detect"] = mode
+            self.command_queue.put(SetPhaseDetectCommand(oscillator_idx, mode))
+            self._save_settings()
+            return {"status": "ok"}
+
         @app.get("/settings/lock_frequencies")
         def get_lock_frequencies():
             return {"mass": self._lock_freq_mass, "temp": self._lock_freq_temp}
@@ -581,6 +592,15 @@ class RestServer:
             self._save_settings()
             return {"status": "ok"}
 
+        @app.post("/settings/measurement_params")
+        def set_measurement_params(ambient_temp: float, mat_dens: float, z_ratio: float):
+            # Film/run parameters shown in the settings panel. /measurement/start
+            # also captures these from the live form; persisting them on APPLY too
+            # means an edit survives a restart even with no measurement in between.
+            self._ambient_temp, self._mat_dens, self._z_ratio = ambient_temp, mat_dens, z_ratio
+            self._save_settings()
+            return {"status": "ok"}
+
         def _finite(v):
             return v if isinstance(v, float) and math.isfinite(v) else (None if isinstance(v, float) else v)
 
@@ -589,6 +609,11 @@ class RestServer:
             return {
                 "oscillators":      self._osc_settings,
                 "output_mode":      self._output_mode,
+                "measurement": {
+                    "ambient_temp": self._ambient_temp,
+                    "mat_dens":     self._mat_dens,
+                    "z_ratio":      self._z_ratio,
+                },
                 "lock_detect": {
                     "amp_threshold":   self._lock_amp_threshold,
                     "phase_tolerance": self._lock_phase_tolerance,

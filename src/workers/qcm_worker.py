@@ -150,6 +150,8 @@ class QCMWorker(threading.Thread):
             self.qcm.setOscConfig(command.oscillator_idx, lpf_freq=command.freq)
         elif isinstance(command, SetInvertedCommand):
             self.qcm.setOscConfig(command.oscillator_idx, inverted=command.inverted)
+        elif isinstance(command, SetPhaseDetectCommand):
+            self.qcm.setOscConfig(command.oscillator_idx, phase_detect=command.mode)
         elif isinstance(command, SetOutputModeCommand):
             self.qcm.setOutputMode(command.mode.value)
         elif isinstance(command, SetLockDetectCommand):
@@ -225,4 +227,4 @@ class QCMWorker(threading.Thread):
             data = self.qcm.getMeasurement()
             self.logger.write_measurement(data)  # durable on-disk record (WS-independent)
             self.event_queue.put(MeasurementEvent(data=data))
-            # self.qcm.moveWindow(fM, fT)
+            self.qcm.moveWindow(data.freq_mass_mode, data.freq_temp_mode)  # keep the PLL capture window centered on the current frequencies

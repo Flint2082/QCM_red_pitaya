@@ -69,6 +69,10 @@ class QCMClient:
     def set_inverted(self, oscillator_idx: int, inverted: bool):
         return self._post("/settings/inverted", oscillator_idx=oscillator_idx, inverted=bool(inverted))
 
+    def set_phase_detect(self, oscillator_idx: int, mode: int):
+        """Phase-detector type (FPGA mult_sel): 0 = ATAN (default), 1 = multiplier."""
+        return self._post("/settings/phase_detect", oscillator_idx=oscillator_idx, mode=int(mode))
+
     def set_output_mode(self, mode: int):
         return self._post("/settings/output_mode", mode=mode)
 

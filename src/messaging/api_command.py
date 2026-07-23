@@ -96,6 +96,10 @@ class SetAutoRelockCommand(ApiCommand):
     enabled: bool  # re-acquire automatically when lock is lost mid-measurement
 
 @dataclass
+class SetAutoAmpThresholdCommand(ApiCommand):
+    enabled: bool  # auto-calibrate the lock amplitude threshold at the end of a run
+
+@dataclass
 class SetSensorParamsCommand(ApiCommand):
     mass_sensitivity: float
     sens_area: float

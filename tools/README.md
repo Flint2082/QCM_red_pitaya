@@ -137,7 +137,7 @@ access to the fields of `MeasurementData`:
 tuple to filter. Event `type` values you can receive:
 `StateEvent`, `MeasurementEvent`, `LockStatusEvent`, `LockFailedEvent`,
 `SweepPointEvent`, `SweepCompleteEvent`, `CapAdjustEvent`,
-`StartFreqAutoUpdatedEvent`, `ErrorEvent`, `OpcStatusEvent`.
+`StartFreqAutoUpdatedEvent`, `LockAmpAutoUpdatedEvent`, `ErrorEvent`, `OpcStatusEvent`.
 
 ```python
 # Watch state changes and lock events instead of measurements:
@@ -173,6 +173,7 @@ All methods are on `QCMClient`. Frequencies are in Hz unless noted.
 | `set_output_mode(mode)` | `POST /settings/output_mode` (DAC debug tap, int 0–11) |
 | `set_lock_detect(amp_threshold, phase_tolerance)` | `POST /settings/lock_detect` |
 | `set_auto_relock(enabled)` | `POST /settings/auto_relock` (auto re-acquire on lost lock, default on) |
+| `set_auto_amp_threshold(enabled)` | `POST /settings/auto_amp_threshold` (set amp threshold to 80% of end-of-run amplitude, default on) |
 | `set_lock_frequencies(mass, temp)` | `POST /settings/lock_frequencies` (transient, feeds `get_lock`) |
 | `get_lock_frequencies()` | `GET /settings/lock_frequencies` |
 | `set_coefficients(fM_0..fM_3, fT_0..fT_3)` | `POST /settings/coefficients` (compensation polynomial) |

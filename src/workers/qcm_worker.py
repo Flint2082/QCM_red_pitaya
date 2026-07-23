@@ -40,6 +40,10 @@ class QCMWorker(threading.Thread):
         # measurement, re-acquire around the last lock frequencies.
         self.AUTO_RELOCK_AFTER = 1.0  # seconds
         self.auto_relock = True  # configurable; when off a lost lock is left alone
+        # End-of-run auto-calibration of the lock-detect amplitude threshold: set it
+        # to this fraction of the amplitude the signals ended the run at.
+        self.AMP_THRESHOLD_FRACTION = 0.8
+        self.auto_amp_threshold = True  # configurable; default on
         self._lock_freqs: tuple | None = None  # (mass, temp) from the last GET LOCK
         self._lock_lost_since: float | None = None
         
@@ -127,6 +131,15 @@ class QCMWorker(threading.Thread):
                 freq_mass = round(self.qcm.getFreq(1) / 1000) * 1000
                 freq_temp = round(self.qcm.getFreq(2) / 1000) * 1000
                 self.event_queue.put(StartFreqAutoUpdatedEvent(freq_mass=freq_mass, freq_temp=freq_temp))
+                # Auto-calibrate the lock amplitude threshold from this run's final
+                # amplitudes. One global threshold is compared against both channels,
+                # so scale off the weaker one to keep both comfortably above it.
+                if self.auto_amp_threshold:
+                    amp = min(self.qcm.getMag(1), self.qcm.getMag(2))
+                    if amp > 0:  # a non-positive threshold would make everything "locked"
+                        threshold = self.AMP_THRESHOLD_FRACTION * amp
+                        self.qcm.setLockDetect(threshold, self.qcm.LOCK_PHASE_TOLERANCE)
+                        self.event_queue.put(LockAmpAutoUpdatedEvent(amp_threshold=threshold))
             self.logger.write_event("RUN_STOP")
             self.logger.stop()
             self._set_state(WorkerState.IDLE)
@@ -160,6 +173,8 @@ class QCMWorker(threading.Thread):
         elif isinstance(command, SetAutoRelockCommand):
             self.auto_relock = bool(command.enabled)
             self._lock_lost_since = None  # drop any in-flight timer so toggling can't fire a stale re-lock
+        elif isinstance(command, SetAutoAmpThresholdCommand):
+            self.auto_amp_threshold = bool(command.enabled)
         elif isinstance(command, SetSensorParamsCommand):
             self.qcm.setSensorParams(command.mass_sensitivity, command.sens_area, command.freq_virgin)
         elif isinstance(command, SetCoefficientsCommand):

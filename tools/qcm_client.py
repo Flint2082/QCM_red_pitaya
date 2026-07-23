@@ -83,6 +83,10 @@ class QCMClient:
         """Automatically re-acquire when lock is lost mid-measurement (default on)."""
         return self._post("/settings/auto_relock", enabled=bool(enabled))
 
+    def set_auto_amp_threshold(self, enabled: bool):
+        """Auto-set the lock amplitude threshold to 80% of the end-of-run amplitude (default on)."""
+        return self._post("/settings/auto_amp_threshold", enabled=bool(enabled))
+
     def set_lock_frequencies(self, mass: float, temp: float):
         return self._post("/settings/lock_frequencies", mass=mass, temp=temp)
 

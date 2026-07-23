@@ -175,6 +175,8 @@ class RestServer:
         self._lock_phase_tolerance: float = 0.05
         # Automatic re-lock when lock is lost mid-measurement (default on)
         self._auto_relock: bool = True
+        # Auto-calibrate the lock amplitude threshold at the end of a run (default on)
+        self._auto_amp_threshold: bool = True
         # Per-run measurement params — last values from a REST start, reused for
         # OPC-triggered starts (so OPC needs no settings of its own).
         self._ambient_temp: float = 23.0
@@ -220,6 +222,8 @@ class RestServer:
             self._lock_phase_tolerance = float(d["lock_phase_tolerance"])
         if "auto_relock" in d:
             self._auto_relock = bool(d["auto_relock"])
+        if "auto_amp_threshold" in d:
+            self._auto_amp_threshold = bool(d["auto_amp_threshold"])
         if "active_crystal" in d:
             self._active_crystal = d["active_crystal"]
         if "ambient_temp" in d:
@@ -243,6 +247,7 @@ class RestServer:
             "lock_amp_threshold":   self._lock_amp_threshold,
             "lock_phase_tolerance": self._lock_phase_tolerance,
             "auto_relock":    self._auto_relock,
+            "auto_amp_threshold": self._auto_amp_threshold,
             "active_crystal": self._active_crystal,
             "ambient_temp": self._ambient_temp,
             "mat_dens": self._mat_dens,
@@ -320,6 +325,7 @@ class RestServer:
 
         self.command_queue.put(SetLockDetectCommand(self._lock_amp_threshold, self._lock_phase_tolerance))
         self.command_queue.put(SetAutoRelockCommand(self._auto_relock))
+        self.command_queue.put(SetAutoAmpThresholdCommand(self._auto_amp_threshold))
 
         # Apply the active crystal's coefficients + lock frequencies, if any.
         if self._active_crystal:
@@ -423,6 +429,14 @@ class RestServer:
                     thickness = msg.get("calculated_thickness")
                     if thickness is not None:
                         self._session_thickness = max(self._session_thickness, float(thickness or 0))
+
+                elif msg.get("type") == "LockAmpAutoUpdatedEvent":
+                    # The worker recalibrated the threshold at end-of-run; mirror it
+                    # into server state so it persists and survives a restart.
+                    thr = msg.get("amp_threshold")
+                    if thr is not None:
+                        self._lock_amp_threshold = float(thr)
+                        self._save_settings()
 
                 elif msg.get("type") == "OpcStatusEvent":
                     self._last_opc_status = msg
@@ -606,6 +620,13 @@ class RestServer:
             self._save_settings()
             return {"status": "ok"}
 
+        @app.post("/settings/auto_amp_threshold")
+        def set_auto_amp_threshold(enabled: bool):
+            self._auto_amp_threshold = enabled
+            self.command_queue.put(SetAutoAmpThresholdCommand(enabled))
+            self._save_settings()
+            return {"status": "ok"}
+
         @app.post("/settings/measurement_params")
         def set_measurement_params(ambient_temp: float, mat_dens: float, z_ratio: float):
             # Film/run parameters shown in the settings panel. /measurement/start
@@ -638,6 +659,7 @@ class RestServer:
                     "phase_tolerance": self._lock_phase_tolerance,
                 },
                 "auto_relock": self._auto_relock,
+                "auto_amp_threshold": self._auto_amp_threshold,
                 "lock_frequencies": {
                     "mass": _finite(self._lock_freq_mass),
                     "temp": _finite(self._lock_freq_temp),

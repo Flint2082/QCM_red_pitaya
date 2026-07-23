@@ -174,13 +174,13 @@ class QCMInterface:
             print("2: The mass mode frequency (fine)")
             print("3: The mass mode frequency (coarse)")
             print("4: The mass mode multiplier output")
-            print("5: The mass mode lock detector")
-            print("6: The mass mode power detector")
+            print("5: The mass mode LPF magnitude")
+            print("6: The mass mode LPF phase")
             print("7: The temp mode frequency (fine)")
             print("8: The temp mode frequency (coarse)")
             print("9: The temp mode multiplier output")
-            print("10: The temp mode lock detector")
-            print("11: The temp mode power detector")
+            print("10: The temp mode LPF magnitude")
+            print("11: The temp mode LPF phase")
         else:
             self.fpga.write_register(register_name='output_select', value=mode)
         

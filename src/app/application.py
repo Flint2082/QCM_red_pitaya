@@ -147,6 +147,8 @@ class Application(threading.Thread):
             self.worker_command_queue.put(wc.SetLockDetectCommand(command.amp_threshold, command.phase_tolerance))
         elif isinstance(command, ac.SetAutoRelockCommand):
             self.worker_command_queue.put(wc.SetAutoRelockCommand(command.enabled))
+        elif isinstance(command, ac.SetAutoAmpThresholdCommand):
+            self.worker_command_queue.put(wc.SetAutoAmpThresholdCommand(command.enabled))
         elif isinstance(command, ac.SetSensorParamsCommand):
             self.worker_command_queue.put(wc.SetSensorParamsCommand(command.mass_sensitivity, command.sens_area, command.freq_virgin))
         elif isinstance(command, ac.StartCapAdjustCommand):
@@ -210,6 +212,10 @@ class Application(threading.Thread):
         elif isinstance(event, we.StartFreqAutoUpdatedEvent):
             print(f"[Application] Auto-updated start freqs: mass={event.freq_mass:.0f} Hz, temp={event.freq_temp:.0f} Hz")
             self._emit(ae.StartFreqAutoUpdatedEvent(freq_mass=event.freq_mass, freq_temp=event.freq_temp))
+
+        elif isinstance(event, we.LockAmpAutoUpdatedEvent):
+            print(f"[Application] Auto-updated lock amplitude threshold: {event.amp_threshold:.4f}")
+            self._emit(ae.LockAmpAutoUpdatedEvent(amp_threshold=event.amp_threshold))
 
         elif isinstance(event, we.ErrorEvent):
             print(f"[Application] Worker error: {event.message}")

@@ -57,6 +57,10 @@ class StartFreqAutoUpdatedEvent(ApiEvent):
     freq_temp: float
 
 @dataclass
+class LockAmpAutoUpdatedEvent(ApiEvent):
+    amp_threshold: float  # auto-calibrated from the end-of-run amplitudes
+
+@dataclass
 class SystemStatusEvent(ApiEvent):
     integrator_gain_mass_mode: float
     integrator_gain_temp_mode: float

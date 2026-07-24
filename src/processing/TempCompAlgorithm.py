@@ -8,7 +8,8 @@ class TempCompAlgorithm:
                  sens_area=5.25e-5,         # m^2 = Sensor area (e.g. 5.25e-5 m^2 for 8.2 mm dia apature)
                  mass_sensitivity=-13.3e-8, # kg/m^2/Hz = Mass sensitivity, negative: added mass lowers the frequency (-13.3 ng/(cm2*Hz) for ~6 MHz AT-cut)
                  z_ratio=1.0,               # acoustic impedance ratio quartz/film (gold 0.381); 1.0 ~ plain Sauerbrey
-                 freq_virgin=None           # Hz = pristine (uncoated) crystal frequency; None/0 = use fM_start
+                 freq_virgin=None,          # Hz = pristine (uncoated) crystal frequency; None/0 = use fM_start
+                 tooling_ratio=1.0          # proportional scaling of the reported thickness (sensor/substrate geometry); 1.0 = no scaling
                  ):
         # Calibration coefficients are provided directly (e.g. from the active
         # crystal profile).
@@ -32,6 +33,7 @@ class TempCompAlgorithm:
         self.sens_area = sens_area      # m^2 = Sensor area
         self.z_ratio = z_ratio          # quartz/film acoustic impedance ratio
         self.f_virgin = freq_virgin or fM_start  # Hz = unloaded reference for the Z-match conversion
+        self.tooling_ratio = tooling_ratio  # proportional scaling of the reported thickness
         
         # Coefficients for the cubic equation a*T_dif^3 + b*T_dif^2 + c*T_dif + d = 0
         # with d calculated later
@@ -80,9 +82,10 @@ class TempCompAlgorithm:
 
             # frequency -> thickness via the Z-match (Lu-Lewis) equation; the raw
             # frequency gives the uncompensated value, the temperature-clean
-            # compensated frequency gives the compensated one.
-            uncompensated_thickness_nm = self.freq_to_thickness(self.fM_start, fM) * 1e9
-            compensated_thickness_nm = self.freq_to_thickness(self.fM_start, compensated_m_freq) * 1e9
+            # compensated frequency gives the compensated one. The tooling ratio is
+            # a simple proportional correction for the sensor/substrate geometry.
+            uncompensated_thickness_nm = self.freq_to_thickness(self.fM_start, fM) * 1e9 * self.tooling_ratio
+            compensated_thickness_nm = self.freq_to_thickness(self.fM_start, compensated_m_freq) * 1e9 * self.tooling_ratio
 
             return T_dif[0], uncompensated_thickness_nm, compensated_thickness_nm, compensated_m_freq
         except Exception as e:

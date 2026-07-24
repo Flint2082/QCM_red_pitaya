@@ -42,7 +42,7 @@ class QCMWorker(threading.Thread):
         self.auto_relock = True  # configurable; when off a lost lock is left alone
         # End-of-run auto-calibration of the lock-detect amplitude threshold: set it
         # to this fraction of the amplitude the signals ended the run at.
-        self.AMP_THRESHOLD_FRACTION = 0.8
+        self.AMP_THRESHOLD_FRACTION = 0.5
         self.auto_amp_threshold = True  # configurable; default on
         self._lock_freqs: tuple | None = None  # (mass, temp) from the last GET LOCK
         self._lock_lost_since: float | None = None
@@ -191,7 +191,7 @@ class QCMWorker(threading.Thread):
         elif isinstance(command, SetAutoAmpThresholdCommand):
             self.auto_amp_threshold = bool(command.enabled)
         elif isinstance(command, SetSensorParamsCommand):
-            self.qcm.setSensorParams(command.mass_sensitivity, command.sens_area, command.freq_virgin)
+            self.qcm.setSensorParams(command.mass_sensitivity, command.sens_area, command.freq_virgin, command.tooling_ratio)
         elif isinstance(command, SetCoefficientsCommand):
             self.qcm.setCoefficients(
                 command.fM_0, command.fM_1, command.fM_2, command.fM_3,

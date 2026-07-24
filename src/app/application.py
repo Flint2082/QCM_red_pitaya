@@ -150,7 +150,7 @@ class Application(threading.Thread):
         elif isinstance(command, ac.SetAutoAmpThresholdCommand):
             self.worker_command_queue.put(wc.SetAutoAmpThresholdCommand(command.enabled))
         elif isinstance(command, ac.SetSensorParamsCommand):
-            self.worker_command_queue.put(wc.SetSensorParamsCommand(command.mass_sensitivity, command.sens_area, command.freq_virgin))
+            self.worker_command_queue.put(wc.SetSensorParamsCommand(command.mass_sensitivity, command.sens_area, command.freq_virgin, command.tooling_ratio))
         elif isinstance(command, ac.StartCapAdjustCommand):
             self.worker_command_queue.put(wc.StartCapAdjustCommand(command.freq_mass, command.freq_temp))
         elif isinstance(command, ac.StopCapAdjustCommand):

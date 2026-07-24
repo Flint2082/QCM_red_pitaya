@@ -62,6 +62,7 @@ class QCMInterface:
         self.mass_sensitivity = -13.3e-8  # kg/(m²·Hz) — negative: added mass lowers the frequency
         self.sens_area = 5.25e-5         # m²
         self.freq_virgin = 0.0           # Hz — pristine crystal frequency for Z-match; 0 = use run start
+        self.tooling_ratio = 1.0         # proportional scaling of reported thickness; 1.0 = no scaling
 
         self.T_start = 0
         self.fT_start = 0
@@ -114,10 +115,11 @@ class QCMInterface:
         self.LOCK_AMP_THRESHOLD = amp_threshold
         self.LOCK_PHASE_TOLERANCE = phase_tolerance
 
-    def setSensorParams(self, mass_sensitivity, sens_area, freq_virgin=0.0):
+    def setSensorParams(self, mass_sensitivity, sens_area, freq_virgin=0.0, tooling_ratio=1.0):
         self.mass_sensitivity = mass_sensitivity
         self.sens_area = sens_area
         self.freq_virgin = freq_virgin
+        self.tooling_ratio = tooling_ratio
         # Hot-patch the running TempCompAlgorithm if one is active. Mirrors the
         # derivations in TempCompAlgorithm.__init__: fM_0 = 1/(ms*A) and
         # fT_0 = (fT_start/fM_start)/(ms*A), both in Hz/kg.
@@ -126,12 +128,13 @@ class QCMInterface:
             tc.mass_sensitivity = mass_sensitivity
             tc.sens_area = sens_area
             tc.f_virgin = freq_virgin or tc.fM_start
+            tc.tooling_ratio = tooling_ratio
             tc.fM_0 = 1 / (mass_sensitivity * sens_area)
             tc.fT_0 = (tc.fT_start / tc.fM_start) / (mass_sensitivity * sens_area)
             tc.a = tc.fM_3 * tc.fT_0 - tc.fT_3 * tc.fM_0
             tc.b = tc.fM_2 * tc.fT_0 - tc.fT_2 * tc.fM_0
             tc.c = tc.fM_1 * tc.fT_0 - tc.fT_1 * tc.fM_0
-        print(f"[QCM] Sensor params updated: mass_sensitivity={mass_sensitivity}, sens_area={sens_area}, freq_virgin={freq_virgin}")
+        print(f"[QCM] Sensor params updated: mass_sensitivity={mass_sensitivity}, sens_area={sens_area}, freq_virgin={freq_virgin}, tooling_ratio={tooling_ratio}")
 
     def setMockSigFreq(self, freq):
         self.fpga.write_register(register_name='mock_sig_freq', value=int(freq*2**6)) # multiplication to account for fixed-point (32F6) representation in FPGA
@@ -395,6 +398,7 @@ class QCMInterface:
             mass_sensitivity=self.mass_sensitivity,
             z_ratio=z_ratio,
             freq_virgin=self.freq_virgin,
+            tooling_ratio=self.tooling_ratio,
             fM_start= self.fM_start,  # Hz
             fT_start= self.fT_start # Hz
         )

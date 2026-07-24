@@ -483,6 +483,7 @@ footer { height: 24px; background: var(--surface); border-top: 1px solid var(--b
           <div class="settings-group">
             <div class="settings-row"><div><div class="settings-row-label">Mass Sensitivity</div><div class="settings-row-desc">Areal mass per unit frequency shift (Sauerbrey)</div></div><div></div><div style="display:flex;align-items:center;gap:6px"><input class="settings-input" type="number" id="s-crystal-mass-sens" value="-1.33e-7" step="any" style="width:180px"><span class="settings-unit">kg/m²/Hz</span></div></div>
             <div class="settings-row"><div><div class="settings-row-label">Sensor Area</div><div class="settings-row-desc">Active sensing area of the crystal</div></div><div></div><div style="display:flex;align-items:center;gap:6px"><input class="settings-input" type="number" id="s-crystal-sens-area" value="5.25e-5" step="any" style="width:180px"><span class="settings-unit">m²</span></div></div>
+            <div class="settings-row"><div><div class="settings-row-label">Tooling Ratio</div><div class="settings-row-desc">Proportional scaling of the reported thickness for sensor/substrate geometry (1 = no scaling)</div></div><div></div><div style="display:flex;align-items:center;gap:6px"><input class="settings-input" type="number" id="s-crystal-tooling" value="1" step="0.001" min="0" style="width:180px"><span class="settings-unit"></span></div></div>
           </div>
 
           <div class="settings-section-title">CALIBRATION COEFFICIENTS</div>
@@ -1138,6 +1139,7 @@ async function loadCrystalForm(name) {
     document.getElementById('s-crystal-deposited').textContent = (p.total_deposited ?? 0).toFixed(2);
     document.getElementById('s-crystal-mass-sens').value = p.mass_sensitivity ?? -13.3e-8;
     document.getElementById('s-crystal-sens-area').value = p.sens_area ?? 5.25e-5;
+    document.getElementById('s-crystal-tooling').value = p.tooling_ratio ?? 1;
     document.getElementById('s-crystal-freq-virgin').value = p.freq_virgin ?? 6000000;
     const coeffMap = { fM0:'fM_0', fM1:'fM_1', fM2:'fM_2', fM3:'fM_3',
                        fT0:'fT_0', fT1:'fT_1', fT2:'fT_2', fT3:'fT_3' };
@@ -1480,6 +1482,7 @@ async function applyCrystal() {
     `fT_0=${g('s-coeff-fT0')}`, `fT_1=${g('s-coeff-fT1')}`,
     `fT_2=${g('s-coeff-fT2')}`, `fT_3=${g('s-coeff-fT3')}`,
     `mass_sensitivity=${g('s-crystal-mass-sens')}`, `sens_area=${g('s-crystal-sens-area')}`,
+    `tooling_ratio=${g('s-crystal-tooling')}`,
     `freq_virgin=${g('s-crystal-freq-virgin')}`,
   ].join('&');
   try {
@@ -1497,6 +1500,7 @@ const CRYSTAL_DEFAULTS = {
   's-crystal-freq-virgin': 6000000,
   's-crystal-mass-sens': -13.3e-8,
   's-crystal-sens-area': 5.25e-5,
+  's-crystal-tooling': 1,
   's-coeff-fM0': 5982438.448062406, 's-coeff-fM1': 9.159340464734298, 's-coeff-fM2': -0.10904938259265566, 's-coeff-fM3': 0.00037590534093399105,
   's-coeff-fT0': 6574158.7173102535, 's-coeff-fT1': -231.43245120384452, 's-coeff-fT2': 1.2282423071087347, 's-coeff-fT3': -0.0025499455088113026,
 };
@@ -1590,7 +1594,7 @@ const SETTING_IDS = [
   's-osc2-int', 's-osc2-prop', 's-osc2-lpf', 's-osc2-inv', 's-osc2-phase',
   's-lock-amp', 's-lock-phase', 's-auto-relock', 's-auto-amp', 's-output-mode',
   's-crystal-name', 's-crystal-freq-mass', 's-crystal-freq-temp', 's-crystal-freq-virgin',
-  's-crystal-mass-sens', 's-crystal-sens-area',
+  's-crystal-mass-sens', 's-crystal-sens-area', 's-crystal-tooling',
   's-coeff-fM0', 's-coeff-fM1', 's-coeff-fM2', 's-coeff-fM3',
   's-coeff-fT0', 's-coeff-fT1', 's-coeff-fT2', 's-coeff-fT3',
 ];

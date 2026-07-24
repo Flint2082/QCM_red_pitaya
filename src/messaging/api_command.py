@@ -104,6 +104,7 @@ class SetSensorParamsCommand(ApiCommand):
     mass_sensitivity: float
     sens_area: float
     freq_virgin: float = 0.0  # Hz — pristine crystal frequency, 0 = unset
+    tooling_ratio: float = 1.0  # proportional scaling of reported thickness
 
 @dataclass
 class StartCapAdjustCommand(ApiCommand):

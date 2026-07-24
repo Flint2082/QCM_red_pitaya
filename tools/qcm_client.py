@@ -114,7 +114,7 @@ class QCMClient:
         return self._post(f"/crystals/{name}/activate")
 
     def apply_crystal(self, name: str, **fields):
-        """fields: freq_mass, freq_temp, fM_0..fT_3, mass_sensitivity, sens_area, freq_virgin."""
+        """fields: freq_mass, freq_temp, fM_0..fT_3, mass_sensitivity, sens_area, freq_virgin, tooling_ratio."""
         return self._post(f"/crystals/{name}/apply", **fields)
 
     def save_current_to_crystal(self, name: str):

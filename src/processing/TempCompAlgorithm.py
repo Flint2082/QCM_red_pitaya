@@ -26,7 +26,10 @@ class TempCompAlgorithm:
         
         # values from the starting measurement
         self.T_start = T_start
-        self.fT_start = fT_start    
+        # Last physically-selected temperature; seeds the cubic-root selection so
+        # the solve tracks the real temperature continuously (see FreqToTemp).
+        self._last_T = T_start
+        self.fT_start = fT_start
         self.fM_start = fM_start
         
         self.mat_dens = mat_dens        # kg/m^3 = Material density
@@ -73,10 +76,25 @@ class TempCompAlgorithm:
             
             # calculate the roots of the cubic equation
             roots = np.roots([self.a, self.b, self.c, d])
-            T_dif = roots[np.isclose(roots.imag, 0)].real  # Select only the real root(s)
+            real_roots = roots[np.isclose(roots.imag, 0)].real  # physical temperatures are real
 
-            # Calculate the compensated mass change using the found temperature difference
-            M_dif = -(-fM_dif + (self.fM_3 * (T_dif[0])**3 + self.fM_2 * (T_dif[0])**2 + self.fM_1 * (T_dif[0])) - (self.fM_3 * (self.T_start)**3 + self.fM_2 * (self.T_start)**2 + self.fM_1 * (self.T_start)))/ self.fM_0
+            # The cubic can have up to three real roots but only one is physical.
+            # np.roots returns them in no meaningful order, so pick the root closest
+            # to the last known temperature (T_start on the first sample). This keeps
+            # the solve on the correct, continuous branch instead of latching onto a
+            # spurious root, which would corrupt the temperature and the compensated
+            # thickness while leaving the uncompensated value untouched.
+            if real_roots.size == 0:
+                # No real solution — frequencies inconsistent with the calibration.
+                # Hold the previous temperature rather than crash the running loop.
+                print("FreqToTemp: no real root; holding last temperature")
+                T = self._last_T
+            else:
+                T = float(real_roots[np.argmin(np.abs(real_roots - self._last_T))])
+            self._last_T = T
+
+            # Calculate the compensated mass change using the found temperature
+            M_dif = -(-fM_dif + (self.fM_3 * T**3 + self.fM_2 * T**2 + self.fM_1 * T) - (self.fM_3 * self.T_start**3 + self.fM_2 * self.T_start**2 + self.fM_1 * self.T_start)) / self.fM_0
 
             compensated_m_freq = self.fM_start + self.fM_0 * M_dif  # measured freq minus the thermal shift
 
@@ -87,7 +105,7 @@ class TempCompAlgorithm:
             uncompensated_thickness_nm = self.freq_to_thickness(self.fM_start, fM) * 1e9 * self.tooling_ratio
             compensated_thickness_nm = self.freq_to_thickness(self.fM_start, compensated_m_freq) * 1e9 * self.tooling_ratio
 
-            return T_dif[0], uncompensated_thickness_nm, compensated_thickness_nm, compensated_m_freq
+            return T, uncompensated_thickness_nm, compensated_thickness_nm, compensated_m_freq
         except Exception as e:
             print(f"Error in FreqToTemp: {e}")
             return None, None, None, None

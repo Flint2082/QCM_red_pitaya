@@ -340,18 +340,21 @@ footer { height: 24px; background: var(--surface); border-top: 1px solid var(--b
   <!-- CALIBRATE -->
   <div class="tab-panel" id="panel-calibrate">
     <div class="toolbar">
+      <button class="btn btn-orange btn-get-lock" onclick="sendCommand('lock')"><svg viewBox="0 0 12 12"><path d="M6 1a3 3 0 0 0-3 3v1H2v6h8V5H9V4a3 3 0 0 0-3-3zm0 1.5a1.5 1.5 0 0 1 1.5 1.5v1h-3V4A1.5 1.5 0 0 1 6 2.5z"/></svg>GET LOCK</button>
+      <button class="btn btn-green" id="btn-start-stop-3" onclick="toggleStartStop()"><svg viewBox="0 0 12 12"><polygon points="3,2 10,6 3,10"/></svg>START</button>
+      <div class="toolbar-sep"></div>
       <span class="toolbar-label">TEMP</span>
       <div class="num-input-wrap">
         <input id="cal-temp-input" type="number" value="25" step="0.1">
         <span class="num-input-unit">°C</span>
       </div>
-      <button class="btn btn-green" onclick="addCalPoint()" title="Record the current live frequencies at the temperature entered">
+      <button class="btn btn-blue" onclick="addCalPoint()" title="Record the current live frequencies at the temperature entered">
         <svg viewBox="0 0 12 12"><path d="M5.25 1h1.5v3.75H10.5v1.5H6.75V10h-1.5V6.25H1.5v-1.5h3.75z"/></svg>ADD POINT
       </button>
       <div class="toolbar-sep"></div>
       <button class="btn" onclick="clearCalPoints()">CLEAR POINTS</button>
       <div class="header-spacer"></div>
-      <button class="btn btn-blue" id="btn-cal-transfer" onclick="transferCalCoeffs()" disabled title="Copy the fitted coefficients into the Crystal settings form (then APPLY there to save)">TRANSFER TO CRYSTAL →</button>
+      <button class="btn btn-blue" id="btn-cal-transfer" onclick="transferCalCoeffs()" disabled title="Compare against the current crystal calibration, then copy the fitted coefficients into the Crystal settings form">TRANSFER TO CRYSTAL →</button>
     </div>
     <div class="stat-bar">
       <div class="stat"><div class="stat-label">Mass Mode Freq</div><div class="stat-value" id="val-cal-fM" style="color:var(--green)">—</div><div class="stat-unit">Hz</div></div>
@@ -758,29 +761,48 @@ const sweepCharts = {
 
 // ---- Calibration scatter + cubic-fit charts (x-axis = temperature) ----
 // dataset 0 = recorded points (markers only), dataset 1 = the cubic fit line.
-function makeCalibChart(id, color) {
+// `key` ('fM' | 'fT') selects which frequency this chart plots; the tooltip and
+// click-to-delete read the original point back from _calPoints by index.
+function makeCalibChart(id, color, key) {
   const ctx = document.getElementById(id); if (!ctx) return null;
   const axFont = { family: 'DM Mono', size: 9 };
   const axX = { type: 'linear', display: true, title: { display: true, text: 'T (°C)', color: TC, font: axFont }, ticks: { color: TC, font: axFont, maxTicksLimit: 6 }, grid: { color: 'rgba(255,255,255,0.04)' }, border: { color: 'transparent' } };
-  // Mass-mode freq shifts only ~tens of Hz over the sweep, so show kHz with
-  // 1 Hz resolution (3 decimals) rather than MHz, or the ticks collapse.
+  // Default (no fit yet): raw frequency in kHz with 1 Hz resolution. Once a
+  // cubic exists, drawCalChart switches this axis to Δf (constant removed).
   const axY = { display: true, title: { display: true, text: 'f (kHz)', color: TC, font: axFont }, ticks: { color: TC, font: axFont, maxTicksLimit: 5, callback: v => (Number(v) / 1e3).toFixed(3) }, grid: { color: 'rgba(255,255,255,0.04)' }, border: { color: 'transparent' } };
   const chart = new Chart(ctx, {
     type: 'line',
     data: { datasets: [
-      { label: 'points', data: [], showLine: false, pointRadius: 4, pointHoverRadius: 5, borderColor: color, backgroundColor: color },
+      { label: 'points', data: [], showLine: false, pointRadius: 4, pointHoverRadius: 6, borderColor: color, backgroundColor: color },
       { label: 'fit',    data: [], showLine: true,  pointRadius: 0, borderColor: color, borderWidth: 1.5, borderDash: [5, 3], tension: 0, fill: false },
     ]},
     options: { responsive: true, maintainAspectRatio: false, animation: false,
-      plugins: { legend: { display: false }, tooltip: { enabled: false }, zoom: ZOOM_CFG },
+      interaction: { mode: 'nearest', intersect: true },
+      onClick: (evt, els) => { const el = els.find(e => e.datasetIndex === 0); if (el) promptDeleteCalPoint(el.index); },
+      plugins: {
+        legend: { display: false },
+        tooltip: {
+          enabled: true, displayColors: false,
+          callbacks: {
+            title: () => '',
+            label: (c) => {
+              if (c.datasetIndex !== 0) return '';
+              const p = _calPoints[c.dataIndex];
+              return p ? [`T = ${p.t} °C`, `${key} = ${p[key].toFixed(2)} Hz`, '(click to delete)'] : '';
+            }
+          }
+        },
+        zoom: ZOOM_CFG
+      },
       scales: { x: axX, y: axY } }
   });
+  ctx.style.cursor = 'pointer';
   ctx.addEventListener('dblclick', () => chart.resetZoom());
   return chart;
 }
 const calibCharts = {
-  fM: makeCalibChart('chart-cal-fM-fit', '#2ecc8a'),
-  fT: makeCalibChart('chart-cal-fT-fit', '#4a9eff'),
+  fM: makeCalibChart('chart-cal-fM-fit', '#2ecc8a', 'fM'),
+  fT: makeCalibChart('chart-cal-fT-fit', '#4a9eff', 'fT'),
 };
 
 // ---- Synchronized zoom groups (one group per tab) ----
@@ -1375,7 +1397,7 @@ function setCapAmp(id, amp) {
 }
 
 function updateStartStopBtns(state) {
-  const ids = ['btn-start-stop', 'btn-start-stop-2'];
+  const ids = ['btn-start-stop', 'btn-start-stop-2', 'btn-start-stop-3'];
   ids.forEach(id => {
     const btn = document.getElementById(id);
     if (!btn) return;
@@ -1884,9 +1906,6 @@ function refreshCalCharts() {
   setText('meta-cal-fM-fit', `${pts.length} pts`);
   setText('meta-cal-fT-fit', `${pts.length} pts`);
 
-  if (calibCharts.fM) calibCharts.fM.data.datasets[0].data = pts.map(p => ({ x: p.t, y: p.fM }));
-  if (calibCharts.fT) calibCharts.fT.data.datasets[0].data = pts.map(p => ({ x: p.t, y: p.fT }));
-
   _calCoefM = _calCoefT = null;
   if (pts.length >= 4) {
     const ts = pts.map(p => p.t);
@@ -1894,22 +1913,49 @@ function refreshCalCharts() {
     _calCoefT = polyfit3(ts, pts.map(p => p.fT));
   }
 
-  const fitLine = (coef) => {
-    if (!coef) return [];
-    const ts = pts.map(p => p.t);
-    const lo = Math.min(...ts), hi = Math.max(...ts), N = 80;
-    const out = [];
-    for (let i = 0; i <= N; i++) { const x = lo + (hi - lo) * i / N; out.push({ x, y: coef[0]*x**3 + coef[1]*x**2 + coef[2]*x + coef[3] }); }
-    return out;
-  };
-  if (calibCharts.fM) { calibCharts.fM.data.datasets[1].data = fitLine(_calCoefM); calibCharts.fM.update('none'); }
-  if (calibCharts.fT) { calibCharts.fT.data.datasets[1].data = fitLine(_calCoefT); calibCharts.fT.update('none'); }
+  drawCalChart(calibCharts.fM, _calCoefM, 'fM');
+  drawCalChart(calibCharts.fT, _calCoefT, 'fT');
 
   renderCalCoeffs();
 
   const hint = document.getElementById('cal-fit-hint');
   if (hint) hint.textContent = pts.length >= 4 ? `cubic fit over ${pts.length} points`
                              : `add ${4 - pts.length} more point${4 - pts.length === 1 ? '' : 's'} to fit`;
+}
+
+// Draw one calibration chart. Points and the fit are shown constant-free: once
+// a cubic is available its constant term c0 is subtracted from both, so the
+// y-axis is Δf(T) = c3·T³ + c2·T² + c1·T (matching the crystal preview graphs).
+// Before a fit exists the raw frequency (kHz) is shown instead. The tooltip
+// still reports the original absolute frequency via _calPoints.
+function drawCalChart(chart, coef, key) {
+  if (!chart) return;
+  const pts = _calPoints;
+  const ref = coef ? coef[3] : 0;   // c0 — the constant term
+  chart.data.datasets[0].data = pts.map(p => ({ x: p.t, y: p[key] - ref }));
+  if (coef) {
+    const ts = pts.map(p => p.t), lo = Math.min(...ts), hi = Math.max(...ts), N = 80;
+    const line = [];
+    for (let i = 0; i <= N; i++) { const x = lo + (hi - lo) * i / N; line.push({ x, y: coef[0]*x**3 + coef[1]*x**2 + coef[2]*x }); }
+    chart.data.datasets[1].data = line;
+  } else {
+    chart.data.datasets[1].data = [];
+  }
+  const ax = chart.options.scales.y;
+  if (coef) { ax.title.text = 'Δf (Hz)'; ax.ticks.callback = v => Number(v).toFixed(0); }
+  else      { ax.title.text = 'f (kHz)'; ax.ticks.callback = v => (Number(v) / 1e3).toFixed(3); }
+  chart.update('none');
+}
+
+// Click-to-delete: confirm, then drop the point from both charts.
+function promptDeleteCalPoint(i) {
+  const p = _calPoints[i];
+  if (!p) return;
+  if (confirm(`Delete this calibration point?\n\nT  = ${p.t} °C\nfM = ${p.fM.toFixed(2)} Hz\nfT = ${p.fT.toFixed(2)} Hz`)) {
+    _calPoints.splice(i, 1);
+    refreshCalCharts();
+    showToast('Point deleted');
+  }
 }
 
 // Fitted coefficients minus the constant (temperature-invariant) term, which
@@ -1922,15 +1968,68 @@ function renderCalCoeffs() {
   if (btn) btn.disabled = !(_calCoefM && _calCoefT);
 }
 
-// Copy the fitted (non-constant) coefficients into the Crystal settings form.
-// The user reviews them there and clicks APPLY to persist — this only stages them.
+// ---- Transfer-to-crystal comparison popup ----
+let _transferCharts = { fM: null, fT: null };
+
+function ensureTransferCharts() {
+  if (_transferCharts.fM) return;
+  const axFont = { family: 'DM Mono', size: 9 };
+  const opts = () => ({
+    responsive: true, maintainAspectRatio: false, animation: false,
+    plugins: { legend: { display: true, labels: { color: TC, font: axFont, boxWidth: 14, padding: 8 } }, tooltip: { enabled: false } },
+    scales: {
+      x: { display: true, title: { display: true, text: 'T (°C)', color: TC, font: axFont }, ticks: { color: TC, font: axFont, maxTicksLimit: 6 }, grid: { color: 'rgba(255,255,255,0.04)' }, border: { color: 'transparent' } },
+      y: { display: true, title: { display: true, text: 'Δf (Hz)', color: TC, font: axFont }, ticks: { color: TC, font: axFont, maxTicksLimit: 5, callback: v => Number(v).toFixed(0) }, grid: { color: 'rgba(255,255,255,0.04)' }, border: { color: 'transparent' } }
+    }
+  });
+  const mk = (id, color) => {
+    const ctx = document.getElementById(id); if (!ctx) return null;
+    return new Chart(ctx, { type: 'line', data: { labels: [], datasets: [
+      { label: 'current', data: [], borderColor: '#8a95a8', borderWidth: 1.5, borderDash: [5, 3], pointRadius: 0, tension: 0.3, fill: false },
+      { label: 'new',     data: [], borderColor: color,     borderWidth: 1.8, pointRadius: 0, tension: 0.3, fill: false },
+    ]}, options: opts() });
+  };
+  _transferCharts.fM = mk('chart-transfer-fM', '#2ecc8a');
+  _transferCharts.fT = mk('chart-transfer-fT', '#4a9eff');
+}
+
+function setTransferChart(chart, temps, oldData, newData) {
+  if (!chart) return;
+  chart.data.labels = temps;
+  chart.data.datasets[0].data = oldData;
+  chart.data.datasets[1].data = newData;
+  chart.update('none');
+}
+
+// TRANSFER TO CRYSTAL: open a popup comparing the crystal's current calibration
+// polynomial (from the settings form) with the newly fitted one, both without
+// their constant term. The copy into the form happens only on CONFIRM.
 function transferCalCoeffs() {
   if (!_calCoefM || !_calCoefT) { showToast('Need at least 4 points to fit', true); return; }
+  ensureTransferCharts();
+  const temps = Array.from({ length: 101 }, (_, i) => i);  // 0–100 °C
+  const gv = id => parseFloat(document.getElementById(id)?.value) || 0;
+  const poly = (c3, c2, c1) => temps.map(t => c3*t**3 + c2*t**2 + c1*t);  // constant term omitted
+  setTransferChart(_transferCharts.fM, temps,
+    poly(gv('s-coeff-fM3'), gv('s-coeff-fM2'), gv('s-coeff-fM1')),
+    poly(_calCoefM[0], _calCoefM[1], _calCoefM[2]));
+  setTransferChart(_transferCharts.fT, temps,
+    poly(gv('s-coeff-fT3'), gv('s-coeff-fT2'), gv('s-coeff-fT1')),
+    poly(_calCoefT[0], _calCoefT[1], _calCoefT[2]));
+  document.getElementById('modal-transfer-coeffs').style.display = 'flex';
+  requestAnimationFrame(() => { _transferCharts.fM && _transferCharts.fM.resize(); _transferCharts.fT && _transferCharts.fT.resize(); });
+}
+
+// Confirmed: copy the fitted (non-constant) coefficients into the Crystal
+// settings form. The user still clicks APPLY there to persist.
+function confirmTransferCalCoeffs() {
+  if (!_calCoefM || !_calCoefT) return;
   const setVal = (id, v) => { const el = document.getElementById(id); if (el) el.value = v; };
   setVal('s-coeff-fM3', _calCoefM[0]); setVal('s-coeff-fM2', _calCoefM[1]); setVal('s-coeff-fM1', _calCoefM[2]);
   setVal('s-coeff-fT3', _calCoefT[0]); setVal('s-coeff-fT2', _calCoefT[1]); setVal('s-coeff-fT1', _calCoefT[2]);
   updateCoeffCharts();   // refresh the preview graphs if the crystal panel is open
   updateDirtyState();    // light up APPLY / UNDO
+  document.getElementById('modal-transfer-coeffs').style.display = 'none';
   showToast('Coefficients transferred to Crystal settings — review & APPLY to save');
 }
 
@@ -2003,6 +2102,33 @@ function clearLogs() {
       <button class="btn btn-orange" onclick="sendCommand('lock');document.getElementById('modal-confirm-start').style.display='none'">GET LOCK FIRST</button>
       <button class="btn btn-red" onclick="doStartAnyway()">START ANYWAY</button>
       <button class="btn" onclick="document.getElementById('modal-confirm-start').style.display='none'">CANCEL</button>
+    </div>
+  </div>
+</div>
+
+<!-- Transfer coefficients comparison prompt -->
+<div id="modal-transfer-coeffs" class="modal-overlay" style="display:none">
+  <div class="modal" style="max-width:680px">
+    <div class="modal-title green">TRANSFER COEFFICIENTS TO CRYSTAL</div>
+    <div class="modal-body" style="margin-bottom:14px">
+      Compare the crystal's current calibration polynomial (grey, dashed) with the
+      newly fitted one (coloured) — both shown without their constant term. Confirm
+      to copy the new coefficients into the Crystal settings form; you still click
+      APPLY there to save.
+    </div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:20px">
+      <div>
+        <div style="font-family:'DM Mono',monospace;font-size:10px;color:var(--green);letter-spacing:.08em;margin-bottom:4px">fM — MASS MODE</div>
+        <div style="height:200px;position:relative"><canvas id="chart-transfer-fM"></canvas></div>
+      </div>
+      <div>
+        <div style="font-family:'DM Mono',monospace;font-size:10px;color:var(--blue);letter-spacing:.08em;margin-bottom:4px">fT — TEMP MODE</div>
+        <div style="height:200px;position:relative"><canvas id="chart-transfer-fT"></canvas></div>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-green" onclick="confirmTransferCalCoeffs()">CONFIRM TRANSFER</button>
+      <button class="btn" onclick="document.getElementById('modal-transfer-coeffs').style.display='none'">CANCEL</button>
     </div>
   </div>
 </div>

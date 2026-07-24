@@ -173,6 +173,11 @@ footer { height: 24px; background: var(--surface); border-top: 1px solid var(--b
 .coeff-graph-card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); overflow: hidden; }
 .coeff-graph-header { padding: 5px 10px; border-bottom: 1px solid var(--border); font-family: 'DM Mono', monospace; font-size: 9px; letter-spacing: 0.1em; text-transform: uppercase; color: var(--text-dim); display: flex; align-items: center; gap: 6px; }
 .coeff-graph-body { height: 240px; padding: 4px; position: relative; }
+
+/* Calibration tab coefficient readout */
+.cal-coeff-row { display: flex; justify-content: space-between; align-items: baseline; font-family: 'DM Mono', monospace; font-size: 12px; padding: 4px 0; border-bottom: 1px solid rgba(255,255,255,0.03); }
+.cal-coeff-row .cal-coeff-name { color: var(--text-dim); }
+.cal-coeff-row .cal-coeff-val  { color: var(--text); }
 </style>
 </head>
 <body>
@@ -209,6 +214,7 @@ footer { height: 24px; background: var(--surface); border-top: 1px solid var(--b
   <button class="tab active" onclick="switchTab('main',this)"><div class="tab-dot" style="background:var(--green)"></div>MAIN</button>
   <button class="tab" onclick="switchTab('monitor',this)"><div class="tab-dot" style="background:var(--blue)"></div>MONITOR</button>
   <button class="tab" onclick="switchTab('analysis',this)"><div class="tab-dot" style="background:var(--purple)"></div>ANALYSIS</button>
+  <button class="tab" onclick="switchTab('calibrate',this)"><div class="tab-dot" style="background:#26d0ce"></div>CALIBRATE</button>
   <button class="tab" onclick="switchTab('settings',this)"><div class="tab-dot" style="background:var(--orange)"></div>SETTINGS</button>
   <button class="tab" onclick="switchTab('logs',this)"><div class="tab-dot" id="log-tab-dot" style="background:var(--border-2)"></div>LOGS</button>
 </div>
@@ -327,6 +333,53 @@ footer { height: 24px; background: var(--surface); border-top: 1px solid var(--b
       <div class="chart-card">
         <div class="chart-card-header"><div class="chart-card-title"><div class="chart-color-bar" style="background:var(--purple)"></div>PHASE vs FREQUENCY</div><div class="chart-card-meta" id="meta-sweep-phase">—</div></div>
         <div class="chart-body"><canvas id="chart-sweep-phase"></canvas></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- CALIBRATE -->
+  <div class="tab-panel" id="panel-calibrate">
+    <div class="toolbar">
+      <span class="toolbar-label">TEMP</span>
+      <div class="num-input-wrap">
+        <input id="cal-temp-input" type="number" value="25" step="0.1">
+        <span class="num-input-unit">°C</span>
+      </div>
+      <button class="btn btn-green" onclick="addCalPoint()" title="Record the current live frequencies at the temperature entered">
+        <svg viewBox="0 0 12 12"><path d="M5.25 1h1.5v3.75H10.5v1.5H6.75V10h-1.5V6.25H1.5v-1.5h3.75z"/></svg>ADD POINT
+      </button>
+      <div class="toolbar-sep"></div>
+      <button class="btn" onclick="clearCalPoints()">CLEAR POINTS</button>
+      <div class="header-spacer"></div>
+      <button class="btn btn-blue" id="btn-cal-transfer" onclick="transferCalCoeffs()" disabled title="Copy the fitted coefficients into the Crystal settings form (then APPLY there to save)">TRANSFER TO CRYSTAL →</button>
+    </div>
+    <div class="stat-bar">
+      <div class="stat"><div class="stat-label">Mass Mode Freq</div><div class="stat-value" id="val-cal-fM" style="color:var(--green)">—</div><div class="stat-unit">Hz</div></div>
+      <div class="stat"><div class="stat-label">Temp Mode Freq</div><div class="stat-value" id="val-cal-fT" style="color:var(--blue)">—</div><div class="stat-unit">Hz</div></div>
+      <div class="stat"><div class="stat-label">Calibration Points</div><div class="stat-value" id="cal-point-count">0</div><div class="stat-unit">points</div></div>
+      <div class="stat"><div class="stat-label">Lock Status</div><div class="stat-value" id="val-cal-lock" style="font-size:14px;color:var(--red)">UNLOCKED</div><div class="stat-unit"></div></div>
+    </div>
+    <div class="chart-grid" style="grid-template-columns:1fr 1fr; grid-template-rows:1fr 1fr auto; overflow-y:auto;">
+      <div class="chart-card"><div class="chart-card-header"><div class="chart-card-title"><div class="chart-color-bar" style="background:var(--green)"></div>LIVE — MASS MODE FREQ</div><div class="chart-card-meta" id="meta-cal-fM-live">—</div></div><div class="chart-body" style="min-height:120px"><canvas id="chart-cal-fM-live"></canvas></div></div>
+      <div class="chart-card"><div class="chart-card-header"><div class="chart-card-title"><div class="chart-color-bar" style="background:var(--blue)"></div>LIVE — TEMP MODE FREQ</div><div class="chart-card-meta" id="meta-cal-fT-live">—</div></div><div class="chart-body" style="min-height:120px"><canvas id="chart-cal-fT-live"></canvas></div></div>
+      <div class="chart-card"><div class="chart-card-header"><div class="chart-card-title"><div class="chart-color-bar" style="background:var(--green)"></div>MASS MODE — f vs T + CUBIC FIT</div><div class="chart-card-meta" id="meta-cal-fM-fit">0 pts</div></div><div class="chart-body" style="min-height:160px"><canvas id="chart-cal-fM-fit"></canvas></div></div>
+      <div class="chart-card"><div class="chart-card-header"><div class="chart-card-title"><div class="chart-color-bar" style="background:var(--blue)"></div>TEMP MODE — f vs T + CUBIC FIT</div><div class="chart-card-meta" id="meta-cal-fT-fit">0 pts</div></div><div class="chart-body" style="min-height:160px"><canvas id="chart-cal-fT-fit"></canvas></div></div>
+      <div class="chart-card" style="grid-column:1 / -1">
+        <div class="chart-card-header"><div class="chart-card-title">FITTED COEFFICIENTS <span style="opacity:.5;text-transform:none;letter-spacing:0">— constant (temperature-invariant) term omitted</span></div><div class="chart-card-meta" id="cal-fit-hint">add ≥ 4 points to fit</div></div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:1px;background:var(--border)">
+          <div style="background:var(--surface);padding:10px 16px">
+            <div style="font-family:'DM Mono',monospace;font-size:10px;color:var(--green);letter-spacing:.08em;margin-bottom:6px">fM — MASS MODE</div>
+            <div class="cal-coeff-row"><span class="cal-coeff-name">fM_3</span><span class="cal-coeff-val" id="cal-fM3">—</span></div>
+            <div class="cal-coeff-row"><span class="cal-coeff-name">fM_2</span><span class="cal-coeff-val" id="cal-fM2">—</span></div>
+            <div class="cal-coeff-row"><span class="cal-coeff-name">fM_1</span><span class="cal-coeff-val" id="cal-fM1">—</span></div>
+          </div>
+          <div style="background:var(--surface);padding:10px 16px">
+            <div style="font-family:'DM Mono',monospace;font-size:10px;color:var(--blue);letter-spacing:.08em;margin-bottom:6px">fT — TEMP MODE</div>
+            <div class="cal-coeff-row"><span class="cal-coeff-name">fT_3</span><span class="cal-coeff-val" id="cal-fT3">—</span></div>
+            <div class="cal-coeff-row"><span class="cal-coeff-name">fT_2</span><span class="cal-coeff-val" id="cal-fT2">—</span></div>
+            <div class="cal-coeff-row"><span class="cal-coeff-name">fT_1</span><span class="cal-coeff-val" id="cal-fT1">—</span></div>
+          </div>
+        </div>
       </div>
     </div>
   </div>
@@ -635,7 +688,7 @@ function switchTab(name, el) {
   el.classList.add('active');
   document.querySelectorAll('.tab-panel').forEach(p => p.classList.toggle('active', p.id === 'panel-' + name));
   setTimeout(() => {
-    [...Object.values(charts), ...Object.values(sweepCharts)].forEach(c => c && c.resize());
+    [...Object.values(charts), ...Object.values(sweepCharts), ...Object.values(calibCharts)].forEach(c => c && c.resize());
     if (name === 'logs' && document.getElementById('log-autoscroll')?.checked) {
       const out = document.getElementById('log-output');
       if (out) out.scrollTop = out.scrollHeight;
@@ -686,6 +739,8 @@ const charts = {
   tempA:    makeChart('chart-temp-a',    '#f5a623'),
   lpf1:     makeDualChart('chart-lpf1',   '#2ecc8a', '#a78bfa'),
   lpf2:     makeDualChart('chart-lpf2',   '#4a9eff', '#a78bfa'),
+  calFmLive: makeChart('chart-cal-fM-live', '#2ecc8a'),
+  calFtLive: makeChart('chart-cal-fT-live', '#4a9eff'),
 };
 
 // ---- Sweep charts (x-axis = frequency) ----
@@ -699,6 +754,33 @@ function makeSweepChart(id, color) {
 const sweepCharts = {
   amp:   makeSweepChart('chart-sweep-amp',   '#4a9eff'),
   phase: makeSweepChart('chart-sweep-phase', '#a78bfa'),
+};
+
+// ---- Calibration scatter + cubic-fit charts (x-axis = temperature) ----
+// dataset 0 = recorded points (markers only), dataset 1 = the cubic fit line.
+function makeCalibChart(id, color) {
+  const ctx = document.getElementById(id); if (!ctx) return null;
+  const axFont = { family: 'DM Mono', size: 9 };
+  const axX = { type: 'linear', display: true, title: { display: true, text: 'T (°C)', color: TC, font: axFont }, ticks: { color: TC, font: axFont, maxTicksLimit: 6 }, grid: { color: 'rgba(255,255,255,0.04)' }, border: { color: 'transparent' } };
+  // Mass-mode freq shifts only ~tens of Hz over the sweep, so show kHz with
+  // 1 Hz resolution (3 decimals) rather than MHz, or the ticks collapse.
+  const axY = { display: true, title: { display: true, text: 'f (kHz)', color: TC, font: axFont }, ticks: { color: TC, font: axFont, maxTicksLimit: 5, callback: v => (Number(v) / 1e3).toFixed(3) }, grid: { color: 'rgba(255,255,255,0.04)' }, border: { color: 'transparent' } };
+  const chart = new Chart(ctx, {
+    type: 'line',
+    data: { datasets: [
+      { label: 'points', data: [], showLine: false, pointRadius: 4, pointHoverRadius: 5, borderColor: color, backgroundColor: color },
+      { label: 'fit',    data: [], showLine: true,  pointRadius: 0, borderColor: color, borderWidth: 1.5, borderDash: [5, 3], tension: 0, fill: false },
+    ]},
+    options: { responsive: true, maintainAspectRatio: false, animation: false,
+      plugins: { legend: { display: false }, tooltip: { enabled: false }, zoom: ZOOM_CFG },
+      scales: { x: axX, y: axY } }
+  });
+  ctx.addEventListener('dblclick', () => chart.resetZoom());
+  return chart;
+}
+const calibCharts = {
+  fM: makeCalibChart('chart-cal-fM-fit', '#2ecc8a'),
+  fT: makeCalibChart('chart-cal-fT-fit', '#4a9eff'),
 };
 
 // ---- Synchronized zoom groups (one group per tab) ----
@@ -741,6 +823,7 @@ function setupZoomGroup(chartList) {
 setupZoomGroup([charts.mainComp, charts.mainTemp]);
 setupZoomGroup([charts.fM, charts.fT, charts.compA, charts.tempA, charts.lpf1, charts.lpf2]);
 setupZoomGroup([sweepCharts.amp, sweepCharts.phase]);
+setupZoomGroup([charts.calFmLive, charts.calFtLive]);
 
 let _sweepPeakAmp = -Infinity;
 let _sweepPeakFreq = null;
@@ -867,6 +950,16 @@ function setLock(mode, locked) {
   label.textContent = (mode === 'mass' ? 'MASS' : 'TEMP') + (locked ? ' LOCKED' : ' UNLOCKED');
   if (mode === 'mass') lockMass = locked;
   if (mode === 'temp') lockTemp = locked;
+  updateCalLockStatus();
+}
+
+// Calibrate-tab lock readout: both / partial / neither.
+function updateCalLockStatus() {
+  const el = document.getElementById('val-cal-lock');
+  if (!el) return;
+  const both = lockMass && lockTemp;
+  el.textContent  = both ? 'LOCKED' : (lockMass || lockTemp ? 'PARTIAL' : 'UNLOCKED');
+  el.style.color  = both ? 'var(--green)' : (lockMass || lockTemp ? 'var(--orange)' : 'var(--red)');
 }
 
 function checkLockLost(newMass, newTemp) {
@@ -910,6 +1003,17 @@ function onMeasurement(e) {
   setText('val-fT',      fmt(e.freq_temp_mode, 2));
   if (e.freq_mass_mode != null && _runStartFm == null) _runStartFm = e.freq_mass_mode;
   updateCrystalUsage(e.freq_mass_mode);
+
+  // Calibration tab: remember the latest live frequencies for ADD POINT, and
+  // mirror them into the calibrate stat bar + live charts.
+  if (e.freq_mass_mode != null) _lastFm = e.freq_mass_mode;
+  if (e.freq_temp_mode != null) _lastFt = e.freq_temp_mode;
+  setText('val-cal-fM', fmt(e.freq_mass_mode, 2));
+  setText('val-cal-fT', fmt(e.freq_temp_mode, 2));
+  setMeta('meta-cal-fM-live', e.freq_mass_mode, 'Hz');
+  setMeta('meta-cal-fT-live', e.freq_temp_mode, 'Hz');
+  push(charts.calFmLive, e.freq_mass_mode, 0, MAX_PTS_MONITOR, ts);
+  push(charts.calFtLive, e.freq_temp_mode, 0, MAX_PTS_MONITOR, ts);
   setText('val-comp-fM', fmt(e.compensated_freq, 2));
   setText('val-comp-a',  fmt(e.calculated_thickness, 4));
   setText('val-uncomp-a',fmt(e.uncompensated_thickness, 4));
@@ -1703,6 +1807,131 @@ function updateCoeffCharts() {
   const fTdata = temps.map(t => fT3*t**3 + fT2*t**2 + fT1*t);
   if (_coeffCharts.fM) { _coeffCharts.fM.data.labels = temps; _coeffCharts.fM.data.datasets[0].data = fMdata; _coeffCharts.fM.update('none'); }
   if (_coeffCharts.fT) { _coeffCharts.fT.data.labels = temps; _coeffCharts.fT.data.datasets[0].data = fTdata; _coeffCharts.fT.update('none'); }
+}
+
+// ---- Calibration tab ----
+// Points recorded by ADD POINT: each {t, fM, fT}. The latest live frequencies
+// come from onMeasurement (only streamed while a measurement is RUNNING).
+let _lastFm = null, _lastFt = null;
+let _calPoints = [];
+let _calCoefM = null, _calCoefT = null;  // [c3, c2, c1, c0] each, or null when < 4 points
+
+// Solve a small dense linear system A x = b by Gauss-Jordan with partial
+// pivoting. Returns the solution vector, or null if A is (near-)singular.
+function solveLinear(A, b) {
+  const n = b.length;
+  const M = A.map((row, i) => [...row, b[i]]);
+  for (let col = 0; col < n; col++) {
+    let piv = col;
+    for (let r = col + 1; r < n; r++) if (Math.abs(M[r][col]) > Math.abs(M[piv][col])) piv = r;
+    if (Math.abs(M[piv][col]) < 1e-12) return null;
+    [M[col], M[piv]] = [M[piv], M[col]];
+    for (let r = 0; r < n; r++) {
+      if (r === col) continue;
+      const f = M[r][col] / M[col][col];
+      for (let c = col; c <= n; c++) M[r][c] -= f * M[col][c];
+    }
+  }
+  return M.map((row, i) => row[n] / row[i]);
+}
+
+// Degree-3 least-squares polynomial fit, returning [c3, c2, c1, c0] for
+// y = c3·x³ + c2·x² + c1·x + c0. Mirrors numpy.polyfit(x, y, 3): the
+// Vandermonde columns are scaled by their norm for conditioning, the scaled
+// normal equations are solved, then the scaling is undone. Verified to match
+// np.polyfit to ~1e-8 relative — same fit as TempCompAlgorithm.calculateCoeffecients.
+function polyfit3(xs, ys) {
+  const deg = 3, m = deg + 1, n = xs.length;
+  if (n < m) return null;
+  const V = xs.map(x => { const r = new Array(m); for (let j = 0; j < m; j++) r[j] = Math.pow(x, deg - j); return r; });
+  const scale = new Array(m).fill(0);
+  for (let j = 0; j < m; j++) { let s = 0; for (let i = 0; i < n; i++) s += V[i][j] * V[i][j]; scale[j] = Math.sqrt(s) || 1; }
+  const A = Array.from({ length: m }, () => new Array(m).fill(0));
+  const b = new Array(m).fill(0);
+  for (let i = 0; i < n; i++) {
+    const vs = new Array(m);
+    for (let j = 0; j < m; j++) vs[j] = V[i][j] / scale[j];
+    for (let j = 0; j < m; j++) { b[j] += vs[j] * ys[i]; for (let k = 0; k < m; k++) A[j][k] += vs[j] * vs[k]; }
+  }
+  const cs = solveLinear(A, b);
+  if (!cs) return null;
+  return cs.map((c, j) => c / scale[j]);
+}
+
+function addCalPoint() {
+  const t = parseFloat(document.getElementById('cal-temp-input').value);
+  if (isNaN(t)) { showToast('Enter a valid temperature', true); return; }
+  if (_lastFm == null || _lastFt == null) {
+    showToast('No live frequency yet — START a measurement so both modes stream', true);
+    return;
+  }
+  _calPoints.push({ t, fM: _lastFm, fT: _lastFt });
+  refreshCalCharts();
+  showToast(`Point added: ${t} °C  (fM ${_lastFm.toFixed(1)}, fT ${_lastFt.toFixed(1)})`);
+}
+
+function clearCalPoints() {
+  if (_calPoints.length && !confirm('Clear all calibration points?')) return;
+  _calPoints = [];
+  refreshCalCharts();
+}
+
+// Redraw the scatter, recompute the cubic fit (when ≥ 4 points), and refresh
+// the coefficient readout + fit lines.
+function refreshCalCharts() {
+  const pts = _calPoints;
+  setText('cal-point-count', pts.length);
+  setText('meta-cal-fM-fit', `${pts.length} pts`);
+  setText('meta-cal-fT-fit', `${pts.length} pts`);
+
+  if (calibCharts.fM) calibCharts.fM.data.datasets[0].data = pts.map(p => ({ x: p.t, y: p.fM }));
+  if (calibCharts.fT) calibCharts.fT.data.datasets[0].data = pts.map(p => ({ x: p.t, y: p.fT }));
+
+  _calCoefM = _calCoefT = null;
+  if (pts.length >= 4) {
+    const ts = pts.map(p => p.t);
+    _calCoefM = polyfit3(ts, pts.map(p => p.fM));
+    _calCoefT = polyfit3(ts, pts.map(p => p.fT));
+  }
+
+  const fitLine = (coef) => {
+    if (!coef) return [];
+    const ts = pts.map(p => p.t);
+    const lo = Math.min(...ts), hi = Math.max(...ts), N = 80;
+    const out = [];
+    for (let i = 0; i <= N; i++) { const x = lo + (hi - lo) * i / N; out.push({ x, y: coef[0]*x**3 + coef[1]*x**2 + coef[2]*x + coef[3] }); }
+    return out;
+  };
+  if (calibCharts.fM) { calibCharts.fM.data.datasets[1].data = fitLine(_calCoefM); calibCharts.fM.update('none'); }
+  if (calibCharts.fT) { calibCharts.fT.data.datasets[1].data = fitLine(_calCoefT); calibCharts.fT.update('none'); }
+
+  renderCalCoeffs();
+
+  const hint = document.getElementById('cal-fit-hint');
+  if (hint) hint.textContent = pts.length >= 4 ? `cubic fit over ${pts.length} points`
+                             : `add ${4 - pts.length} more point${4 - pts.length === 1 ? '' : 's'} to fit`;
+}
+
+// Fitted coefficients minus the constant (temperature-invariant) term, which
+// the compensation algorithm derives from the start frequencies rather than the fit.
+function renderCalCoeffs() {
+  const set = (id, v) => { const el = document.getElementById(id); if (el) el.textContent = (v == null) ? '—' : Number(v).toPrecision(7); };
+  set('cal-fM3', _calCoefM?.[0]); set('cal-fM2', _calCoefM?.[1]); set('cal-fM1', _calCoefM?.[2]);
+  set('cal-fT3', _calCoefT?.[0]); set('cal-fT2', _calCoefT?.[1]); set('cal-fT1', _calCoefT?.[2]);
+  const btn = document.getElementById('btn-cal-transfer');
+  if (btn) btn.disabled = !(_calCoefM && _calCoefT);
+}
+
+// Copy the fitted (non-constant) coefficients into the Crystal settings form.
+// The user reviews them there and clicks APPLY to persist — this only stages them.
+function transferCalCoeffs() {
+  if (!_calCoefM || !_calCoefT) { showToast('Need at least 4 points to fit', true); return; }
+  const setVal = (id, v) => { const el = document.getElementById(id); if (el) el.value = v; };
+  setVal('s-coeff-fM3', _calCoefM[0]); setVal('s-coeff-fM2', _calCoefM[1]); setVal('s-coeff-fM1', _calCoefM[2]);
+  setVal('s-coeff-fT3', _calCoefT[0]); setVal('s-coeff-fT2', _calCoefT[1]); setVal('s-coeff-fT1', _calCoefT[2]);
+  updateCoeffCharts();   // refresh the preview graphs if the crystal panel is open
+  updateDirtyState();    // light up APPLY / UNDO
+  showToast('Coefficients transferred to Crystal settings — review & APPLY to save');
 }
 
 // ---- Log tab ----

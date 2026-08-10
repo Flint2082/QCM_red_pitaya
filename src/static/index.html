@@ -198,6 +198,9 @@ footer { height: 24px; background: var(--surface); border-top: 1px solid var(--b
   <div class="status-pill error" id="rec-warning" style="display:none;cursor:pointer"
        title="This run is not being written to disk — click for details"
        onclick="showRecFailedModal()">● NOT RECORDING</div>
+  <div class="status-pill running" id="target-pill" style="display:none;cursor:pointer"
+       title="The target thickness has been reached — click for details"
+       onclick="showTargetModal()">● TARGET REACHED</div>
   <div class="header-spacer"></div>
   <div class="status-pill idle" id="status-pill"><span id="state-label">IDLE</span></div>
   <div class="logo-sep"></div>
@@ -211,6 +214,11 @@ footer { height: 24px; background: var(--surface); border-top: 1px solid var(--b
     <div class="ws-dot" id="ws-dot"></div>
     <span id="ws-label">DISCONNECTED</span>
   </div>
+  <div class="logo-sep"></div>
+  <button class="btn btn-red" onclick="askReboot()" title="Reboot the Red Pitaya">
+    <svg viewBox="0 0 12 12"><path d="M6 1.5v1.6a2.9 2.9 0 1 0 2.6 1.6l1-.8A4.2 4.2 0 1 1 6 1.5z"/><path d="M5.4 0.6l2.2 1.7-2.2 1.7z"/></svg>
+    REBOOT
+  </button>
 </header>
 
 <div class="tab-bar">
@@ -319,13 +327,25 @@ footer { height: 24px; background: var(--surface); border-top: 1px solid var(--b
       </div>
       <div class="toolbar-sep"></div>
       <button class="btn btn-blue" id="btn-sweep-toggle" onclick="toggleSweep()"><svg viewBox="0 0 12 12" style="width:11px;height:11px;fill:currentColor"><polygon points="3,2 10,6 3,10"/></svg>RUN SWEEP</button>
+      <div class="toolbar-sep"></div>
+      <button class="btn btn-green" id="btn-sweep-fm" onclick="runModeSweep(1)"
+              title="Sweep a 500 kHz window at 1 kHz around the crystal's mass lock frequency">SWEEP fM</button>
+      <button class="btn btn-green" id="btn-sweep-ft" onclick="runModeSweep(2)"
+              title="Sweep a 500 kHz window at 1 kHz around the crystal's temp lock frequency">SWEEP fT</button>
       <div class="header-spacer"></div>
+      <button class="btn btn-green" id="btn-sweep-csv" onclick="downloadSweepCsv()" disabled
+              title="Download this sweep (server copy) as CSV">
+        <svg viewBox="0 0 12 12"><path d="M5.25 1h1.5v4h2L6 8 3.25 5h2z"/><path d="M2.5 9.5h7v1.2h-7z"/></svg>
+        SAVE CSV
+      </button>
       <button class="btn" onclick="clearSweep()">CLEAR</button>
     </div>
     <div class="stat-bar">
       <div class="stat"><div class="stat-label">Points</div><div class="stat-value" id="val-sweep-n">—</div><div class="stat-unit"></div></div>
       <div class="stat"><div class="stat-label">Peak Amplitude</div><div class="stat-value" id="val-sweep-peak-amp" style="color:var(--blue)">—</div><div class="stat-unit"></div></div>
       <div class="stat"><div class="stat-label">Peak Frequency</div><div class="stat-value" id="val-sweep-peak-freq" style="color:var(--blue)">—</div><div class="stat-unit">Hz</div></div>
+      <div class="stat"><div class="stat-label">2nd Peak Amplitude</div><div class="stat-value" id="val-sweep-peak2-amp" style="color:var(--purple)">—</div><div class="stat-unit"></div></div>
+      <div class="stat"><div class="stat-label">2nd Peak Frequency</div><div class="stat-value" id="val-sweep-peak2-freq" style="color:var(--purple)">—</div><div class="stat-unit">Hz</div></div>
       <div class="stat"><div class="stat-label">Status</div><div class="stat-value" id="val-sweep-status">IDLE</div><div class="stat-unit"></div></div>
     </div>
     <div class="chart-grid" style="grid-template-columns:1fr; grid-template-rows:1fr 1fr;">
@@ -420,6 +440,12 @@ footer { height: 24px; background: var(--surface); border-top: 1px solid var(--b
           <div class="settings-section-title">TEMPERATURE</div>
           <div class="settings-group">
             <div class="settings-row"><div><div class="settings-row-label">Ambient Temperature</div><div class="settings-row-desc">Starting reference temperature</div></div><div></div><div style="display:flex;align-items:center;gap:6px"><input class="settings-input" type="number" id="s-amb-temp" value="23" step="0.5"><span class="settings-unit">°C</span></div></div>
+          </div>
+
+          <div class="settings-section-title">TARGET</div>
+          <div class="settings-group">
+            <div class="settings-row"><div><div class="settings-row-label">Target Thickness</div><div class="settings-row-desc">Compensated thickness at which the target flag is raised — shows a popup and sets the flag on the OPC server and the REST API. The measurement keeps running. 0 = no target.</div></div><div></div><div style="display:flex;align-items:center;gap:6px"><input class="settings-input" type="number" id="s-target-thickness" value="0" step="1" min="0"><span class="settings-unit">nm</span></div></div>
+            <div class="settings-row"><div><div class="settings-row-label">Target Status</div><div class="settings-row-desc">Live state of the flag for the current run</div></div><div></div><div style="display:flex;align-items:center;gap:6px"><span id="s-target-status" style="font-family:'DM Mono',monospace;font-size:12px;color:var(--text-dim)">NO TARGET</span></div></div>
           </div>
         </div>
 
@@ -611,6 +637,13 @@ footer { height: 24px; background: var(--surface); border-top: 1px solid var(--b
                 <div class="notif-desc">Frequency sweep finishes</div>
               </div>
               <label class="toggle-switch"><input type="checkbox" id="notif-sweepComplete" checked onchange="notifConfig.sweepComplete=this.checked"><span class="toggle-slider"></span></label>
+            </div>
+            <div class="notif-row">
+              <div class="notif-row-info">
+                <div class="notif-label">Target Thickness Reached</div>
+                <div class="notif-desc">Deposition reaches the target set under Measurement</div>
+              </div>
+              <label class="toggle-switch"><input type="checkbox" id="notif-targetReached" checked onchange="notifConfig.targetReached=this.checked"><span class="toggle-slider"></span></label>
             </div>
             <div class="notif-row">
               <div class="notif-row-info">
@@ -850,12 +883,22 @@ setupZoomGroup([charts.fM, charts.fT, charts.compA, charts.tempA, charts.lpf1, c
 setupZoomGroup([sweepCharts.amp, sweepCharts.phase]);
 setupZoomGroup([charts.calFmLive, charts.calFtLive]);
 
-let _sweepPeakAmp = -Infinity;
-let _sweepPeakFreq = null;
 let _sweepTotal = 0;
+let _sweepName = null;   // server-side CSV of the sweep just finished
+
+// Mode-sweep presets: a window this wide, at this step, centred on the crystal's
+// lock frequency for the chosen mode. Wide enough to find the resonance even
+// when the stored lock frequency is well off — a coarse locator, not a detailed
+// scan; narrow the toolbar fields and re-run to resolve the peak's shape.
+const MODE_SWEEP_WINDOW = 500000;  // Hz, total span (±250 kHz around the centre)
+const MODE_SWEEP_STEP   = 1000;    // Hz
 
 function setSweepBtnState(running) {
   _sweepRunning = running;
+  ['btn-sweep-fm', 'btn-sweep-ft'].forEach(id => {
+    const b = document.getElementById(id);
+    if (b) b.disabled = running;
+  });
   const btn = document.getElementById('btn-sweep-toggle');
   if (!btn) return;
   if (running) {
@@ -879,6 +922,32 @@ async function runSweep() {
   const step   = parseFloat(document.getElementById('sweep-step').value);
   const settle = parseFloat(document.getElementById('sweep-settle').value);
   if ([start, stop, step, settle].some(isNaN)) { showToast('Enter valid sweep parameters.', true); return; }
+  await startSweep(osc, start, stop, step, settle);
+}
+
+// SWEEP fM / SWEEP fT: centre the standard window on the crystal's lock
+// frequency from Settings — the same value GET LOCK uses, so it works straight
+// from IDLE and follows whichever crystal is active. The toolbar fields are
+// filled in too, so the preset is visible and can be tweaked and re-run.
+async function runModeSweep(osc) {
+  const id = osc === 1 ? 's-crystal-freq-mass' : 's-crystal-freq-temp';
+  const centre = parseFloat(document.getElementById(id).value);
+  if (isNaN(centre) || centre <= 0) {
+    showToast(`Set a valid ${osc === 1 ? 'mass' : 'temp'} lock frequency in Crystal Settings`, true);
+    return;
+  }
+  const start = centre - MODE_SWEEP_WINDOW / 2;
+  const stop  = centre + MODE_SWEEP_WINDOW / 2;
+  document.getElementById('sweep-osc').value   = String(osc);
+  document.getElementById('sweep-start').value = start;
+  document.getElementById('sweep-stop').value  = stop;
+  document.getElementById('sweep-step').value  = MODE_SWEEP_STEP;
+  const settle = parseFloat(document.getElementById('sweep-settle').value) || 0.05;
+  showToast(`Sweeping ${osc === 1 ? 'fM' : 'fT'} — ${fmtHz(MODE_SWEEP_WINDOW)} around ${(centre/1e6).toFixed(4)} MHz`);
+  await startSweep(osc, start, stop, MODE_SWEEP_STEP, settle);
+}
+
+async function startSweep(osc, start, stop, step, settle) {
   _sweepTotal = Math.floor((stop - start) / step) + 1;
   clearSweep();
   document.getElementById('val-sweep-status').textContent = 'PENDING';
@@ -914,28 +983,81 @@ function onSweepPoint(e) {
   document.getElementById('meta-sweep-phase').textContent = fmt(e.phase, 4);
   document.getElementById('val-sweep-status').textContent = `${pct}%`;
 
-  if (e.amplitude > _sweepPeakAmp) {
-    _sweepPeakAmp  = e.amplitude;
-    _sweepPeakFreq = e.frequency;
-    setText('val-sweep-peak-amp',  fmt(_sweepPeakAmp, 4));
-    setText('val-sweep-peak-freq', fmt(_sweepPeakFreq, 0));
-  }
+  updateSweepPeaks();
 }
 
-function onSweepComplete() {
+// A resonance covers several samples, so the runner-up sample is almost always
+// the flank of the tallest peak, not a second resonance. Ignore everything
+// within this many steps of a peak already taken, so "2nd peak" means a
+// genuinely separate one — the other mode, or a spurious response.
+const PEAK_SEPARATION_STEPS = 5;
+
+// The two highest well-separated maxima of the amplitude trace, tallest first.
+function findSweepPeaks(freqs, amps) {
+  const sep = PEAK_SEPARATION_STEPS * Math.abs((freqs[1] ?? 0) - (freqs[0] ?? 0));
+  const peaks = [];
+  const taken = [];
+  for (let k = 0; k < 2; k++) {
+    let best = -1;
+    for (let i = 0; i < amps.length; i++) {
+      const a = amps[i];
+      if (a == null || !isFinite(a)) continue;
+      if (taken.some(f => Math.abs(freqs[i] - f) <= sep)) continue;
+      if (best < 0 || a > amps[best]) best = i;
+    }
+    if (best < 0) break;
+    peaks.push({ freq: freqs[best], amp: amps[best] });
+    taken.push(freqs[best]);
+  }
+  return peaks;
+}
+
+function updateSweepPeaks() {
+  const freqs = sweepCharts.amp.data.labels;
+  const amps  = sweepCharts.amp.data.datasets[0].data;
+  const [p1, p2] = findSweepPeaks(freqs, amps);
+  setText('val-sweep-peak-amp',   p1 ? fmt(p1.amp, 4) : '—');
+  setText('val-sweep-peak-freq',  p1 ? fmt(p1.freq, 0) : '—');
+  setText('val-sweep-peak2-amp',  p2 ? fmt(p2.amp, 4) : '—');
+  setText('val-sweep-peak2-freq', p2 ? fmt(p2.freq, 0) : '—');
+}
+
+function onSweepComplete(ev) {
   document.getElementById('val-sweep-status').textContent = 'DONE';
   setSweepBtnState(false);
+  updateSweepPeaks();
+  // The worker reports the CSV it recorded (null when recording failed) — only
+  // offer the download when there is actually a file to fetch.
+  _sweepName = (ev && ev.name) || null;
+  const btn = document.getElementById('btn-sweep-csv');
+  if (btn) btn.disabled = !_sweepName;
   sendNotif('QCM — Sweep Complete', 'Frequency sweep finished', 'sweepComplete');
 }
 
+// Download the sweep the Pitaya logged to disk — the same relationship the run
+// CSVs have: the browser keeps no copy, it fetches the server's.
+async function downloadSweepCsv() {
+  let name = _sweepName;
+  if (!name) {
+    try {
+      const d = await fetch(`${API_URL}/sweeps`).then(r => r.json());
+      name = d.current || (d.sweeps || []).find(s => s.size > 0)?.name;
+    } catch(e) { /* fall through to the error toast */ }
+  }
+  if (!name) { showToast('No recorded sweep to download', true); return; }
+  window.location.href = `${API_URL}/sweeps/${encodeURIComponent(name)}/download`;
+}
+
 function clearSweep() {
-  _sweepPeakAmp = -Infinity;
-  _sweepPeakFreq = null;
+  _sweepName = null;
+  const csvBtn = document.getElementById('btn-sweep-csv');
+  if (csvBtn) csvBtn.disabled = true;
   ['amp','phase'].forEach(k => {
     const c = sweepCharts[k]; if (!c) return;
     c.data.labels = []; c.data.datasets.forEach(d => d.data = []); c.update('none');
   });
-  ['val-sweep-n','val-sweep-peak-amp','val-sweep-peak-freq'].forEach(id => setText(id, '—'));
+  ['val-sweep-n','val-sweep-peak-amp','val-sweep-peak-freq',
+   'val-sweep-peak2-amp','val-sweep-peak2-freq'].forEach(id => setText(id, '—'));
   document.getElementById('meta-sweep-amp').textContent   = '—';
   document.getElementById('meta-sweep-phase').textContent = '—';
   document.getElementById('val-sweep-status').textContent = 'IDLE';
@@ -1128,7 +1250,7 @@ function connect() {
       if (ev.type === 'MeasurementEvent')   onMeasurement(ev);
       if (ev.type === 'StateEvent')         onStateChange(ev.state);
       if (ev.type === 'SweepPointEvent')    onSweepPoint(ev);
-      if (ev.type === 'SweepCompleteEvent') onSweepComplete();
+      if (ev.type === 'SweepCompleteEvent') onSweepComplete(ev);
       if (ev.type === 'CapAdjustEvent')     onCapAdjust(ev);
       if (ev.type === 'OpcStatusEvent')     onOpcStatus(ev);
       if (ev.type === 'LockFailedEvent')    document.getElementById('modal-lock-failed').style.display = 'flex';
@@ -1137,6 +1259,7 @@ function connect() {
       if (ev.type === 'LockAmpAutoUpdatedEvent') onLockAmpAutoUpdated(ev);
       if (ev.type === 'RunLogStartedEvent') onRunLogStarted(ev);
       if (ev.type === 'RunLogFailedEvent')  onRunLogFailed(ev);
+      if (ev.type === 'TargetReachedEvent') onTargetReached(ev);
       if (ev.type === 'LogEvent')           onLogEvent(ev);
     } catch(e) { console.warn('Bad WS msg', e); }
   };
@@ -1154,7 +1277,7 @@ function showToast(msg, isError = false, isWarning = false) {
 }
 
 // ---- Notification system ----
-const notifConfig = { enabled: false, sound: true, lockLost: true, sweepComplete: true, opcLost: true, wsLost: true, recFailed: true };
+const notifConfig = { enabled: false, sound: true, lockLost: true, sweepComplete: true, opcLost: true, wsLost: true, recFailed: true, targetReached: true };
 let _audioCtx = null;
 
 function getAudioCtx() {
@@ -1203,6 +1326,12 @@ function playNotifSound(eventType) {
       playBeep(440, 0.2);
       playBeep(440, 0.2, 0.25, 0.26);
       playBeep(300, 0.4, 0.25, 0.52);
+      break;
+    case 'targetReached':
+      // Rising three-tone: unmistakably the "done" chime, not an alarm.
+      playBeep(660, 0.16);
+      playBeep(880, 0.16, 0.25, 0.18);
+      playBeep(1180, 0.3, 0.25, 0.36);
       break;
   }
 }
@@ -1399,6 +1528,103 @@ async function resumeRecording() {
   } catch(e) { showToast('Could not resume recording', true); }
 }
 
+// ---- Target thickness ----
+// The worker owns the comparison and sends the flag both ways: reached=true on
+// the crossing, reached=false when a new run (or a raised target) clears it.
+let _targetReached = false;
+let _targetInfo = { thickness: 0, target: 0 };
+
+function onTargetReached(ev) {
+  _targetReached = !!ev.reached;
+  _targetInfo = { thickness: ev.thickness, target: ev.target };
+  document.getElementById('target-pill').style.display = _targetReached ? 'flex' : 'none';
+  updateTargetStatus();
+  if (!_targetReached) return;   // a clear is silent — nothing happened worth interrupting for
+  onLogEvent({ level: 'INFO', message: `[TARGET] reached ${Number(ev.thickness).toFixed(3)} nm `
+             + `(target ${Number(ev.target).toFixed(3)} nm)`, timestamp: Date.now() / 1000 });
+  sendNotif('QCM — Target Thickness Reached',
+            `${Number(ev.thickness).toFixed(2)} nm of ${Number(ev.target).toFixed(2)} nm`, 'targetReached');
+  showTargetModal();
+}
+
+function showTargetModal() {
+  setText('target-modal-thickness', fmt(_targetInfo.thickness, 3));
+  setText('target-modal-target',    fmt(_targetInfo.target, 3));
+  document.getElementById('target-stop-btn').disabled = !_isRunning;
+  document.getElementById('modal-target-reached').style.display = 'flex';
+}
+
+function stopFromTarget() {
+  document.getElementById('modal-target-reached').style.display = 'none';
+  sendCommand('stop');
+}
+
+// Settings-panel readout: what the flag is doing right now, so the target is
+// not a write-only field.
+function updateTargetStatus() {
+  const el = document.getElementById('s-target-status');
+  if (!el) return;
+  const target = parseFloat(document.getElementById('s-target-thickness')?.value);
+  if (!(target > 0)) {
+    el.textContent = 'NO TARGET';
+    el.style.color = 'var(--text-dim)';
+  } else if (_targetReached) {
+    el.textContent = `REACHED — ${fmt(_targetInfo.thickness, 2)} nm`;
+    el.style.color = 'var(--green)';
+  } else {
+    el.textContent = `ARMED — ${target} nm`;
+    el.style.color = 'var(--orange)';
+  }
+}
+
+// ---- Reboot ----
+// A reboot mid-run ends that run where it stands, so the confirmation says so
+// and the force flag is only sent from the explicit "reboot anyway" path.
+function askReboot() {
+  const running = _isRunning;
+  document.getElementById('reboot-running-warning').style.display = running ? 'block' : 'none';
+  document.getElementById('reboot-confirm-btn').className = 'btn ' + (running ? 'btn-red' : 'btn-orange');
+  document.getElementById('reboot-confirm-btn').textContent = running ? 'REBOOT ANYWAY' : 'REBOOT';
+  document.getElementById('modal-reboot').style.display = 'flex';
+}
+
+async function doReboot() {
+  const force = _isRunning;
+  document.getElementById('modal-reboot').style.display = 'none';
+  try {
+    const r = await fetch(`${API_URL}/system/reboot?force=${force}`, { method: 'POST' });
+    if (!r.ok) { showToast('Reboot refused: ' + (await r.text()).slice(0, 80), true); return; }
+  } catch(e) {
+    showToast('Reboot command failed', true);
+    return;
+  }
+  document.getElementById('modal-rebooting').style.display = 'flex';
+  waitForReboot();
+}
+
+// The box goes away and comes back: poll /health until it answers again, then
+// reload so the page starts from the freshly booted server's state.
+async function waitForReboot() {
+  const started = Date.now();
+  const statusEl = document.getElementById('reboot-status');
+  // Ignore the first few seconds — the server answers right up until the kernel
+  // actually goes down, and a hit there would look like "already back".
+  await new Promise(r => setTimeout(r, 8000));
+  while (true) {
+    const secs = Math.round((Date.now() - started) / 1000);
+    if (statusEl) statusEl.textContent = `waiting… ${secs} s`;
+    try {
+      const r = await fetch(`${API_URL}/health`, { cache: 'no-store' });
+      if (r.ok) {
+        if (statusEl) statusEl.textContent = 'back up — reloading';
+        setTimeout(() => window.location.reload(), 800);
+        return;
+      }
+    } catch(e) { /* still down — expected */ }
+    await new Promise(r => setTimeout(r, 2000));
+  }
+}
+
 // Enable the download button once a run has produced data, grey it out otherwise.
 function updateDownloadBtn() {
   const btn = document.getElementById('btn-download-latest');
@@ -1447,6 +1673,7 @@ async function loadInitialSettings() {
       if (s.measurement.ambient_temp != null) document.getElementById('s-amb-temp').value   = s.measurement.ambient_temp;
       if (s.measurement.mat_dens != null)     document.getElementById('s-mat-dens').value   = s.measurement.mat_dens;
       if (s.measurement.z_ratio != null)      document.getElementById('s-mat-zratio').value = s.measurement.z_ratio;
+      if (s.measurement.target_thickness != null) document.getElementById('s-target-thickness').value = s.measurement.target_thickness;
     }
     // Lock-failed hint tracks the PLL capture window rather than a fixed number.
     if (s.pll?.capture_range != null) {
@@ -1492,6 +1719,16 @@ async function loadInitialSettings() {
     if (opc.base_node) document.getElementById('s-opc-base').value = opc.base_node;
   } catch(e) { /* OPC bridge may not be enabled */ }
   loadOpcNodes();
+
+  // A refresh mid-run must not lose a flag that is already up: the WebSocket
+  // only replays the state, so read the target back explicitly.
+  try {
+    const t = await fetch(`${API_URL}/measurement/target`).then(r => r.json());
+    _targetReached = !!t.reached;
+    _targetInfo = { thickness: t.thickness_at_target ?? 0, target: t.target_thickness ?? 0 };
+    document.getElementById('target-pill').style.display = _targetReached ? 'flex' : 'none';
+  } catch(e) { /* older backend without the target endpoint */ }
+  updateTargetStatus();
   snapshotBaseline();   // everything just loaded is the clean baseline
 }
 loadInitialSettings();
@@ -1860,7 +2097,10 @@ async function applyMeasurementParams() {
   const dens = parseFloat(document.getElementById('s-mat-dens').value);
   const zr   = parseFloat(document.getElementById('s-mat-zratio').value);
   if ([t, dens, zr].some(isNaN)) return;
-  await fetch(`${API_URL}/settings/measurement_params?ambient_temp=${t}&mat_dens=${dens}&z_ratio=${zr}`, { method: 'POST' });
+  const target = parseFloat(document.getElementById('s-target-thickness').value);
+  await fetch(`${API_URL}/settings/measurement_params?ambient_temp=${t}&mat_dens=${dens}&z_ratio=${zr}`
+            + (isNaN(target) ? '' : `&target_thickness=${target}`), { method: 'POST' });
+  updateTargetStatus();
 }
 
 async function applyAllSettings() { await applyOscSettings(1); await applyOscSettings(2); await applyMeasurementParams(); await applyOutputMode(); await applyLockDetect(); await applyCrystal(); }
@@ -1869,7 +2109,7 @@ async function applyAllSettings() { await applyOscSettings(1); await applyOscSet
 // Every settings input that APPLY commits. OPC fields are excluded (they have
 // their own CONNECT action).
 const SETTING_IDS = [
-  's-mat-dens', 's-mat-zratio', 's-amb-temp',
+  's-mat-dens', 's-mat-zratio', 's-amb-temp', 's-target-thickness',
   's-osc1-int', 's-osc1-prop', 's-osc1-lpf', 's-osc1-inv', 's-osc1-phase',
   's-osc2-int', 's-osc2-prop', 's-osc2-lpf', 's-osc2-inv', 's-osc2-phase',
   's-lock-amp', 's-lock-phase', 's-auto-relock', 's-auto-amp', 's-output-mode',
@@ -1929,6 +2169,9 @@ function undoSettings() {
 // Recompute dirtiness whenever any settings field is edited.
 document.querySelector('.settings-content')?.addEventListener('input', updateDirtyState);
 document.querySelector('.settings-content')?.addEventListener('change', updateDirtyState);
+// The target readout follows the field as it is typed, so "ARMED at 250 nm"
+// reflects what is in the box even before APPLY commits it.
+document.getElementById('s-target-thickness')?.addEventListener('input', updateTargetStatus);
 
 function toggleCrystalAdvanced(btn) {
   const adv = document.getElementById('crystal-advanced');
@@ -2313,6 +2556,62 @@ function clearLogs() {
       <button class="btn btn-green" id="rec-resume-btn" onclick="resumeRecording()"
               title="Re-open the log for the rest of this run">RESUME RECORDING</button>
       <button class="btn" onclick="document.getElementById('modal-rec-failed').style.display='none'">DISMISS</button>
+    </div>
+  </div>
+</div>
+
+<!-- Target thickness reached -->
+<div id="modal-target-reached" class="modal-overlay" style="display:none">
+  <div class="modal">
+    <div class="modal-title green">✓ TARGET THICKNESS REACHED</div>
+    <div class="modal-body">
+      The compensated thickness has reached the target set under
+      Settings → Measurement.
+      <div style="font-family:'DM Mono',monospace;font-size:12px;line-height:1.8;margin-top:10px">
+        MEASURED &nbsp;<span id="target-modal-thickness" style="color:var(--green)">—</span> nm<br>
+        TARGET &nbsp;&nbsp;&nbsp;<span id="target-modal-target">—</span> nm
+      </div>
+      <br>
+      The measurement is still running and the flag is set on the OPC server
+      (<span style="font-family:'DM Mono',monospace;font-size:11px">GVL_QCM.READ.TargetReached</span>)
+      and the REST API. It clears when the next run starts.
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-red" id="target-stop-btn" onclick="stopFromTarget()">STOP MEASUREMENT</button>
+      <button class="btn" onclick="document.getElementById('modal-target-reached').style.display='none'">KEEP RUNNING</button>
+    </div>
+  </div>
+</div>
+
+<!-- Reboot confirmation -->
+<div id="modal-reboot" class="modal-overlay" style="display:none">
+  <div class="modal">
+    <div class="modal-title">⚠ REBOOT THE RED PITAYA</div>
+    <div class="modal-body">
+      The whole instrument restarts: the FPGA bitstream is reloaded, both PLLs
+      come up unlocked, and the OPC-UA link drops until the PLC reconnects.
+      It takes roughly a minute to come back.
+      <div id="reboot-running-warning" style="display:none;margin-top:12px;padding:10px;border:1px solid var(--red);border-radius:var(--radius);color:var(--red)">
+        A measurement is running. Rebooting ends it where it stands — the run CSV
+        keeps everything recorded up to this moment, and nothing after it.
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-orange" id="reboot-confirm-btn" onclick="doReboot()">REBOOT</button>
+      <button class="btn" onclick="document.getElementById('modal-reboot').style.display='none'">CANCEL</button>
+    </div>
+  </div>
+</div>
+
+<!-- Reboot in progress -->
+<div id="modal-rebooting" class="modal-overlay" style="display:none">
+  <div class="modal">
+    <div class="modal-title">REBOOTING</div>
+    <div class="modal-body">
+      The Red Pitaya is restarting. This page reloads by itself as soon as the
+      server answers again.
+      <div style="font-family:'DM Mono',monospace;font-size:12px;margin-top:12px;color:var(--text-mid)"
+           id="reboot-status">waiting… 0 s</div>
     </div>
   </div>
 </div>

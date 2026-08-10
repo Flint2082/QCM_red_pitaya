@@ -26,7 +26,7 @@ class SweepPointEvent(Event):
 
 @dataclass
 class SweepCompleteEvent(Event):
-    pass
+    name: str | None = None  # CSV the sweep was recorded to, None = not recorded
 
 @dataclass
 class MeasurementEvent(Event):
@@ -62,6 +62,15 @@ class RunLogStartedEvent(Event):
 @dataclass
 class RunLogFailedEvent(Event):
     reason: str  # why the run is not being recorded (disk full, write error, ...)
+
+@dataclass
+class TargetReachedEvent(Event):
+    """Target-thickness flag. Emitted when the target is crossed (reached=True)
+    and again when it is cleared at the start of a run or on a target change
+    (reached=False), so consumers never have to infer the flag from state."""
+    reached: bool
+    thickness: float  # compensated thickness at the moment of the transition
+    target: float     # target that was in force (0 = target disabled)
 
 @dataclass
 class SystemStatusEvent(Event):

@@ -113,6 +113,10 @@ class SetSensorParamsCommand(ApiCommand):
     tooling_ratio: float = 1.0  # proportional scaling of reported thickness
 
 @dataclass
+class SetTargetThicknessCommand(ApiCommand):
+    target: float  # nm of compensated thickness; 0 disables the target
+
+@dataclass
 class StartCapAdjustCommand(ApiCommand):
     freq_mass: float
     freq_temp: float

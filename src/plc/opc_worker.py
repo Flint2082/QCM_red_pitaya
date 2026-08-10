@@ -16,7 +16,7 @@ from messaging.api_command import (
     StopMeasurementCommand,
     StartupPLLCommand,
 )
-from messaging.api_event import MeasurementEvent, OpcStatusEvent, StateEvent
+from messaging.api_event import MeasurementEvent, OpcStatusEvent, StateEvent, TargetReachedEvent
 from plc.wago_client import WagoClient
 
 # --------------------------------------------------
@@ -43,6 +43,7 @@ _READ_KEYS = [
     "GVL_QCM.READ.CompensatedMassFrequency",
     "GVL_QCM.READ.LockMass",
     "GVL_QCM.READ.LockTemp",
+    "GVL_QCM.READ.TargetReached",
     "GVL_QCM.READ.Timestamp",
     "GVL_QCM.READ.ErrorCode",
 ]
@@ -60,8 +61,9 @@ _POLL_INTERVAL      =  0.5   # seconds between CTRL-fallback polls
 _SUBSCRIPTION_MS    =  100   # OPC-UA subscription publishing interval (ms)
 
 
-def _build_measurement_payload(data: MeasurementData) -> dict:
+def _build_measurement_payload(data: MeasurementData, target_reached: bool = False) -> dict:
     return {
+        "GVL_QCM.READ.TargetReached":            bool(target_reached),
         "GVL_QCM.READ.MassFrequency":            float(data.freq_mass_mode),
         "GVL_QCM.READ.TempFrequency":            float(data.freq_temp_mode),
         "GVL_QCM.READ.MassAmplitude":            float(data.amp_mass),
@@ -139,6 +141,10 @@ class OPCUAWorker(threading.Thread):
         self._last_poll = 0.0
         self._last_reconnect = 0.0
         self._was_connected: bool | None = None  # None = not yet emitted
+        # Target-thickness flag, owned by the worker and mirrored here. Written
+        # with every measurement rather than once on the transition, so it is a
+        # level the PLC can read at any time and a reconnect restores it.
+        self._target_reached = False
         self._subscription = None   # active OPC-UA subscription object
         # Source of control parameters for OPC-triggered actions (the RestServer,
         # set after construction). Settings live in REST, not OPC.
@@ -273,6 +279,8 @@ class OPCUAWorker(threading.Thread):
                     self._write_measurement(event.data)
                 elif isinstance(event, StateEvent):
                     self._write_status(event.state)
+                elif isinstance(event, TargetReachedEvent):
+                    self._write_target_reached(event.reached)
             except queue.Empty:
                 break
 
@@ -281,10 +289,18 @@ class OPCUAWorker(threading.Thread):
             return
         self.client.write_by_key("GVL_QCM.READ.Status", state)
 
+    def _write_target_reached(self, reached: bool):
+        """Push the transition straight through, so the PLC sees the target the
+        moment it is hit instead of waiting for the next measurement write."""
+        self._target_reached = bool(reached)
+        if not self.client.is_connected:
+            return
+        self.client.write_by_key("GVL_QCM.READ.TargetReached", self._target_reached)
+
     def _write_measurement(self, data: MeasurementData):
         if not self.client.is_connected:
             return
-        payload = _build_measurement_payload(data)
+        payload = _build_measurement_payload(data, self._target_reached)
         if not self.client.batch_write_by_keys(payload):
             print("[OPCUA] Measurement write failed — will retry on reconnect")
 

@@ -136,7 +136,7 @@ access to the fields of `MeasurementData`:
 `stream()` is the general form — pass `types=None` to receive every event, or a
 tuple to filter. Event `type` values you can receive:
 `StateEvent`, `MeasurementEvent`, `LockStatusEvent`, `LockFailedEvent`,
-`SweepPointEvent`, `SweepCompleteEvent`, `CapAdjustEvent`,
+`SweepPointEvent`, `SweepCompleteEvent`, `CapAdjustEvent`, `TargetReachedEvent`,
 `StartFreqAutoUpdatedEvent`, `LockAmpAutoUpdatedEvent`, `ErrorEvent`, `OpcStatusEvent`.
 
 ```python
@@ -161,6 +161,28 @@ All methods are on `QCMClient`. Frequencies are in Hz unless noted.
 | `start_measurement(ambient_temp, mat_dens=19320.0, z_ratio=1.0)` | `POST /measurement/start` | `ambient_temp` required; `mat_dens` kg/m³ |
 | `stop_measurement()` | `POST /measurement/stop` | |
 | `state()` | `GET /state` | returns the state string |
+| `set_target_thickness(value)` | `POST /settings/target_thickness` | nm; 0 = no target |
+| `target()` | `GET /measurement/target` | current target + whether it has been reached |
+
+### Target thickness
+
+Set a target and the system raises a flag the moment the compensated thickness
+reaches it: a `TargetReachedEvent` on the WebSocket, a popup in the web UI,
+`GVL_QCM.READ.TargetReached` on the PLC, and `reached: true` from
+`GET /measurement/target`. **The measurement is not stopped** — the flag says
+the film is thick enough, and stopping is left to whoever is watching (the
+operator's STOP button, or the PLC acting on the node).
+
+The flag clears when the next run starts, or if the target is raised above the
+current thickness. `0` disables the target entirely.
+
+```python
+qcm.set_target_thickness(250)          # nm
+qcm.start_measurement(ambient_temp=23)
+for ev in qcm.stream(types=("TargetReachedEvent",), limit=1):
+    print(f"reached {ev.thickness:.1f} nm of {ev.target:.1f} nm")
+qcm.stop_measurement()
+```
 
 ### Oscillator / lock settings
 | method | endpoint |
@@ -197,10 +219,41 @@ sensor parameters. Activating one applies all of them.
 | method | endpoint |
 |--------|----------|
 | `start_sweep(oscillator_idx, start_freq, stop_freq, step_size, settle_time)` | `POST /sweep/start` |
+| `sweep_mode(oscillator_idx, settle_time=0.05)` | 500 kHz window at 1 kHz around the crystal's lock frequency |
 | `abort_sweep()` | `POST /sweep/abort` |
+| `sweeps()` | `GET /sweeps` — sweep CSVs on the Pitaya, newest first |
+| `download_sweep(name, dest_path)` / `download_latest_sweep(dest_path)` | `GET /sweeps/{name}/download` |
+| `delete_sweep(name)` | `DELETE /sweeps/{name}` |
 
 While sweeping, the server pushes `SweepPointEvent` (`frequency`, `amplitude`,
-`phase`) then a final `SweepCompleteEvent`.
+`phase`) then a final `SweepCompleteEvent` whose `name` is the CSV the sweep was
+recorded to (`None` if recording failed).
+
+Every sweep is written to `data/sweeps/` on the Pitaya as it is taken, so it
+survives a dropped WebSocket. `sweep_mode()` is the scripted form of the
+**SWEEP fM** / **SWEEP fT** buttons in the UI: it centres a 500 kHz window,
+stepped at 1 kHz, on the active crystal's mass or temp lock frequency. That is
+a coarse locator — wide enough to find a resonance that has moved well away
+from the stored frequency, but too coarse to resolve the peak's shape. Narrow
+the range and re-run once you know roughly where it sits.
+
+```python
+qcm.sweep_mode(1)                                  # sweep around fM
+for _ in qcm.stream(types=("SweepCompleteEvent",), limit=1):
+    pass                                           # wait for it to finish
+qcm.download_latest_sweep("sweep.csv")
+```
+
+Plot the result with [`sweep_plotter.py`](sweep_plotter.py):
+
+```bash
+python sweep_plotter.py sweep.csv
+```
+
+It draws amplitude and phase against frequency and marks the two strongest
+well-separated peaks — the same "peak / 2nd peak" the ANALYSIS tab reports. With
+no argument it opens a file dialog or picks the newest `qcm_sweep_*.csv` from
+the current directory, `./data/sweeps`, or your Downloads folder.
 
 ### Capacitor adjust (null the parasitic capacitance)
 | method | endpoint |
@@ -224,6 +277,15 @@ The worker writes a CSV for every measurement run on the Pitaya itself.
 | `opc_settings()` | `GET /opc/settings` |
 | `opc_connect(url, user="", password="", base_node=None)` | `POST /opc/connect` |
 | `opc_nodes()` | `GET /opc/nodes` (the node tree to mirror on the PLC) |
+
+### System
+| method | endpoint | notes |
+|--------|----------|-------|
+| `reboot(force=False)` | `POST /system/reboot` | reboots the Pitaya; 409 during a run unless `force=True` |
+
+A reboot reloads the FPGA bitstream and brings the PLLs up unlocked, so it is
+the way out of a wedged instrument — but it ends any run in progress, keeping
+only what the CSV had recorded up to that moment.
 
 ---
 

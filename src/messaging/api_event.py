@@ -25,7 +25,7 @@ class SweepPointEvent(ApiEvent):
 
 @dataclass
 class SweepCompleteEvent(ApiEvent):
-    pass
+    name: str | None = None  # CSV the sweep was recorded to, None = not recorded
 
 @dataclass
 class MeasurementEvent(ApiEvent):
@@ -67,6 +67,15 @@ class RunLogStartedEvent(ApiEvent):
 @dataclass
 class RunLogFailedEvent(ApiEvent):
     reason: str  # why the run is not being recorded (disk full, write error, ...)
+
+@dataclass
+class TargetReachedEvent(ApiEvent):
+    """Target-thickness flag: True when the target is crossed, False when it is
+    cleared (run start / target change). Drives the UI popup, the REST flag and
+    the OPC TargetReached node."""
+    reached: bool
+    thickness: float
+    target: float
 
 @dataclass
 class SystemStatusEvent(ApiEvent):

@@ -52,6 +52,16 @@ class QCMClient:
     def state(self) -> str:
         return self._get("/state")["state"]
 
+    # ------------------------------------------------------------ target thickness
+    def set_target_thickness(self, value: float):
+        """Compensated thickness (nm) at which the target flag is raised; 0 = off.
+        Reaching it sets the flag here and on the PLC but does not stop the run."""
+        return self._post("/settings/target_thickness", value=value)
+
+    def target(self) -> dict:
+        """{target_thickness, enabled, reached, reached_at, thickness_at_target}."""
+        return self._get("/measurement/target")
+
     # -------------------------------------------------- oscillator / lock settings
     def set_frequency(self, oscillator_idx: int, frequency: float):
         return self._post("/settings/frequency", oscillator_idx=oscillator_idx, frequency=frequency)
@@ -132,6 +142,44 @@ class QCMClient:
     def abort_sweep(self):
         return self._post("/sweep/abort")
 
+    # Window and step used by the SWEEP fM / SWEEP fT buttons in the web UI.
+    MODE_SWEEP_WINDOW = 20000.0   # Hz, total span
+    MODE_SWEEP_STEP   = 100.0     # Hz
+
+    def sweep_mode(self, oscillator_idx: int, settle_time: float = 0.05):
+        """Sweep the standard window around the active crystal's lock frequency
+        for one mode (1 = mass, 2 = temp) — the scripted form of the SWEEP fM /
+        SWEEP fT buttons. Returns the sweep parameters that were started."""
+        freqs = self.get_lock_frequencies()
+        centre = freqs["mass"] if oscillator_idx == 1 else freqs["temp"]
+        if not centre:
+            raise RuntimeError(f"No lock frequency set for oscillator {oscillator_idx}")
+        start = centre - self.MODE_SWEEP_WINDOW / 2
+        stop = centre + self.MODE_SWEEP_WINDOW / 2
+        self.start_sweep(oscillator_idx, start, stop, self.MODE_SWEEP_STEP, settle_time)
+        return {"oscillator_idx": oscillator_idx, "start_freq": start, "stop_freq": stop,
+                "step_size": self.MODE_SWEEP_STEP, "settle_time": settle_time}
+
+    # --------------------------------------------------------- server-side sweeps
+    def sweeps(self) -> list:
+        return self._get("/sweeps")["sweeps"]
+
+    def download_sweep(self, name: str, dest_path: str):
+        r = requests.get(f"{self.base}/sweeps/{name}/download", timeout=self.timeout)
+        r.raise_for_status()
+        with open(dest_path, "wb") as f:
+            f.write(r.content)
+        return dest_path
+
+    def download_latest_sweep(self, dest_path: str):
+        sweeps = self.sweeps()
+        if not sweeps:
+            raise RuntimeError("No server-side sweeps available")
+        return self.download_sweep(sweeps[0]["name"], dest_path)
+
+    def delete_sweep(self, name: str):
+        return self._delete(f"/sweeps/{name}")
+
     # ------------------------------------------------------------ capacitor adjust
     def start_cap_adjust(self):
         return self._post("/cap_adjust/start")
@@ -165,6 +213,14 @@ class QCMClient:
         if not runs:
             raise RuntimeError("No server-side runs available")
         return self.download_run(runs[0]["name"], dest_path)
+
+    # ------------------------------------------------------------------- system
+    def reboot(self, force: bool = False):
+        """Reboot the Red Pitaya. The FPGA bitstream reloads and the PLLs come up
+        unlocked, so it is the way out of a wedged instrument. Refused with HTTP
+        409 while a measurement is running unless force=True — a reboot ends that
+        run where it stands."""
+        return self._post("/system/reboot", force=force)
 
     # ------------------------------------------------------------- live streaming
     def stream(self, types=("MeasurementEvent",), limit=None):

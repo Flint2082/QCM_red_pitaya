@@ -6,8 +6,9 @@
 *.Xil*
 *.egg*
 
-# Server-side run logs written at runtime
+# Server-side run and sweep logs written at runtime
 data/runs/
+data/sweeps/
 
 !model_composer/qcm_rp
 !model_composer/qcm_rp/outputs

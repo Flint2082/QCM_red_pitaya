@@ -13,6 +13,7 @@ import os
 import queue
 import re
 import shutil
+import subprocess
 import sys
 import threading
 import time
@@ -27,6 +28,7 @@ from fastapi.staticfiles import StaticFiles
 from domain.crystal import CrystalManager, CrystalProfile, sanitize_name
 from domain.qcm_interface import WINDOW_SIZE
 from domain.run_logger import MIN_FREE_BYTES, RUNS_DIR
+from domain.sweep_logger import SWEEPS_DIR
 from plc.opc_worker import _READ_KEYS as OPC_READ_KEYS, _CTRL_KEYS as OPC_CTRL_KEYS
 from messaging.api_command import *
 from messaging.api_event import LogEvent
@@ -188,6 +190,15 @@ class RestServer:
         self._ambient_temp: float = 23.0
         self._mat_dens: float = 19320.0
         self._z_ratio: float = 1.0
+        # Target thickness in nm (0 = no target). The worker owns the comparison;
+        # these two mirror it so REST clients and the PLC can read the flag at
+        # any time rather than having to catch the event.
+        self._target_thickness: float = 0.0
+        self._target_reached: bool = False
+        self._target_reached_at: float | None = None
+        self._target_thickness_at: float | None = None  # thickness when it tripped
+        # Sweep the worker last recorded, for "download the sweep I just took".
+        self._current_sweep: str | None = None
         # Coefficient cache — reflects the active crystal (no standalone CSV)
         self._coefficients: dict | None = None
         # Crystal profiles
@@ -238,6 +249,8 @@ class RestServer:
             self._mat_dens = float(d["mat_dens"])
         if "z_ratio" in d:
             self._z_ratio = float(d["z_ratio"])
+        if "target_thickness" in d:
+            self._target_thickness = float(d["target_thickness"])
         # Restore OPC connection parameters without triggering a reconnect
         if self._wago_client and "opc_url" in d:
             self._wago_client.url      = d["opc_url"]
@@ -258,6 +271,7 @@ class RestServer:
             "ambient_temp": self._ambient_temp,
             "mat_dens": self._mat_dens,
             "z_ratio": self._z_ratio,
+            "target_thickness": self._target_thickness,
         }
         if self._wago_client:
             data["opc_url"]       = self._wago_client.url
@@ -284,6 +298,12 @@ class RestServer:
             "lock_freq_mass": self._lock_freq_mass,
             "lock_freq_temp": self._lock_freq_temp,
         }
+
+    def _set_target_thickness(self, value: float):
+        """Push a new target to the worker (which owns the comparison) and cache
+        it here for GET /settings. Negative values mean "no target", same as 0."""
+        self._target_thickness = max(0.0, float(value))
+        self.command_queue.put(SetTargetThicknessCommand(self._target_thickness))
 
     def _apply_crystal(self, profile: CrystalProfile):
         """Push a crystal's settings into server state and the command queue.
@@ -332,6 +352,7 @@ class RestServer:
         self.command_queue.put(SetLockDetectCommand(self._lock_amp_threshold, self._lock_phase_tolerance))
         self.command_queue.put(SetAutoRelockCommand(self._auto_relock))
         self.command_queue.put(SetAutoAmpThresholdCommand(self._auto_amp_threshold))
+        self.command_queue.put(SetTargetThicknessCommand(self._target_thickness))
 
         # Apply the active crystal's coefficients + lock frequencies, if any.
         if self._active_crystal:
@@ -343,6 +364,35 @@ class RestServer:
                 print(f"[Settings] Active crystal '{self._active_crystal}' not found; skipping")
 
         print("[Settings] Queued persisted settings to apply on boot")
+
+    # --------------------------------------------------
+    # System control
+    # --------------------------------------------------
+
+    @staticmethod
+    def _do_reboot():
+        """Reboot the box, off the request thread so the HTTP response is
+        delivered first — otherwise the UI sees a dropped connection instead of
+        an acknowledgement and cannot tell a reboot from a crash."""
+        time.sleep(0.5)
+        # systemctl is the clean path (it stops the units first); the plain
+        # reboot binary is the fallback when systemd is not the init. Each is
+        # run to completion so a non-zero exit falls through to the next one —
+        # Popen alone would "succeed" for a command that then refuses. Requires
+        # root, which the service already runs as.
+        for cmd in (["systemctl", "reboot"], ["/sbin/reboot"], ["reboot"]):
+            if shutil.which(cmd[0]) is None and not os.path.exists(cmd[0]):
+                continue
+            try:
+                # A reboot request returns promptly and the machine goes down
+                # afterwards, so a short timeout is a hang, not normal operation.
+                result = subprocess.run(cmd, timeout=30, capture_output=True, text=True)
+                if result.returncode == 0:
+                    return
+                print(f"[API] {' '.join(cmd)} exited {result.returncode}: {result.stderr.strip()}")
+            except Exception as e:
+                print(f"[API] {' '.join(cmd)} failed: {e}")
+        print("[API] Reboot failed — no working reboot command (are we running as root?)")
 
     # --------------------------------------------------
     # Lifecycle
@@ -443,6 +493,16 @@ class RestServer:
                     if thr is not None:
                         self._lock_amp_threshold = float(thr)
                         self._save_settings()
+
+                elif msg.get("type") == "TargetReachedEvent":
+                    self._target_reached = bool(msg.get("reached"))
+                    self._target_reached_at = time.time() if self._target_reached else None
+                    self._target_thickness_at = msg.get("thickness") if self._target_reached else None
+
+                elif msg.get("type") == "SweepCompleteEvent":
+                    # None when the sweep could not be recorded — keep it None so
+                    # the UI greys the download rather than offering a stale file.
+                    self._current_sweep = msg.get("name")
 
                 elif msg.get("type") == "RunLogStartedEvent":
                     self._current_run = msg.get("name")
@@ -642,13 +702,36 @@ class RestServer:
             return {"status": "ok"}
 
         @app.post("/settings/measurement_params")
-        def set_measurement_params(ambient_temp: float, mat_dens: float, z_ratio: float):
+        def set_measurement_params(ambient_temp: float, mat_dens: float, z_ratio: float,
+                                   target_thickness: float | None = None):
             # Film/run parameters shown in the settings panel. /measurement/start
             # also captures these from the live form; persisting them on APPLY too
             # means an edit survives a restart even with no measurement in between.
             self._ambient_temp, self._mat_dens, self._z_ratio = ambient_temp, mat_dens, z_ratio
+            if target_thickness is not None:
+                self._set_target_thickness(target_thickness)
             self._save_settings()
             return {"status": "ok"}
+
+        @app.post("/settings/target_thickness")
+        def set_target_thickness(value: float):
+            """Compensated thickness in nm at which the target flag is raised.
+            0 disables the target. Takes effect immediately, mid-run included."""
+            self._set_target_thickness(value)
+            self._save_settings()
+            return {"status": "ok", "target_thickness": self._target_thickness}
+
+        @app.get("/measurement/target")
+        def get_target():
+            """The target-thickness flag, for clients that poll instead of
+            listening for TargetReachedEvent on the WebSocket."""
+            return {
+                "target_thickness": self._target_thickness,
+                "enabled":          self._target_thickness > 0,
+                "reached":          self._target_reached,
+                "reached_at":       self._target_reached_at,
+                "thickness_at_target": self._target_thickness_at,
+            }
 
         def _finite(v):
             return v if isinstance(v, float) and math.isfinite(v) else (None if isinstance(v, float) else v)
@@ -659,9 +742,10 @@ class RestServer:
                 "oscillators":      self._osc_settings,
                 "output_mode":      self._output_mode,
                 "measurement": {
-                    "ambient_temp": self._ambient_temp,
-                    "mat_dens":     self._mat_dens,
-                    "z_ratio":      self._z_ratio,
+                    "ambient_temp":     self._ambient_temp,
+                    "mat_dens":         self._mat_dens,
+                    "z_ratio":          self._z_ratio,
+                    "target_thickness": self._target_thickness,
                 },
                 # Derived from the PLL capture window so the UI never hard-codes it.
                 "pll": {
@@ -880,6 +964,51 @@ class RestServer:
             self.command_queue.put(AbortSweepCommand())
             return {"status": "ok"}
 
+        # ---- Server-side sweep logs (written to disk by the worker) ----
+
+        @app.get("/sweeps")
+        def list_sweeps():
+            """Sweep CSVs saved on the Pitaya, newest first. `current` is the
+            sweep this session recorded last — the UI downloads that rather than
+            whichever file happens to have the newest mtime."""
+            out = []
+            try:
+                for f in os.listdir(SWEEPS_DIR):
+                    if not f.endswith(".csv"):
+                        continue
+                    try:
+                        st = os.stat(os.path.join(SWEEPS_DIR, f))
+                        out.append({"name": f, "size": st.st_size, "modified": st.st_mtime})
+                    except OSError:
+                        pass
+            except FileNotFoundError:
+                pass
+            out.sort(key=lambda r: r["modified"], reverse=True)
+            return {"sweeps": out, "current": self._current_sweep}
+
+        @app.get("/sweeps/{name}/download")
+        def download_sweep(name: str):
+            safe = os.path.basename(name)  # strip any path components (no traversal)
+            path = os.path.join(SWEEPS_DIR, safe)
+            if not safe.endswith(".csv") or not os.path.exists(path):
+                raise HTTPException(404, "Sweep not found")
+            return FileResponse(path, filename=safe, media_type="text/csv")
+
+        @app.delete("/sweeps/{name}")
+        def delete_sweep(name: str):
+            """Delete one sweep CSV. Only ever called after the operator confirms
+            the specific file in the UI."""
+            safe = os.path.basename(name)
+            path = os.path.join(SWEEPS_DIR, safe)
+            if not safe.endswith(".csv") or not os.path.exists(path):
+                raise HTTPException(404, "Sweep not found")
+            size = os.path.getsize(path)
+            os.remove(path)
+            if safe == self._current_sweep:
+                self._current_sweep = None
+            print(f"[API] Deleted sweep {safe} ({size / 1024:.0f} kB)")
+            return {"status": "ok", "deleted": safe, "freed_bytes": size}
+
         @app.get("/state")
         def get_state():
             return {"state": self._last_state}
@@ -920,6 +1049,23 @@ class RestServer:
                 "read": entries(OPC_READ_KEYS, "QCM → PLC"),
                 "ctrl": entries(OPC_CTRL_KEYS, "PLC → QCM"),
             }
+
+        # ---- System ----
+
+        @app.post("/system/reboot")
+        def reboot(force: bool = False):
+            """Reboot the Red Pitaya. Everything restarts: the FPGA bitstream is
+            reloaded, the PLLs come up unlocked and the OPC link reconnects, so
+            it is the way out of a wedged FPGA or a hung network stack.
+
+            A reboot during a measurement ends that run where it stands, so it
+            takes an explicit force — the UI asks a second time before sending it.
+            """
+            if self._last_state == "RUNNING" and not force:
+                raise HTTPException(409, "A measurement is running — stop it first, or pass force=true")
+            print("[API] Reboot requested — going down now")
+            threading.Thread(target=self._do_reboot, daemon=True, name="reboot").start()
+            return {"status": "rebooting"}
 
         # ---- Health ----
 

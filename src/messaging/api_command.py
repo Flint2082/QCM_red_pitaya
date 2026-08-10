@@ -36,6 +36,12 @@ class StopMeasurementCommand(ApiCommand):
     pass
 
 @dataclass
+class RetryRunLogCommand(ApiCommand):
+    """Re-open the run log for a measurement that is running unrecorded, after
+    the operator has freed disk space."""
+    pass
+
+@dataclass
 class StartSweepCommand(ApiCommand):
     oscillator_idx: int
     start_freq: float

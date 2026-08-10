@@ -123,6 +123,8 @@ class Application(threading.Thread):
                 ambient_temp=command.ambient_temp, mat_dens=command.mat_dens, z_ratio=command.z_ratio))
         elif isinstance(command, ac.StopMeasurementCommand):
             self.worker_command_queue.put(wc.StopMeasurementCommand())
+        elif isinstance(command, ac.RetryRunLogCommand):
+            self.worker_command_queue.put(wc.RetryRunLogCommand())
         elif isinstance(command, ac.StartupPLLCommand):
             self.worker_command_queue.put(wc.StartupPLLCommand(command.start_freq_mass, command.start_freq_temp))
         elif isinstance(command, ac.StartSweepCommand):
@@ -216,6 +218,13 @@ class Application(threading.Thread):
         elif isinstance(event, we.LockAmpAutoUpdatedEvent):
             print(f"[Application] Auto-updated lock amplitude threshold: {event.amp_threshold:.4f}")
             self._emit(ae.LockAmpAutoUpdatedEvent(amp_threshold=event.amp_threshold))
+
+        elif isinstance(event, we.RunLogStartedEvent):
+            self._emit(ae.RunLogStartedEvent(name=event.name))
+
+        elif isinstance(event, we.RunLogFailedEvent):
+            print(f"[Application] Run log unavailable: {event.reason}")
+            self._emit(ae.RunLogFailedEvent(reason=event.reason))
 
         elif isinstance(event, we.ErrorEvent):
             print(f"[Application] Worker error: {event.message}")

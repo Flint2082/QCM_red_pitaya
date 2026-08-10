@@ -61,6 +61,14 @@ class LockAmpAutoUpdatedEvent(ApiEvent):
     amp_threshold: float  # auto-calibrated from the end-of-run amplitudes
 
 @dataclass
+class RunLogStartedEvent(ApiEvent):
+    name: str  # CSV this run is being recorded to, on the Pitaya
+
+@dataclass
+class RunLogFailedEvent(ApiEvent):
+    reason: str  # why the run is not being recorded (disk full, write error, ...)
+
+@dataclass
 class SystemStatusEvent(ApiEvent):
     integrator_gain_mass_mode: float
     integrator_gain_temp_mode: float

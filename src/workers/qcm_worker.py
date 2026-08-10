@@ -29,7 +29,13 @@ class QCMWorker(threading.Thread):
         self.running = True
         self.state = WorkerState.IDLE
         # Durable server-side CSV log of each run, independent of the WebSocket.
-        self.logger = RunLogger()
+        # Logging problems are pushed to the UI: the live plots keep working when
+        # the log is dead, so nothing else would give the operator a clue.
+        self.logger = RunLogger(
+            on_start=lambda name: self.event_queue.put(RunLogStartedEvent(name=name)),
+            on_error=lambda reason: self.event_queue.put(RunLogFailedEvent(reason=reason)),
+        )
+        self._run_command = None  # last StartMeasurementCommand, for RetryRunLogCommand
         # Lock-status emission throttle: send on change, plus a periodic
         # heartbeat so new WS clients converge. Unthrottled this produced
         # ~10 events/sec of WS traffic even when idle.
@@ -111,6 +117,15 @@ class QCMWorker(threading.Thread):
         }
         return snapshot
 
+    def _start_run_log(self, command) -> bool:
+        """Open the run log and write its opening rows. Returns whether recording
+        is live — RunLogger reports the failure itself, so callers just carry on."""
+        if not self.logger.start():
+            return False
+        self.logger.write_settings(self._settings_snapshot(command))
+        self.logger.write_event("RUN_START", f"T={command.ambient_temp} mat_dens={command.mat_dens} z_ratio={command.z_ratio}")
+        return True
+
     def handle_command(self, command: WorkerCommand):
 
         # ============================
@@ -132,10 +147,16 @@ class QCMWorker(threading.Thread):
         # Start measurement
         elif isinstance(command, StartMeasurementCommand) and self.state == WorkerState.IDLE:
             self.qcm.setMeasurementReference(T=command.ambient_temp, mat_dens=command.mat_dens, z_ratio=command.z_ratio)
-            self.logger.start()
-            self.logger.write_settings(self._settings_snapshot(command))
-            self.logger.write_event("RUN_START", f"T={command.ambient_temp} mat_dens={command.mat_dens} z_ratio={command.z_ratio}")
+            self._run_command = command
+            self._start_run_log(command)
             self._set_state(WorkerState.MEASURING)
+
+        # Recording was disabled (usually a full disk) and the operator has since
+        # freed space — pick the log back up for the rest of the run.
+        elif isinstance(command, RetryRunLogCommand):
+            if self.state == WorkerState.MEASURING and self._run_command and not self.logger.active:
+                if self._start_run_log(self._run_command):
+                    self.logger.write_event("RECORDING_RESUMED", "log re-opened mid-run; earlier points are lost")
 
         # Stop measurement
         elif isinstance(command, StopMeasurementCommand) and self.state == WorkerState.MEASURING:

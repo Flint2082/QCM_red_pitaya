@@ -195,6 +195,9 @@ footer { height: 24px; background: var(--surface); border-top: 1px solid var(--b
     <svg viewBox="0 0 12 12"><path d="M5.25 1h1.5v4h2L6 8 3.25 5h2z"/><path d="M2.5 9.5h7v1.2h-7z"/></svg>
     SAVE CSV
   </button>
+  <div class="status-pill error" id="rec-warning" style="display:none;cursor:pointer"
+       title="This run is not being written to disk — click for details"
+       onclick="showRecFailedModal()">● NOT RECORDING</div>
   <div class="header-spacer"></div>
   <div class="status-pill idle" id="status-pill"><span id="state-label">IDLE</span></div>
   <div class="logo-sep"></div>
@@ -1132,6 +1135,8 @@ function connect() {
       if (ev.type === 'LockStatusEvent')    onLockStatus(ev);
       if (ev.type === 'StartFreqAutoUpdatedEvent') onStartFreqAutoUpdated(ev);
       if (ev.type === 'LockAmpAutoUpdatedEvent') onLockAmpAutoUpdated(ev);
+      if (ev.type === 'RunLogStartedEvent') onRunLogStarted(ev);
+      if (ev.type === 'RunLogFailedEvent')  onRunLogFailed(ev);
       if (ev.type === 'LogEvent')           onLogEvent(ev);
     } catch(e) { console.warn('Bad WS msg', e); }
   };
@@ -1149,7 +1154,7 @@ function showToast(msg, isError = false, isWarning = false) {
 }
 
 // ---- Notification system ----
-const notifConfig = { enabled: false, sound: true, lockLost: true, sweepComplete: true, opcLost: true, wsLost: true };
+const notifConfig = { enabled: false, sound: true, lockLost: true, sweepComplete: true, opcLost: true, wsLost: true, recFailed: true };
 let _audioCtx = null;
 
 function getAudioCtx() {
@@ -1194,6 +1199,11 @@ function playNotifSound(eventType) {
     case 'wsLost':
       playBeep(280, 0.45);
       break;
+    case 'recFailed':
+      playBeep(440, 0.2);
+      playBeep(440, 0.2, 0.25, 0.26);
+      playBeep(300, 0.4, 0.25, 0.52);
+      break;
   }
 }
 
@@ -1236,16 +1246,157 @@ function onNotifBrowserToggle(checked) {
 }
 
 // ---- CSV export ----
-// Download the complete, gap-free run that the Pitaya logged to disk (the newest
-// server-side run = the current/just-finished one). Used by both the run-complete
-// popup and the always-on header button — there is no browser-side copy.
+// Download the complete, gap-free run that the Pitaya logged to disk. Used by
+// both the run-complete popup and the always-on header button — there is no
+// browser-side copy. The backend names the run it recorded ("current"); the
+// newest non-empty file is only a fallback, because picking purely by mtime
+// hands back a header-only file whenever a later run failed to record.
 async function downloadServerRun() {
   try {
-    const { runs } = await fetch(`${API_URL}/runs`).then(r => r.json());
-    if (!runs || !runs.length) { showToast('No server-side run found', true); return; }
+    const d = await fetch(`${API_URL}/runs`).then(r => r.json());
+    const runs = d.runs || [];
+    const name = (d.current && runs.some(r => r.name === d.current && r.size > 0))
+      ? d.current
+      : (runs.find(r => r.size > 0) || {}).name;
+    if (!name) {
+      showToast('No recorded run to download', true);
+      if (runs.length) showRecFailedModal();  // files exist but all empty: explain why
+      return;
+    }
     document.getElementById('modal-save-csv').style.display = 'none';
-    window.location.href = `${API_URL}/runs/${encodeURIComponent(runs[0].name)}/download`;
+    // Falling back to an older file: say which one, so it can't be mistaken for
+    // the run that was just taken.
+    if (name !== d.current) showToast(`Latest run unavailable — downloading ${name}`, false, true);
+    window.location.href = `${API_URL}/runs/${encodeURIComponent(name)}/download`;
   } catch(e) { showToast('Server download failed', true); }
+}
+
+// ---- Run recording status ----
+// Live plots arrive over the WebSocket, so a dead run log is invisible in the UI
+// unless it is called out: a header pill for as long as it is broken, plus a
+// modal the moment it happens.
+let _currentRunName = null;
+let _recordingOk = true;
+let _recFailReason = '';
+let _pendingDelete = null;  // run awaiting the second, explicit delete confirmation
+
+function fmtBytes(n) {
+  if (n == null) return '—';
+  if (n >= 1024 ** 3) return (n / 1024 ** 3).toFixed(2) + ' GB';
+  if (n >= 1024 ** 2) return (n / 1024 ** 2).toFixed(0) + ' MB';
+  return (n / 1024).toFixed(0) + ' kB';
+}
+
+function setRecWarning(on) {
+  const pill = document.getElementById('rec-warning');
+  if (pill) pill.style.display = on ? 'flex' : 'none';
+}
+
+function onRunLogStarted(ev) {
+  _currentRunName = ev.name;
+  _recordingOk = true;
+  _recFailReason = '';
+  setRecWarning(false);
+  onLogEvent({ level: 'INFO', message: `[REC] recording to ${ev.name}`, timestamp: Date.now() / 1000 });
+}
+
+function onRunLogFailed(ev) {
+  _currentRunName = null;
+  _recordingOk = false;
+  _recFailReason = ev.reason || 'unknown error';
+  setRecWarning(true);
+  onLogEvent({ level: 'ERROR', message: `[REC] ${_recFailReason}`, timestamp: Date.now() / 1000 });
+  sendNotif('QCM — RUN NOT BEING RECORDED', _recFailReason, 'recFailed');
+  showRecFailedModal();
+}
+
+async function showRecFailedModal() {
+  document.getElementById('rec-fail-reason').textContent = _recFailReason || 'The run log is not open.';
+  document.getElementById('rec-confirm-row').style.display = 'none';
+  document.getElementById('modal-rec-failed').style.display = 'flex';
+  _pendingDelete = null;
+  await refreshStorageInfo();
+}
+
+// Fill in the disk figures and pick the deletion candidate: the oldest run,
+// never the one being recorded right now.
+async function refreshStorageInfo() {
+  const storageEl = document.getElementById('rec-storage');
+  const oldestEl  = document.getElementById('rec-oldest');
+  const delBtn    = document.getElementById('rec-delete-btn');
+  try {
+    const d = await fetch(`${API_URL}/runs`).then(r => r.json());
+    const runs = d.runs || [];
+    const used = runs.reduce((a, r) => a + r.size, 0);
+    storageEl.textContent = `${fmtBytes(d.free_bytes)} free of ${fmtBytes(d.total_bytes)} · `
+                          + `${runs.length} runs using ${fmtBytes(used)}`;
+    const oldest = runs.filter(r => r.name !== d.current)
+                       .sort((a, b) => a.modified - b.modified)[0];
+    _pendingDelete = oldest || null;
+    if (oldest) {
+      const when = new Date(oldest.modified * 1000).toLocaleDateString();
+      oldestEl.textContent = `${oldest.name} — ${fmtBytes(oldest.size)}, ${when}`;
+      delBtn.disabled = false;
+      delBtn.textContent = `DELETE OLDEST (${fmtBytes(oldest.size)})`;
+    } else {
+      oldestEl.textContent = 'nothing to delete';
+      delBtn.disabled = true;
+    }
+    // The oldest run is often a small one, so say plainly whether deleting it
+    // is actually enough — otherwise it is a button that appears to do nothing.
+    const short = (d.min_free_bytes || 0) - (d.free_bytes || 0);
+    const shortEl = document.getElementById('rec-shortfall');
+    if (short > 0 && oldest) {
+      shortEl.textContent = oldest.size >= short
+        ? `Deleting it frees enough to record again.`
+        : `Not enough on its own — ${fmtBytes(short)} more needed, so this will `
+          + `take several deletes (largest run: ${fmtBytes(Math.max(...runs.map(r => r.size)))}).`;
+      shortEl.style.color = oldest.size >= short ? 'var(--green)' : 'var(--orange)';
+    } else {
+      shortEl.textContent = '';
+    }
+    document.getElementById('rec-resume-btn').disabled = !_isRunning;
+  } catch(e) {
+    storageEl.textContent = 'could not read storage info';
+    oldestEl.textContent = '—';
+    delBtn.disabled = true;
+  }
+}
+
+// Two steps on purpose: deleting a run is permanent and the file may be the only
+// copy of an experiment, so the name and size are spelled out before the second click.
+function askDeleteOldest() {
+  if (!_pendingDelete) return;
+  document.getElementById('rec-confirm-name').textContent =
+    `${_pendingDelete.name} (${fmtBytes(_pendingDelete.size)})`;
+  document.getElementById('rec-confirm-row').style.display = 'block';
+}
+
+async function confirmDeleteOldest() {
+  if (!_pendingDelete) return;
+  const target = _pendingDelete;
+  try {
+    const r = await fetch(`${API_URL}/runs/${encodeURIComponent(target.name)}`, { method: 'DELETE' });
+    if (!r.ok) { showToast('Delete failed: ' + (await r.text()).slice(0, 80), true); return; }
+    const d = await r.json();
+    onLogEvent({ level: 'WARN', message: `[REC] deleted ${target.name} — ${fmtBytes(d.freed_bytes)} freed`, timestamp: Date.now() / 1000 });
+    showToast(`Deleted ${target.name} — ${fmtBytes(d.freed_bytes)} freed`);
+  } catch(e) {
+    showToast('Delete failed', true);
+    return;
+  }
+  document.getElementById('rec-confirm-row').style.display = 'none';
+  await refreshStorageInfo();
+}
+
+// Recording cannot be retro-fitted to the part of the run that already happened,
+// so this only picks the log up from here.
+async function resumeRecording() {
+  try {
+    await fetch(`${API_URL}/runs/retry-log`, { method: 'POST' });
+    showToast('Re-opening the run log…');
+    setTimeout(() => { if (_recordingOk) document.getElementById('modal-rec-failed').style.display = 'none'; }, 1200);
+  } catch(e) { showToast('Could not resume recording', true); }
 }
 
 // Enable the download button once a run has produced data, grey it out otherwise.
@@ -1487,9 +1638,12 @@ function onStateChange(state) {
     }
     _runActive = true;  // covers fresh start, re-lock resume, and joining an in-progress run after a refresh
   } else if (state === 'IDLE' && _runActive) {
-    // Genuine stop — a re-lock goes to LOCKING, not IDLE. Offer the CSV.
+    // Genuine stop — a re-lock goes to LOCKING, not IDLE. Offer the CSV, unless
+    // there is nothing to offer: never show "RUN COMPLETE" over a failed log.
     _runActive = false;
-    if (_runPoints > 0) {
+    if (!_recordingOk) {
+      showRecFailedModal();
+    } else if (_runPoints > 0) {
       const el = document.getElementById('csv-row-count');
       if (el) el.textContent = _runPoints;
       document.getElementById('modal-save-csv').style.display = 'flex';
@@ -2129,6 +2283,36 @@ function clearLogs() {
     <div class="modal-footer">
       <button class="btn btn-green" onclick="confirmTransferCalCoeffs()">CONFIRM TRANSFER</button>
       <button class="btn" onclick="document.getElementById('modal-transfer-coeffs').style.display='none'">CANCEL</button>
+    </div>
+  </div>
+</div>
+
+<!-- Recording failed / disk full -->
+<div id="modal-rec-failed" class="modal-overlay" style="display:none">
+  <div class="modal">
+    <div class="modal-title">⚠ RUN NOT BEING RECORDED</div>
+    <div class="modal-body">
+      <strong id="rec-fail-reason" style="color:var(--red)"></strong><br><br>
+      The measurement itself is unaffected and the live plots are correct, but
+      nothing is being written to disk — when this run ends there will be no CSV.
+      <br><br>
+      <div style="font-family:'DM Mono',monospace;font-size:11px;line-height:1.7">
+        STORAGE &nbsp;<span id="rec-storage">—</span><br>
+        OLDEST &nbsp;&nbsp;<span id="rec-oldest">—</span>
+      </div>
+      <div id="rec-shortfall" style="margin-top:8px;font-size:11px"></div>
+      <div id="rec-confirm-row" style="display:none;margin-top:14px;padding:10px;border:1px solid var(--red);border-radius:var(--radius)">
+        Permanently delete <strong id="rec-confirm-name"></strong>?<br>
+        This cannot be undone — the file is not backed up anywhere else.<br><br>
+        <button class="btn btn-red" onclick="confirmDeleteOldest()">CONFIRM DELETE</button>
+        <button class="btn" onclick="document.getElementById('rec-confirm-row').style.display='none'">CANCEL</button>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-orange" id="rec-delete-btn" onclick="askDeleteOldest()">DELETE OLDEST</button>
+      <button class="btn btn-green" id="rec-resume-btn" onclick="resumeRecording()"
+              title="Re-open the log for the rest of this run">RESUME RECORDING</button>
+      <button class="btn" onclick="document.getElementById('modal-rec-failed').style.display='none'">DISMISS</button>
     </div>
   </div>
 </div>

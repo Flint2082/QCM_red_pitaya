@@ -12,6 +12,7 @@ import math
 import os
 import queue
 import re
+import shutil
 import sys
 import threading
 import time
@@ -25,7 +26,7 @@ from fastapi.staticfiles import StaticFiles
 
 from domain.crystal import CrystalManager, CrystalProfile, sanitize_name
 from domain.qcm_interface import WINDOW_SIZE
-from domain.run_logger import RUNS_DIR
+from domain.run_logger import MIN_FREE_BYTES, RUNS_DIR
 from plc.opc_worker import _READ_KEYS as OPC_READ_KEYS, _CTRL_KEYS as OPC_CTRL_KEYS
 from messaging.api_command import *
 from messaging.api_event import LogEvent
@@ -159,6 +160,11 @@ class RestServer:
         self._broadcaster_started = False  # guards against starting two broadcasters
         self._last_state: str = "IDLE"
         self._last_opc_status: dict | None = None
+        # Run log the worker is currently writing (None = not recording). Tracked
+        # so the UI downloads the run it just took rather than whichever file in
+        # data/runs/ happens to have the newest mtime.
+        self._current_run: str | None = None
+        self._run_log_error: str | None = None
         # Lock frequencies used by the GET LOCK command. These are NOT persisted:
         # the active crystal profile is the source of truth (applied on boot).
         # The values here are only a fallback until a crystal is applied.
@@ -437,6 +443,14 @@ class RestServer:
                     if thr is not None:
                         self._lock_amp_threshold = float(thr)
                         self._save_settings()
+
+                elif msg.get("type") == "RunLogStartedEvent":
+                    self._current_run = msg.get("name")
+                    self._run_log_error = None
+
+                elif msg.get("type") == "RunLogFailedEvent":
+                    self._current_run = None
+                    self._run_log_error = msg.get("reason")
 
                 elif msg.get("type") == "OpcStatusEvent":
                     self._last_opc_status = msg
@@ -786,7 +800,12 @@ class RestServer:
 
         @app.get("/runs")
         def list_runs():
-            """Run CSVs saved on the Pitaya, newest first."""
+            """Run CSVs saved on the Pitaya, newest first.
+
+            `current` is the run being recorded right now (or the last one this
+            session) — the UI downloads that in preference to "newest by mtime".
+            `free_bytes` drives the disk-full warning.
+            """
             out = []
             try:
                 for f in os.listdir(RUNS_DIR):
@@ -800,7 +819,46 @@ class RestServer:
             except FileNotFoundError:
                 pass
             out.sort(key=lambda r: r["modified"], reverse=True)
-            return {"runs": out}
+            try:
+                usage = shutil.disk_usage(RUNS_DIR)
+                free, total = usage.free, usage.total
+            except OSError:
+                free = total = None
+            return {
+                "runs": out,
+                "current": self._current_run,
+                "log_error": self._run_log_error,
+                "free_bytes": free,
+                "total_bytes": total,
+                "min_free_bytes": MIN_FREE_BYTES,
+            }
+
+        @app.delete("/runs/{name}")
+        def delete_run(name: str):
+            """Delete one run CSV. Only ever called after the operator confirms
+            the specific file in the UI — never automatically, and never the run
+            currently being written."""
+            safe = os.path.basename(name)
+            path = os.path.join(RUNS_DIR, safe)
+            if not safe.endswith(".csv") or not os.path.exists(path):
+                raise HTTPException(404, "Run not found")
+            if safe == self._current_run:
+                raise HTTPException(409, "That run is being recorded right now")
+            size = os.path.getsize(path)
+            os.remove(path)
+            print(f"[API] Deleted run {safe} ({size / 1024 ** 2:.0f} MB) to free space")
+            try:
+                free = shutil.disk_usage(RUNS_DIR).free
+            except OSError:
+                free = None
+            return {"status": "ok", "deleted": safe, "freed_bytes": size, "free_bytes": free}
+
+        @app.post("/runs/retry-log")
+        def retry_run_log():
+            """Re-open the log for a measurement that is running unrecorded (after
+            freeing space). Records the rest of the run; the lost part stays lost."""
+            self.command_queue.put(RetryRunLogCommand())
+            return {"status": "ok"}
 
         @app.get("/runs/{name}/download")
         def download_run(name: str):

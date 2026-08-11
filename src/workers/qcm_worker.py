@@ -217,14 +217,10 @@ class QCMWorker(threading.Thread):
             self.qcm.setFreq(command.oscillator_idx, command.frequency)
         elif isinstance(command, SetIntegratorGainCommand):
             self.qcm.setOscConfig(command.oscillator_idx, int_gain=command.gain)
-        elif isinstance(command, SetProportionalGainCommand):
-            self.qcm.setOscConfig(command.oscillator_idx, prop_gain=command.gain)
         elif isinstance(command, SetLPFFreqCommand):
             self.qcm.setOscConfig(command.oscillator_idx, lpf_freq=command.freq)
         elif isinstance(command, SetInvertedCommand):
             self.qcm.setOscConfig(command.oscillator_idx, inverted=command.inverted)
-        elif isinstance(command, SetPhaseDetectCommand):
-            self.qcm.setOscConfig(command.oscillator_idx, phase_detect=command.mode)
         elif isinstance(command, SetOutputModeCommand):
             self.qcm.setOutputMode(command.mode.value)
         elif isinstance(command, SetLockDetectCommand):

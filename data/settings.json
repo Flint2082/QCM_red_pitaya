@@ -2,17 +2,13 @@
   "osc_settings": {
     "1": {
       "int_gain": 1e-05,
-      "prop_gain": 0.0,
       "lpf_freq": 200.0,
-      "inverted": true,
-      "phase_detect": 0
+      "inverted": true
     },
     "2": {
       "int_gain": 1e-05,
-      "prop_gain": 0.0,
       "lpf_freq": 200.0,
-      "inverted": true,
-      "phase_detect": 0
+      "inverted": true
     }
   },
   "output_mode": 0,

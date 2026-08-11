@@ -191,7 +191,6 @@ qcm.stop_measurement()
 | `set_integrator_gain(oscillator_idx, gain)` | `POST /settings/integrator_gain` |
 | `set_lpf_freq(oscillator_idx, freq)` | `POST /settings/lpf_freq` (demod low-pass cutoff) |
 | `set_inverted(oscillator_idx, inverted)` | `POST /settings/inverted` |
-| `set_phase_detect(oscillator_idx, mode)` | `POST /settings/phase_detect` (FPGA `mult_sel`, 0 = ATAN, 1 = multiplier) |
 | `set_output_mode(mode)` | `POST /settings/output_mode` (DAC debug tap, int 0–11) |
 | `set_lock_detect(amp_threshold, phase_tolerance)` | `POST /settings/lock_detect` |
 | `set_auto_relock(enabled)` | `POST /settings/auto_relock` (auto re-acquire on lost lock, default on) |

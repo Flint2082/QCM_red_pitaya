@@ -69,19 +69,12 @@ class QCMClient:
     def set_integrator_gain(self, oscillator_idx: int, gain: float):
         return self._post("/settings/integrator_gain", oscillator_idx=oscillator_idx, gain=gain)
 
-    def set_proportional_gain(self, oscillator_idx: int, gain: float):
-        return self._post("/settings/proportional_gain", oscillator_idx=oscillator_idx, gain=gain)
-
     def set_lpf_freq(self, oscillator_idx: int, freq: float):
         """Demodulator low-pass cutoff frequency in Hz."""
         return self._post("/settings/lpf_freq", oscillator_idx=oscillator_idx, freq=freq)
 
     def set_inverted(self, oscillator_idx: int, inverted: bool):
         return self._post("/settings/inverted", oscillator_idx=oscillator_idx, inverted=bool(inverted))
-
-    def set_phase_detect(self, oscillator_idx: int, mode: int):
-        """Phase-detector type (FPGA mult_sel): 0 = ATAN (default), 1 = multiplier."""
-        return self._post("/settings/phase_detect", oscillator_idx=oscillator_idx, mode=int(mode))
 
     def set_output_mode(self, mode: int):
         return self._post("/settings/output_mode", mode=mode)

@@ -68,19 +68,9 @@ class SetIntegratorGainCommand(WorkerCommand):
     gain: float
 
 @dataclass
-class SetProportionalGainCommand(WorkerCommand):
-    oscillator_idx: int
-    gain: float
-
-@dataclass
 class SetInvertedCommand(WorkerCommand):
     oscillator_idx: int
     inverted: bool
-
-@dataclass
-class SetPhaseDetectCommand(WorkerCommand):
-    oscillator_idx: int
-    mode: int  # mult_sel: phase-detector type (0 = ATAN, 1 = multiplier)
 
 @dataclass
 class SetLPFFreqCommand(WorkerCommand):

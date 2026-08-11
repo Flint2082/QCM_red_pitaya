@@ -33,9 +33,7 @@ class QCMInterface:
         
         self.INT_GAIN_PRE_LOCK = 0.0001
         self.INT_GAIN_POST_LOCK = 0.00001
-        self.PROP_GAIN_DEFAULT = 0.0  # proportional path off by default (pure-I loop)
         self.LPF_FREQ = 200.0  # Hz — default demodulator LPF cutoff frequency
-        self.PHASE_DETECT_DEFAULT = 0  # mult_sel: FPGA phase-detector type (0 = ATAN, 1 = multiplier)
 
         # Lock-detect conditions (configurable via settings). A channel counts
         # as locked when its amplitude exceeds the threshold AND its phase is
@@ -43,9 +41,8 @@ class QCMInterface:
         self.LOCK_AMP_THRESHOLD = 0.1     # minimum amplitude
         self.LOCK_PHASE_TOLERANCE = 0.05  # maximum |phase - lock point|
         # Phase (radians) the loop settles at once locked, for the default
-        # inverted feedback. Both phase detectors (ATAN and multiplier) lock in
-        # quadrature at -pi/2; non-inverted feedback flips the sign — see
-        # getPhaseLockTarget.
+        # inverted feedback. The phase detector locks in quadrature at -pi/2;
+        # non-inverted feedback flips the sign — see getPhaseLockTarget.
         self.PHASE_LOCK_TARGET = -np.pi / 2
         
         # variables
@@ -72,9 +69,7 @@ class QCMInterface:
         # defaults. Defaults match startupPLL's historical hard-coded values.
         self._inv = {1: True, 2: True}                                          # inverted feedback
         self._int_gain = {1: self.INT_GAIN_POST_LOCK, 2: self.INT_GAIN_POST_LOCK}  # post-lock integrator gain
-        self._prop_gain = {1: self.PROP_GAIN_DEFAULT, 2: self.PROP_GAIN_DEFAULT}   # proportional gain
         self._lpf_freq = {1: self.LPF_FREQ, 2: self.LPF_FREQ}                   # LPF cutoff frequency (Hz)
-        self._phase_detect = {1: self.PHASE_DETECT_DEFAULT, 2: self.PHASE_DETECT_DEFAULT}  # mult_sel: phase-detector type
 
 
         self.fpga = fpga
@@ -103,9 +98,6 @@ class QCMInterface:
 
     def setInt(self, osc_index, gain):
         self.fpga.write_register(register_name='integral_'+str(osc_index),value=int(gain*2**32)) # multiplication to account for fixed-point (32F32) representation in FPGA
-
-    def setProp(self, osc_index, gain):
-        self.fpga.write_register(register_name='proportional_'+str(osc_index),value=int(gain*2**32)) # multiplication to account for fixed-point (32F32) representation in FPGA
 
     def setLPFFreq(self, osc_index, freq):
         gain = ( 2 * np.pi * freq ) / ( self.fpga.sample_rate + ( 2 * np.pi * freq ) )
@@ -143,31 +135,19 @@ class QCMInterface:
         self.fpga.write_register(register_name='inv_fb_'+str(osc_index), value=inv)
         self._inv[osc_index] = bool(inv)
 
-    def setPhaseDetect(self, osc_index, mode):
-        # mult_sel is a 1-bit FPGA register selecting the phase-detector type
-        # (0 = ATAN, 1 = multiplier), so coerce to a single bit.
-        value = 1 if int(mode) else 0
-        self.fpga.write_register(register_name='mult_sel_'+str(osc_index), value=value)
-        self._phase_detect[osc_index] = value
-
-    def setOscConfig(self, osc_index, int_gain=None, prop_gain=None, lpf_freq=None, inverted=None, phase_detect=None):
+    def setOscConfig(self, osc_index, int_gain=None, lpf_freq=None, inverted=None):
         """Apply and remember the configured per-oscillator loop settings. The
         cached values are reused by startupPLL so a lock uses the persisted
-        settings. Low-level setters (setInt/setProp/setLPFFreq) stay uncached for
-        the transient writes done during locking, sweeps and standby."""
+        settings. Low-level setters (setInt/setLPFFreq) stay uncached for the
+        transient writes done during locking, sweeps and standby."""
         if int_gain is not None:
             self._int_gain[osc_index] = int_gain
             self.setInt(osc_index, int_gain)
-        if prop_gain is not None:
-            self._prop_gain[osc_index] = prop_gain
-            self.setProp(osc_index, prop_gain)
         if lpf_freq is not None:
             self._lpf_freq[osc_index] = lpf_freq
             self.setLPFFreq(osc_index, lpf_freq)
         if inverted is not None:
             self.setInv(osc_index, inverted)
-        if phase_detect is not None:
-            self.setPhaseDetect(osc_index, phase_detect)
 
     def setOutputMode(self, mode = -1):
         if mode == -1:
@@ -213,9 +193,9 @@ class QCMInterface:
         return phase/2**12           # FIX_30_12
 
     def getPhaseLockTarget(self, osc_index):
-        """Phase (radians) this channel settles at once locked. Both phase
-        detectors lock in quadrature, and inverting the feedback flips which of
-        the two quadrature points (-pi/2 / +pi/2) is the stable one."""
+        """Phase (radians) this channel settles at once locked. The loop locks in
+        quadrature, and inverting the feedback flips which of the two quadrature
+        points (-pi/2 / +pi/2) is the stable one."""
         target = self.PHASE_LOCK_TARGET
         if not self._inv.get(osc_index, True):
             target = -target
@@ -238,7 +218,6 @@ class QCMInterface:
     def standby(self, osc_index: int):
         self.setFreq(osc_index,0)
         self.setInt(osc_index,0)
-        self.setProp(osc_index,0)
         self.reset()
 
     def startCapAdjust(self, freq_mass, freq_temp):
@@ -253,8 +232,6 @@ class QCMInterface:
         self.reset()
         self.setInt(1, 0.0)
         self.setInt(2, 0.0)
-        self.setProp(1, 0.0)
-        self.setProp(2, 0.0)
         self.setLPFFreq(1, self._lpf_freq[1])
         self.setLPFFreq(2, self._lpf_freq[2])
         self.setFreq(1, f1)
@@ -266,7 +243,6 @@ class QCMInterface:
         self.standby(2)
         self.setFreq(1, 6000000)
         self.setInt(1, 0.00)
-        self.setProp(1, 0.00)
         self.setLPFFreq(1, self.LPF_FREQ)
 
         while True:
@@ -306,16 +282,12 @@ class QCMInterface:
         
         print(f"Starting up PLLs around frequencies {start_freq_mass} and {start_freq_temp}")
 
-        ## Apply the configured per-oscillator settings (inversion + proportional gain + LPF cutoff + phase-detector type)
+        ## Apply the configured per-oscillator settings (inversion + LPF cutoff)
         self.setInv(1, self._inv[1])
-        self.setProp(1, self._prop_gain[1])
         self.setLPFFreq(1, self._lpf_freq[1])
-        self.setPhaseDetect(1, self._phase_detect[1])
 
         self.setInv(2, self._inv[2])
-        self.setProp(2, self._prop_gain[2])
         self.setLPFFreq(2, self._lpf_freq[2])
-        self.setPhaseDetect(2, self._phase_detect[2])
 
         for t in range(self.MAX_STARTUP_TRIES): # try to lock for up to MAX_STARTUP_TRIES
             self.setFreq(1,start_freq_mass-self.WINDOW_SIZE/2)
@@ -353,10 +325,8 @@ class QCMInterface:
             "oscillators": {
                 str(i): {
                     "int_gain":          self._int_gain.get(i),
-                    "prop_gain":         self._prop_gain.get(i),
                     "lpf_freq":          self._lpf_freq.get(i),
                     "inverted":          self._inv.get(i),
-                    "phase_detect":      self._phase_detect.get(i),
                     "phase_lock_target": self.getPhaseLockTarget(i),
                 }
                 for i in (1, 2)

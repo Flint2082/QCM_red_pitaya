@@ -68,19 +68,9 @@ class SetIntegratorGainCommand(ApiCommand):
     gain: float
 
 @dataclass
-class SetProportionalGainCommand(ApiCommand):
-    oscillator_idx: int
-    gain: float
-
-@dataclass
 class SetInvertedCommand(ApiCommand):
     oscillator_idx: int
     inverted: bool
-
-@dataclass
-class SetPhaseDetectCommand(ApiCommand):
-    oscillator_idx: int
-    mode: int  # mult_sel: phase-detector type (0 = ATAN, 1 = multiplier)
 
 @dataclass
 class SetLPFFreqCommand(ApiCommand):

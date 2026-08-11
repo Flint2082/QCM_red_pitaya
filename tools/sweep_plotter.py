@@ -9,9 +9,12 @@ or `QCMClient.download_latest_sweep()`. The file holds:
   * one row per point     - frequency_hz, amplitude, phase
 
 Amplitude and phase share the frequency axis: amplitude on the left, phase on
-the right. The two strongest well-separated maxima are marked, which is the same
-"peak / 2nd peak" the web UI reports — use them to read off the resonance and
-whatever else the crystal is doing nearby.
+the right. Amplitude is shown on a log scale by default so weak features away
+from resonance stay readable; both the amplitude scale and the frequency axis
+can be flipped between linear and log from the Options check boxes. The two
+strongest well-separated maxima are marked, which is the same "peak / 2nd peak"
+the web UI reports — use them to read off the resonance and whatever else the
+crystal is doing nearby.
 
 Usage:
     python tools/sweep_plotter.py [path/to/qcm_sweep.csv]
@@ -171,7 +174,7 @@ def main():
                                   alpha=0.75, label="Phase")
 
     ax.set_xlabel("Frequency (Hz)")
-    ax.set_ylabel("Amplitude", color=AMP_COLOR)
+    ax.set_ylabel("Amplitude (log)", color=AMP_COLOR)
     ax_phase.set_ylabel("Phase (rad)", color=PHASE_COLOR)
     ax.tick_params(axis="y", colors=AMP_COLOR)
     ax_phase.tick_params(axis="y", colors=PHASE_COLOR)
@@ -197,20 +200,28 @@ def main():
     settings_box.set_visible(False)
 
     # --- options check boxes -------------------------------------------------
-    ax_opts = fig.add_axes([0.02, 0.60, 0.20, 0.24])
+    ax_opts = fig.add_axes([0.02, 0.55, 0.20, 0.30])
     ax_opts.set_title("Options", fontsize=10)
     options_check = CheckButtons(
-        ax_opts, ["Amplitude", "Phase", "Peaks", "Show settings"],
-        [True, True, bool(peak_artists), False],
+        ax_opts,
+        ["Amplitude", "Phase", "Peaks", "Show settings", "Log amplitude", "Log X axis"],
+        [True, True, bool(peak_artists), False, True, False],
     )
 
     def redraw(_=None):
-        show_amp, show_phase, show_peaks, show_settings = options_check.get_status()
+        (show_amp, show_phase, show_peaks, show_settings,
+         log_amp, log_x) = options_check.get_status()
         amp_line.set_visible(show_amp)
         phase_line.set_visible(show_phase)
         for artist in peak_artists:
             artist.set_visible(show_peaks)
         settings_box.set_visible(show_settings)
+        ax.set_yscale("log" if log_amp else "linear")
+        ax.set_ylabel("Amplitude (log)" if log_amp else "Amplitude", color=AMP_COLOR)
+        # ax and ax_phase share the frequency axis (twinx); set both so the log
+        # scale takes on whichever axes matplotlib reads ticks from.
+        ax.set_xscale("log" if log_x else "linear")
+        ax_phase.set_xscale("log" if log_x else "linear")
         fig.canvas.draw_idle()
 
     options_check.on_clicked(redraw)

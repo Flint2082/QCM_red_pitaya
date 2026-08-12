@@ -295,7 +295,6 @@ footer { height: 24px; background: var(--surface); border-top: 1px solid var(--b
       <div class="chart-card"><div class="chart-card-header"><div class="chart-card-title"><div class="chart-color-bar" style="background:var(--blue)"></div>TEMP MODE FREQ</div><div class="chart-card-meta" id="meta-fT">—</div></div><div class="chart-body" style="min-height:110px"><canvas id="chart-fT"></canvas></div></div>
       <div class="chart-card"><div class="chart-card-header"><div class="chart-card-title"><div class="chart-color-bar" style="background:var(--green)"></div>MASS MODE — AMP &amp; PHASE</div></div><div class="chart-body" style="min-height:110px"><canvas id="chart-lpf1"></canvas></div></div>
       <div class="chart-card"><div class="chart-card-header"><div class="chart-card-title"><div class="chart-color-bar" style="background:var(--blue)"></div>TEMP MODE — AMP &amp; PHASE</div></div><div class="chart-body" style="min-height:110px"><canvas id="chart-lpf2"></canvas></div></div>
-      <div class="chart-card" style="grid-column:1 / -1"><div class="chart-card-header"><div class="chart-card-title"><div class="chart-color-bar" style="background:var(--purple)"></div>LOCK QUALITY — PHASE σ (rad)</div><div class="chart-card-meta" id="meta-quality">—</div></div><div class="chart-body" style="min-height:110px"><canvas id="chart-quality"></canvas></div></div>
     </div>
   </div>
 
@@ -332,9 +331,9 @@ footer { height: 24px; background: var(--surface); border-top: 1px solid var(--b
       <button class="btn btn-blue" id="btn-sweep-toggle" onclick="toggleSweep()"><svg viewBox="0 0 12 12" style="width:11px;height:11px;fill:currentColor"><polygon points="3,2 10,6 3,10"/></svg>RUN SWEEP</button>
       <div class="toolbar-sep"></div>
       <button class="btn btn-green" id="btn-sweep-fm" onclick="runModeSweep(1)"
-              title="Sweep a 500 kHz window at 1 kHz around the crystal's mass lock frequency">SWEEP fM</button>
+              title="Sweep a 50 kHz window at 100 Hz around the crystal's mass lock frequency">SWEEP fM</button>
       <button class="btn btn-green" id="btn-sweep-ft" onclick="runModeSweep(2)"
-              title="Sweep a 500 kHz window at 1 kHz around the crystal's temp lock frequency">SWEEP fT</button>
+              title="Sweep a 50 kHz window at 100 Hz around the crystal's temp lock frequency">SWEEP fT</button>
       <div class="header-spacer"></div>
       <button class="btn btn-green" id="btn-sweep-csv" onclick="downloadSweepCsv()" disabled
               title="Download this sweep (server copy) as CSV">
@@ -346,9 +345,8 @@ footer { height: 24px; background: var(--surface); border-top: 1px solid var(--b
     <div class="stat-bar">
       <div class="stat"><div class="stat-label">Points</div><div class="stat-value" id="val-sweep-n">—</div><div class="stat-unit"></div></div>
       <div class="stat" title="Points where the phase crosses the loop's lock point on a falling edge — the places this oscillator can actually lock"><div class="stat-label">Lock Points</div><div class="stat-value" id="val-sweep-lock-n" style="color:var(--orange)">—</div><div class="stat-unit"></div></div>
-      <div class="stat" title="Lowest-frequency lock point"><div class="stat-label">Lock Pt 1</div><div class="stat-value" id="val-sweep-lock1" style="color:var(--orange)">—</div><div class="stat-unit">Hz</div></div>
-      <div class="stat" title="Second lock point, by ascending frequency"><div class="stat-label">Lock Pt 2</div><div class="stat-value" id="val-sweep-lock2" style="color:var(--orange)">—</div><div class="stat-unit">Hz</div></div>
-      <div class="stat" title="Separation between the first two lock points"><div class="stat-label">Separation</div><div class="stat-value" id="val-sweep-lock-sep" style="color:var(--purple)">—</div><div class="stat-unit">Hz</div></div>
+      <div class="stat" title="Strongest lock point — the one with the highest amplitude"><div class="stat-label">Lock Pt 1</div><div class="stat-value" id="val-sweep-lock1" style="color:var(--orange)">—</div><div class="stat-unit">Hz</div></div>
+      <div class="stat" title="Second strongest lock point by amplitude"><div class="stat-label">Lock Pt 2</div><div class="stat-value" id="val-sweep-lock2" style="color:var(--orange)">—</div><div class="stat-unit">Hz</div></div>
       <div class="stat"><div class="stat-label">Status</div><div class="stat-value" id="val-sweep-status">IDLE</div><div class="stat-unit"></div></div>
     </div>
     <div class="chart-grid" style="grid-template-columns:1fr; grid-template-rows:1fr 1fr;">
@@ -752,16 +750,13 @@ function makeChart(id, color) {
   return new Chart(ctx, { type: 'line', data: { labels: [], datasets: [{ data: [], borderColor: color, borderWidth: 1.5, pointRadius: 0, tension: 0.2, fill: true, backgroundColor: color + '14' }] }, options: structuredClone(BASE_OPTS) });
 }
 
-// Two traces on one time axis. By default they get independent left/right scales
-// (amplitude vs phase — unrelated units); pass sameAxis for two traces that share
-// units and are meant to be compared directly against each other.
-function makeDualChart(id, c1, c2, l1 = 'AMP', l2 = 'PHASE', sameAxis = false) {
+function makeDualChart(id, c1, c2) {
   const ctx = document.getElementById(id); if (!ctx) return null;
   return new Chart(ctx, {
     type: 'line',
     data: { labels: [], datasets: [
-      { data: [], borderColor: c1, borderWidth: 1.5, pointRadius: 0, tension: 0.2, fill: false, yAxisID: 'y', label: l1 },
-      { data: [], borderColor: c2, borderWidth: 1.5, pointRadius: 0, tension: 0.2, fill: false, yAxisID: sameAxis ? 'y' : 'y2', borderDash: [4,2], label: l2 },
+      { data: [], borderColor: c1, borderWidth: 1.5, pointRadius: 0, tension: 0.2, fill: false, yAxisID: 'y', label: 'AMP' },
+      { data: [], borderColor: c2, borderWidth: 1.5, pointRadius: 0, tension: 0.2, fill: false, yAxisID: 'y2', borderDash: [4,2], label: 'PHASE' },
     ]},
     options: { ...structuredClone(BASE_OPTS),
       plugins: { tooltip: { enabled: false }, legend: { display: true, labels: { color: TC, font: { family: 'DM Mono', size: 9 }, boxWidth: 14, padding: 8 } }, zoom: ZOOM_CFG },
@@ -779,9 +774,6 @@ const charts = {
   tempA:    makeChart('chart-temp-a',    '#f5a623'),
   lpf1:     makeDualChart('chart-lpf1',   '#2ecc8a', '#a78bfa'),
   lpf2:     makeDualChart('chart-lpf2',   '#4a9eff', '#a78bfa'),
-  // Both channels' phase-error std on one pair of axes — this is the trace to
-  // watch when choosing the Phase Noise Limit in Settings.
-  quality:  makeDualChart('chart-quality', '#2ecc8a', '#4a9eff', 'MASS σ', 'TEMP σ', true),
   calFmLive: makeChart('chart-cal-fM-live', '#2ecc8a'),
   calFtLive: makeChart('chart-cal-fT-live', '#4a9eff'),
 };
@@ -970,7 +962,7 @@ function setupZoomGroup(chartList) {
   });
 }
 setupZoomGroup([charts.mainComp, charts.mainTemp]);
-setupZoomGroup([charts.fM, charts.fT, charts.compA, charts.tempA, charts.lpf1, charts.lpf2, charts.quality]);
+setupZoomGroup([charts.fM, charts.fT, charts.compA, charts.tempA, charts.lpf1, charts.lpf2]);
 setupZoomGroup([sweepCharts.amp, sweepCharts.phase]);
 setupZoomGroup([charts.calFmLive, charts.calFtLive]);
 
@@ -981,8 +973,10 @@ let _sweepName = null;   // server-side CSV of the sweep just finished
 // lock frequency for the chosen mode. Wide enough to find the resonance even
 // when the stored lock frequency is well off — a coarse locator, not a detailed
 // scan; narrow the toolbar fields and re-run to resolve the peak's shape.
-const MODE_SWEEP_WINDOW = 500000;  // Hz, total span (±250 kHz around the centre)
-const MODE_SWEEP_STEP   = 1000;    // Hz
+// Narrow and fine: lock-point detection needs the phase transition resolved by
+// several samples, which a 1 kHz step across a ~500 Hz-wide resonance does not do.
+const MODE_SWEEP_WINDOW = 50000;   // Hz, total span (±25 kHz around the centre)
+const MODE_SWEEP_STEP   = 100;     // Hz
 
 function setSweepBtnState(running) {
   _sweepRunning = running;
@@ -1097,25 +1091,37 @@ function lockPhaseTarget() {
 }
 
 // Returns the crossings in ascending frequency order.
-function findLockPoints(freqs, phases, target) {
+function findLockPoints(freqs, phases, amps, target) {
   const out = [];
   for (let i = 0; i + 1 < phases.length; i++) {
     const a = phases[i], b = phases[i + 1];
     if (a == null || b == null || !isFinite(a) || !isFinite(b)) continue;
 
-    // Shortest-path change between samples. Taking the short way is what makes
-    // this immune to the raw phase wrapping at ±π: a trace jumping +3 → -3 is
-    // rising through π, not falling, and comes out with d > 0 here.
-    const d = wrapPi(b - a);
-    if (d >= 0) continue;                 // need a falling edge: dφ/df < 0
+    // Signed distance from the lock point, measured the short way round, so the
+    // raw phase wrapping at ±π cannot masquerade as a crossing: a trace jumping
+    // +3.0 → -3.0 is only 1.3 rad of *rise* relative to a -π/2 target, and both
+    // errors come out negative.
+    const ea = wrapPi(a - target), eb = wrapPi(b - target);
 
-    // Distance from the sample to the target, in the direction of travel.
-    const ea = wrapPi(a - target);
-    if (!(ea > 0 && ea <= -d)) continue;  // the step must actually reach the target
+    // The whole condition: previous sample above the lock point, next one below.
+    // Deliberately no limit on how far the phase moves in a single step — at a
+    // coarse step a high-Q resonance can swing most of its range between two
+    // samples, and requiring a small step is what made those go undetected.
+    if (!(ea > 0 && eb <= 0)) continue;
 
-    const t  = ea / -d;                   // fractional position of the crossing
+    // Linear interpolation on the phase error, so a 1 kHz step still puts the
+    // frequency far closer than 1 kHz from the true crossing.
+    const t  = ea / (ea - eb);
     const fa = Number(freqs[i]), fb = Number(freqs[i + 1]);
-    out.push({ freq: fa + t * (fb - fa), index: t < 0.5 ? i : i + 1, slope: d / (fb - fa) });
+    const aa = Number(amps[i]),  ab = Number(amps[i + 1]);
+    const amp = (isFinite(aa) && isFinite(ab)) ? aa + t * (ab - aa)
+              : (isFinite(aa) ? aa : (isFinite(ab) ? ab : null));
+    out.push({
+      freq:  fa + t * (fb - fa),
+      amp,
+      index: t < 0.5 ? i : i + 1,   // marker snaps to the nearer sample
+      slope: (eb - ea) / (fb - fa),
+    });
   }
   return out;
 }
@@ -1127,7 +1133,7 @@ function updateSweepLockPoints() {
   const phases = sweepCharts.phase.data.datasets[SWEEP_DS.TRACE].data;
   const amps   = sweepCharts.amp.data.datasets[SWEEP_DS.TRACE].data;
   const target = lockPhaseTarget();
-  const pts = findLockPoints(freqs, phases, target);
+  const pts = findLockPoints(freqs, phases, amps, target);
   _sweepLockPoints = pts;
 
   // Markers snap to the nearer of the two bracketing samples; the reported
@@ -1143,10 +1149,12 @@ function updateSweepLockPoints() {
   sweepCharts.amp.data.datasets[SWEEP_DS.MARKS].data    = ampMarks;
   sweepCharts.phase.data.datasets[SWEEP_DS.TARGET].data = new Array(freqs.length).fill(target);
 
+  // Tiles list the strongest first. Crossings with no amplitude reading sort last
+  // rather than to the top, which is where a null would land in a naive compare.
+  const ranked = pts.slice().sort((x, y) => (y.amp ?? -Infinity) - (x.amp ?? -Infinity));
   setText('val-sweep-lock-n', freqs.length ? String(pts.length) : '—');
-  setText('val-sweep-lock1',  pts[0] ? fmt(pts[0].freq, 0) : '—');
-  setText('val-sweep-lock2',  pts[1] ? fmt(pts[1].freq, 0) : '—');
-  setText('val-sweep-lock-sep', pts.length > 1 ? fmt(pts[1].freq - pts[0].freq, 0) : '—');
+  setText('val-sweep-lock1',  ranked[0] ? fmt(ranked[0].freq, 0) : '—');
+  setText('val-sweep-lock2',  ranked[1] ? fmt(ranked[1].freq, 0) : '—');
 
   _dirtyCharts.add(sweepCharts.amp);
   _dirtyCharts.add(sweepCharts.phase);
@@ -1188,7 +1196,7 @@ function clearSweep() {
   });
   _sweepLockPoints = [];
   ['val-sweep-n','val-sweep-lock-n','val-sweep-lock1',
-   'val-sweep-lock2','val-sweep-lock-sep'].forEach(id => setText(id, '—'));
+   'val-sweep-lock2'].forEach(id => setText(id, '—'));
   document.getElementById('meta-sweep-amp').textContent   = '—';
   document.getElementById('meta-sweep-phase').textContent = '—';
   document.getElementById('val-sweep-status').textContent = 'IDLE';
@@ -1313,9 +1321,6 @@ function applyTelemetry(e, ts) {
 
   setLockQuality('mass', e.quality_mass);
   setLockQuality('temp', e.quality_temp);
-  push(charts.quality, e.quality_mass, 0, MAX_PTS_MONITOR, ts);
-  push(charts.quality, e.quality_temp, 1, MAX_PTS_MONITOR);
-  setMeta('meta-quality', e.quality_temp, 'rad');
 
   setLock('mass', e.lock_mass);
   setLock('temp', e.lock_temp);

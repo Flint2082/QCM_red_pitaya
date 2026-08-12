@@ -7,7 +7,7 @@ import calendar
 from collections import deque
 import numpy as np
 
-from domain.measurement import MeasurementData
+from domain.measurement import MeasurementData, TelemetryData
 
 
 # Frequency capture window (Hz). Must match the FPGA's scan window so the PLL
@@ -35,11 +35,20 @@ class QCMInterface:
         self.INT_GAIN_POST_LOCK = 0.00001
         self.LPF_FREQ = 200.0  # Hz — default demodulator LPF cutoff frequency
 
-        # Lock-detect conditions (configurable via settings). A channel counts
-        # as locked when its amplitude exceeds the threshold AND its phase is
-        # within the tolerance of the loop's lock point.
-        self.LOCK_AMP_THRESHOLD = 0.1     # minimum amplitude
-        self.LOCK_PHASE_TOLERANCE = 0.05  # maximum |phase - lock point|
+        # Lock-detect conditions (configurable via settings). A channel counts as
+        # locked when the phase error is both *centred* on the loop's lock point
+        # and *quiet* — mean and standard deviation over a rolling window.
+        #
+        # The scatter test replaces the amplitude threshold this used to carry.
+        # Phase noise scales with 1/SNR, so a weak signal widens the scatter by
+        # itself: the same guard, but self-normalising. An absolute amplitude
+        # level could not do the job here — the b-mode amplitude halves over
+        # ~20 K, so any level was either too low to mean anything or high enough
+        # to flag a perfectly good hot lock as lost.
+        self.LOCK_PHASE_TOLERANCE = 0.05  # rad — max |mean phase error|
+        self.LOCK_PHASE_STD = 0.05        # rad — max phase-error std ("lock quality")
+        self.LOCK_WINDOW = 12             # samples in the rolling estimate (~1.2 s at 10 Hz)
+        self.LOCK_MIN_SAMPLES = 4         # fewer than this says nothing either way
         # Phase (radians) the loop settles at once locked, for the default
         # inverted feedback. The phase detector locks in quadrature at -pi/2;
         # non-inverted feedback flips the sign — see getPhaseLockTarget.
@@ -71,6 +80,11 @@ class QCMInterface:
         self._int_gain = {1: self.INT_GAIN_POST_LOCK, 2: self.INT_GAIN_POST_LOCK}  # post-lock integrator gain
         self._lpf_freq = {1: self.LPF_FREQ, 2: self.LPF_FREQ}                   # LPF cutoff frequency (Hz)
 
+        # Rolling phase-error history per oscillator, fed one sample per
+        # acquisition cycle by sampleLock. Lock state and lock quality are both
+        # read back out of these, so every consumer judges lock the same way.
+        self._phase_err = {1: deque(maxlen=self.LOCK_WINDOW),
+                           2: deque(maxlen=self.LOCK_WINDOW)}
 
         self.fpga = fpga
 
@@ -103,9 +117,9 @@ class QCMInterface:
         gain = ( 2 * np.pi * freq ) / ( self.fpga.sample_rate + ( 2 * np.pi * freq ) )
         self.fpga.write_register(register_name='lpf_gain_'+str(osc_index),value=int(gain*2**32)) # multiplication to account for fixed-point (32F32) representation in FPGA
 
-    def setLockDetect(self, amp_threshold, phase_tolerance):
-        self.LOCK_AMP_THRESHOLD = amp_threshold
+    def setLockDetect(self, phase_tolerance, phase_std):
         self.LOCK_PHASE_TOLERANCE = phase_tolerance
+        self.LOCK_PHASE_STD = phase_std
 
     def setSensorParams(self, mass_sensitivity, sens_area, freq_virgin=0.0, tooling_ratio=1.0):
         self.mass_sensitivity = mass_sensitivity
@@ -174,6 +188,7 @@ class QCMInterface:
     def reset(self):
         self.fpga.write_register(register_name='reset', value=1)
         self.fpga.write_register(register_name='reset', value=0)
+        self.resetLockStats()  # the loop just moved; old phase errors say nothing about the new state
         
     def getFreq(self, osc_index):
         lsb = self.fpga.read_register(f'frequency_out_lsb_{osc_index}') & 0xFFFFFFFF
@@ -201,16 +216,73 @@ class QCMInterface:
             target = -target
         return target
 
-    def getLockDetect(self, osc_index, amp=None, phase=None):
-        if amp is None or phase is None:
-            amp = self.getMag(osc_index)
-            phase = self.getPhase(osc_index)
-        # Amplitude above threshold and phase close to this channel's lock point
-        # indicates lock. The phase is the most important factor, but the amplitude check helps avoid false positives when the signal is very weak.
+    def _phaseError(self, osc_index, phase):
+        """Shortest angular distance from this channel's lock point, wrap-safe."""
         target = self.getPhaseLockTarget(osc_index)
-        error = (phase - target + np.pi) % (2 * np.pi) - np.pi  # shortest angular distance, handles wrap
-        return amp > self.LOCK_AMP_THRESHOLD and abs(error) < self.LOCK_PHASE_TOLERANCE
-    
+        return (phase - target + np.pi) % (2 * np.pi) - np.pi
+
+    def sampleLock(self, osc_index, phase=None):
+        """Feed one phase-error sample into the rolling window and return
+        (locked, quality). Call once per acquisition cycle per channel: lock is
+        judged from the window, never from a single reading."""
+        if phase is None:
+            phase = self.getPhase(osc_index)
+        self._phase_err[osc_index].append(self._phaseError(osc_index, phase))
+        return self.getLockDetect(osc_index), self.getLockQuality(osc_index)
+
+    def resetLockStats(self, osc_index=None):
+        """Drop the phase-error history for one or both channels. Called from
+        reset(), so any deliberate disturbance of the loop starts the window
+        fresh instead of judging the new state through the old samples."""
+        for i in ((osc_index,) if osc_index is not None else (1, 2)):
+            self._phase_err[i].clear()
+
+    def getLockQuality(self, osc_index):
+        """Standard deviation of the phase error (rad) over the rolling window —
+        the "lock quality" figure, smaller is better. None until the window holds
+        LOCK_MIN_SAMPLES, which is the honest answer rather than a flattering 0.
+
+        This is what the amplitude threshold used to be for: it answers "is the
+        phase reading trustworthy?" directly. Phase noise scales with 1/SNR, so a
+        weak signal shows up here without anyone having to know what amplitude to
+        expect at this temperature, on this crystal, under this much film."""
+        buf = self._phase_err[osc_index]
+        if len(buf) < self.LOCK_MIN_SAMPLES:
+            return None
+        return float(np.std(buf))
+
+    def getLockDetect(self, osc_index):
+        """True when the phase error is both centred on the lock point and quiet.
+
+        The response is deliberately asymmetric: a single wild sample entering
+        the window lifts the std straight away, so a lost lock is flagged within
+        a sample or two, while clearing the flag needs the whole window to refill
+        with quiet samples. Fast to distrust, slow to trust."""
+        buf = self._phase_err[osc_index]
+        if len(buf) < self.LOCK_MIN_SAMPLES:
+            return False
+        return (abs(float(np.mean(buf))) < self.LOCK_PHASE_TOLERANCE
+                and float(np.std(buf)) < self.LOCK_PHASE_STD)
+
+    def _fillLockWindows(self, osc_indices=(1, 2), interval=0.02):
+        """Take a fresh burst of phase samples and report {osc: locked}. Used
+        where no acquisition loop is feeding sampleLock — i.e. during startupPLL.
+
+        Channels are interleaved rather than filled one after the other, so the
+        burst costs one settling period instead of one per channel. The burst is
+        faster than the acquisition loop's ~10 Hz, but the demodulator LPF
+        (LPF_FREQ, 200 Hz by default) settles in far less than `interval`, so
+        samples are independent either way and the two paths produce comparable
+        standard deviations."""
+        for i in osc_indices:
+            self.resetLockStats(i)
+        for _ in range(self.LOCK_WINDOW):
+            for i in osc_indices:
+                self.sampleLock(i)
+            time.sleep(interval)
+        return {i: self.getLockDetect(i) for i in osc_indices}
+
+
     # ===========================
     # Control methods
     # ===========================
@@ -299,8 +371,12 @@ class QCMInterface:
             self.reset()  # Ensure we're starting from a known state each time
             
             time.sleep(1)  # wait a bit for PLL to respond
-        
-            bothLocked = self.getLockDetect(1) and self.getLockDetect(2)
+
+            # Both windows are filled before either is judged — evaluating them
+            # with `and` would short-circuit and leave channel 2 empty, so it
+            # could never read as locked.
+            locked = self._fillLockWindows((1, 2))
+            bothLocked = locked[1] and locked[2]
             if bothLocked:
                 break
 
@@ -310,12 +386,18 @@ class QCMInterface:
             print("Warning: PLLs did not lock within expected time. Check starting frequencies.")
         else:
             print("PLLs locked successfully at frequencies:")
-            print(f"  Oscillator 1: {self.getFreq(1)} Hz    Phase: {self.getPhase(1)}    Amplitude: {self.getMag(1)}")
-            print(f"  Oscillator 2: {self.getFreq(2)} Hz    Phase: {self.getPhase(2)}    Amplitude: {self.getMag(2)}")
+            for i in (1, 2):
+                q = self.getLockQuality(i)
+                print(f"  Oscillator {i}: {self.getFreq(i)} Hz    Phase: {self.getPhase(i)}    "
+                      f"Amplitude: {self.getMag(i)}    Quality: {'—' if q is None else f'{q:.4f} rad'}")
 
         # Settle to the configured (post-lock) integrator gain
         self.setInt(1, self._int_gain[1])
         self.setInt(2, self._int_gain[2])
+        # Drop the acquisition-time samples: they were taken at the pre-lock gain,
+        # and mixing them with post-lock ones would let the gain change itself show
+        # up as phase noise and trip an immediate false "lock lost".
+        self.resetLockStats()
         return bothLocked
         
     def getSettingsSnapshot(self) -> dict:
@@ -332,8 +414,9 @@ class QCMInterface:
                 for i in (1, 2)
             },
             "lock_detect": {
-                "amp_threshold":   self.LOCK_AMP_THRESHOLD,
                 "phase_tolerance": self.LOCK_PHASE_TOLERANCE,
+                "phase_std":       self.LOCK_PHASE_STD,
+                "window":          self.LOCK_WINDOW,
             },
             "window_size": self.WINDOW_SIZE,
         }
@@ -375,30 +458,40 @@ class QCMInterface:
 
         print(f"Reference set: fM={self.fM_start}, fT={self.fT_start}, T={self.T_start}")
         
-    def getMeasurement(self):
-        fM = self.getFreq(1)
-        fT = self.getFreq(2)
-        amp_mass = self.getMag(1)
-        phase_mass = self.getPhase(1)
-        amp_temp = self.getMag(2)
-        phase_temp = self.getPhase(2)
-        T_calc, uncompensated_thickness_nm, compensated_thickness_nm, compensated_m_freq = self.temp_comp.FreqToTemp(fT, fM)
+    def getTelemetry(self) -> TelemetryData:
+        """One sample of everything the hardware reports directly. Needs no
+        measurement reference and no calibration, so it is available in every
+        state — which is what keeps the monitor charts live outside a run.
+
+        Lock state and quality are read from the rolling window rather than
+        sampled here; the acquisition loop owns the sampling (see sampleLock) so
+        the window advances exactly once per cycle."""
+        return TelemetryData(
+            timestamp=time.time(),
+            freq_mass_mode=self.getFreq(1),
+            freq_temp_mode=self.getFreq(2),
+            amp_mass=self.getMag(1),
+            phase_mass=self.getPhase(1),
+            amp_temp=self.getMag(2),
+            phase_temp=self.getPhase(2),
+            lock_mass=self.getLockDetect(1),
+            lock_temp=self.getLockDetect(2),
+            quality_mass=self.getLockQuality(1),
+            quality_temp=self.getLockQuality(2),
+        )
+
+    def getMeasurement(self) -> MeasurementData:
+        t = self.getTelemetry()
+        T_calc, uncompensated_thickness_nm, compensated_thickness_nm, compensated_m_freq = \
+            self.temp_comp.FreqToTemp(t.freq_temp_mode, t.freq_mass_mode)
         if np.isfinite(compensated_m_freq):
             self.setMockSigFreq(compensated_m_freq)
         return MeasurementData(
-            timestamp=time.time(),
-            freq_mass_mode=fM,
-            freq_temp_mode=fT,
+            **vars(t),
             uncompensated_thickness=uncompensated_thickness_nm,
             calculated_thickness=compensated_thickness_nm,
             calculated_temp=T_calc,
             compensated_freq=compensated_m_freq,
-            amp_mass=amp_mass,
-            phase_mass=phase_mass,
-            amp_temp=amp_temp,
-            phase_temp=phase_temp,
-            lock_mass=self.getLockDetect(1, amp=amp_mass, phase=phase_mass),
-            lock_temp=self.getLockDetect(2, amp=amp_temp, phase=phase_temp),
         )
     
     def moveWindow(self, fM, fT):

@@ -43,6 +43,8 @@ CHANNELS = [
     ("phase_temp",          "Temp Phase",             "tab:gray"),
     ("lock_mass",           "Mass Lock",              "tab:orange"),
     ("lock_temp",           "Temp Lock",              "darkgoldenrod"),
+    ("quality_mass",        "Mass Lock σ (rad)",      "tab:purple"),
+    ("quality_temp",        "Temp Lock σ (rad)",      "tab:brown"),
 ]
 
 # Channels shown when the window first opens.

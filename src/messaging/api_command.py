@@ -84,16 +84,12 @@ class SetOutputModeCommand(ApiCommand):
 
 @dataclass
 class SetLockDetectCommand(ApiCommand):
-    amp_threshold: float
-    phase_tolerance: float
+    phase_tolerance: float  # rad — max |mean phase error|
+    phase_std: float        # rad — max phase-error std ("lock quality")
 
 @dataclass
 class SetAutoRelockCommand(ApiCommand):
     enabled: bool  # re-acquire automatically when lock is lost mid-measurement
-
-@dataclass
-class SetAutoAmpThresholdCommand(ApiCommand):
-    enabled: bool  # auto-calibrate the lock amplitude threshold at the end of a run
 
 @dataclass
 class SetSensorParamsCommand(ApiCommand):

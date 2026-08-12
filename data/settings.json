@@ -12,10 +12,9 @@
     }
   },
   "output_mode": 0,
-  "lock_amp_threshold": 0.1,
   "lock_phase_tolerance": 0.05,
+  "lock_phase_std": 0.05,
   "auto_relock": true,
-  "auto_amp_threshold": true,
   "lock_freq_mass": 5983000.0,
   "lock_freq_temp": 6570000.0,
   "active_crystal": "TestCrystal",

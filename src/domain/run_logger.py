@@ -32,7 +32,8 @@ RUNS_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..", 
 HEADERS = [
     "timestamp_iso", "timestamp_s", "freq_mass_hz", "freq_temp_hz", "comp_mass_freq_hz",
     "thickness_comp_nm", "thickness_uncomp_nm", "temperature_c", "amp_mass", "phase_mass",
-    "amp_temp", "phase_temp", "lock_mass", "lock_temp", "event_type", "event_detail",
+    "amp_temp", "phase_temp", "lock_mass", "lock_temp", "quality_mass", "quality_temp",
+    "event_type", "event_detail",
 ]
 
 # A run writes one ~170-byte row per measurement cycle, roughly 1 kB/s or 100 MB
@@ -155,6 +156,11 @@ class RunLogger:
                 "amp_temp": data.amp_temp, "phase_temp": data.phase_temp,
                 "lock_mass": 1 if data.lock_mass else 0,
                 "lock_temp": 1 if data.lock_temp else 0,
+                # Phase-error std (rad) the lock decision was made on — blank
+                # until the window fills, so a lock flag can be second-guessed
+                # against the evidence behind it after the fact.
+                "quality_mass": "" if data.quality_mass is None else data.quality_mass,
+                "quality_temp": "" if data.quality_temp is None else data.quality_temp,
                 "event_type": "", "event_detail": "",
             })
             self._file.flush()

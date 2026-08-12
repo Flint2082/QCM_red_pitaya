@@ -2,7 +2,7 @@ from dataclasses import dataclass, field
 from enum import Enum, auto
 from typing import Optional
 
-from domain.measurement import MeasurementData
+from domain.measurement import MeasurementData, TelemetryData
 from messaging.defines import WorkerState
 
 @dataclass(kw_only=True)
@@ -31,7 +31,15 @@ class SweepCompleteEvent(Event):
 @dataclass
 class MeasurementEvent(Event):
     data: MeasurementData
-    
+
+@dataclass
+class TelemetryEvent(Event):
+    """Raw hardware readings, emitted while a run is *not* in progress so the
+    monitor stays live without a measurement reference. During a run the same
+    fields ride along on MeasurementEvent instead — emitting both would double
+    every point on the raw charts."""
+    data: TelemetryData
+
 @dataclass
 class LockFailedEvent(Event):
     pass
@@ -40,6 +48,8 @@ class LockFailedEvent(Event):
 class LockStatusEvent(Event):
     lock_mass: bool
     lock_temp: bool
+    quality_mass: float | None  # phase-error std (rad); None = window not full yet
+    quality_temp: float | None
 
 @dataclass
 class CapAdjustEvent(Event):
@@ -50,10 +60,6 @@ class CapAdjustEvent(Event):
 class StartFreqAutoUpdatedEvent(Event):
     freq_mass: float
     freq_temp: float
-
-@dataclass
-class LockAmpAutoUpdatedEvent(Event):
-    amp_threshold: float  # auto-calibrated from the end-of-run amplitudes
 
 @dataclass
 class RunLogStartedEvent(Event):

@@ -23,7 +23,7 @@ def main():
     # 1) Inspect / configure via REST (these are the same calls the web UI makes).
     print("Active crystal:", qcm.crystals().get("active"))
     qcm.set_lpf_freq(1, 200)          # demodulator LPF cutoff (Hz)
-    qcm.set_lock_detect(amp_threshold=0.1, phase_tolerance=0.05)
+    qcm.set_lock_detect(phase_tolerance=0.05, phase_std=0.05)
 
     # 2) Lock the PLLs, then start a measurement.
     print("Locking …")

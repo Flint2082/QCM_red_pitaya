@@ -132,12 +132,18 @@ access to the fields of `MeasurementData`:
 | `amp_mass`, `amp_temp`   | demodulated amplitudes                   |
 | `phase_mass`, `phase_temp`| demodulated phases                      |
 | `lock_mass`, `lock_temp` | per-mode lock status (bool)              |
+| `quality_mass`, `quality_temp` | phase-error σ over the lock window (rad), lower is better; `None` until the window fills |
+
+Everything above the compensated values is also published on its own as
+`TelemetryEvent`, which the worker emits whenever a run is *not* in progress —
+those fields need no measurement reference, so they stay live while idle. During
+a run they ride along on `MeasurementEvent` instead, never both.
 
 `stream()` is the general form — pass `types=None` to receive every event, or a
 tuple to filter. Event `type` values you can receive:
-`StateEvent`, `MeasurementEvent`, `LockStatusEvent`, `LockFailedEvent`,
+`StateEvent`, `MeasurementEvent`, `TelemetryEvent`, `LockStatusEvent`, `LockFailedEvent`,
 `SweepPointEvent`, `SweepCompleteEvent`, `CapAdjustEvent`, `TargetReachedEvent`,
-`StartFreqAutoUpdatedEvent`, `LockAmpAutoUpdatedEvent`, `ErrorEvent`, `OpcStatusEvent`.
+`StartFreqAutoUpdatedEvent`, `ErrorEvent`, `OpcStatusEvent`.
 
 ```python
 # Watch state changes and lock events instead of measurements:
@@ -192,9 +198,8 @@ qcm.stop_measurement()
 | `set_lpf_freq(oscillator_idx, freq)` | `POST /settings/lpf_freq` (demod low-pass cutoff) |
 | `set_inverted(oscillator_idx, inverted)` | `POST /settings/inverted` |
 | `set_output_mode(mode)` | `POST /settings/output_mode` (DAC debug tap, int 0–11) |
-| `set_lock_detect(amp_threshold, phase_tolerance)` | `POST /settings/lock_detect` |
+| `set_lock_detect(phase_tolerance, phase_std)` | `POST /settings/lock_detect` (both rad: max mean phase error, max phase-error σ) |
 | `set_auto_relock(enabled)` | `POST /settings/auto_relock` (auto re-acquire on lost lock, default on) |
-| `set_auto_amp_threshold(enabled)` | `POST /settings/auto_amp_threshold` (set amp threshold to 80% of end-of-run amplitude, default on) |
 | `set_lock_frequencies(mass, temp)` | `POST /settings/lock_frequencies` (transient, feeds `get_lock`) |
 | `get_lock_frequencies()` | `GET /settings/lock_frequencies` |
 | `set_coefficients(fM_0..fM_3, fT_0..fT_3)` | `POST /settings/coefficients` (compensation polynomial) |

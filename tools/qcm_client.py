@@ -79,16 +79,14 @@ class QCMClient:
     def set_output_mode(self, mode: int):
         return self._post("/settings/output_mode", mode=mode)
 
-    def set_lock_detect(self, amp_threshold: float, phase_tolerance: float):
-        return self._post("/settings/lock_detect", amp_threshold=amp_threshold, phase_tolerance=phase_tolerance)
+    def set_lock_detect(self, phase_tolerance: float, phase_std: float):
+        """Lock-detect limits, both in radians: max |mean phase error| and max
+        phase-error standard deviation over the lock window (lock quality)."""
+        return self._post("/settings/lock_detect", phase_tolerance=phase_tolerance, phase_std=phase_std)
 
     def set_auto_relock(self, enabled: bool):
         """Automatically re-acquire when lock is lost mid-measurement (default on)."""
         return self._post("/settings/auto_relock", enabled=bool(enabled))
-
-    def set_auto_amp_threshold(self, enabled: bool):
-        """Auto-set the lock amplitude threshold to 80% of the end-of-run amplitude (default on)."""
-        return self._post("/settings/auto_amp_threshold", enabled=bool(enabled))
 
     def set_lock_frequencies(self, mass: float, temp: float):
         return self._post("/settings/lock_frequencies", mass=mass, temp=temp)

@@ -57,10 +57,6 @@ class QCMWorker(threading.Thread):
         # measurement, re-acquire around the last lock frequencies.
         self.AUTO_RELOCK_AFTER = 1.0  # seconds
         self.auto_relock = True  # configurable; when off a lost lock is left alone
-        # End-of-run auto-calibration of the lock-detect amplitude threshold: set it
-        # to this fraction of the amplitude the signals ended the run at.
-        self.AMP_THRESHOLD_FRACTION = 0.5
-        self.auto_amp_threshold = True  # configurable; default on
         self._lock_freqs: tuple | None = None  # (mass, temp) from the last GET LOCK
         self._lock_lost_since: float | None = None
         
@@ -130,7 +126,6 @@ class QCMWorker(threading.Thread):
         parameters. Recorded once at run start."""
         snapshot = self.qcm.getSettingsSnapshot()
         snapshot["auto_relock"] = self.auto_relock
-        snapshot["auto_amp_threshold"] = self.auto_amp_threshold
         snapshot["measurement"] = {
             "ambient_temp":     command.ambient_temp,
             "mat_dens":         command.mat_dens,
@@ -190,15 +185,6 @@ class QCMWorker(threading.Thread):
                 freq_mass = round(self.qcm.getFreq(1) / 100) * 100
                 freq_temp = round(self.qcm.getFreq(2) / 100) * 100
                 self.event_queue.put(StartFreqAutoUpdatedEvent(freq_mass=freq_mass, freq_temp=freq_temp))
-                # Auto-calibrate the lock amplitude threshold from this run's final
-                # amplitudes. One global threshold is compared against both channels,
-                # so scale off the weaker one to keep both comfortably above it.
-                if self.auto_amp_threshold:
-                    amp = round(min(self.qcm.getMag(1), self.qcm.getMag(2)))
-                    if amp > 0:  # a non-positive threshold would make everything "locked"
-                        threshold = self.AMP_THRESHOLD_FRACTION * amp
-                        self.qcm.setLockDetect(threshold, self.qcm.LOCK_PHASE_TOLERANCE)
-                        self.event_queue.put(LockAmpAutoUpdatedEvent(amp_threshold=threshold))
             self.logger.write_event("RUN_STOP")
             self.logger.stop()
             self._set_state(WorkerState.IDLE)
@@ -224,12 +210,10 @@ class QCMWorker(threading.Thread):
         elif isinstance(command, SetOutputModeCommand):
             self.qcm.setOutputMode(command.mode.value)
         elif isinstance(command, SetLockDetectCommand):
-            self.qcm.setLockDetect(command.amp_threshold, command.phase_tolerance)
+            self.qcm.setLockDetect(command.phase_tolerance, command.phase_std)
         elif isinstance(command, SetAutoRelockCommand):
             self.auto_relock = bool(command.enabled)
             self._lock_lost_since = None  # drop any in-flight timer so toggling can't fire a stale re-lock
-        elif isinstance(command, SetAutoAmpThresholdCommand):
-            self.auto_amp_threshold = bool(command.enabled)
         elif isinstance(command, SetTargetThicknessCommand):
             self.target_thickness = max(0.0, float(command.target))
             # Raising the target mid-run means the film is below it again, so the
@@ -309,14 +293,20 @@ class QCMWorker(threading.Thread):
             self._set_target_reached(True, thickness)
 
     def update(self):
+        # Advance the phase-error window by exactly one sample per channel per
+        # cycle. This is the only place that samples it during normal running, so
+        # the window length translates directly into a time constant.
+        lock_mass, quality_mass = self.qcm.sampleLock(1)
+        lock_temp, quality_temp = self.qcm.sampleLock(2)
+
         # Emit lock status on change (immediate UI feedback) or as a periodic
         # heartbeat — not every loop iteration, which floods the WS clients.
-        lock_mass = self.qcm.getLockDetect(1)
-        lock_temp = self.qcm.getLockDetect(2)
         now = time.time()
         status = (lock_mass, lock_temp)
         if status != self._last_lock_status or now - self._last_lock_emit >= self.LOCK_STATUS_HEARTBEAT:
-            self.event_queue.put(LockStatusEvent(lock_mass=lock_mass, lock_temp=lock_temp))
+            self.event_queue.put(LockStatusEvent(
+                lock_mass=lock_mass, lock_temp=lock_temp,
+                quality_mass=quality_mass, quality_temp=quality_temp))
             self._last_lock_status = status
             self._last_lock_emit = now
 
@@ -344,3 +334,10 @@ class QCMWorker(threading.Thread):
             self._check_target(data)
             self.event_queue.put(MeasurementEvent(data=data))
             self.qcm.moveWindow(data.freq_mass_mode, data.freq_temp_mode)  # keep the PLL capture window centered on the current frequencies
+            return
+
+        # Not measuring: push the raw readings anyway. Frequencies, amplitudes,
+        # phases and lock quality need neither a measurement reference nor a
+        # calibration, so there is no reason for the monitor to sit blank while
+        # the operator is locking up or judging a lock before starting a run.
+        self.event_queue.put(TelemetryEvent(data=self.qcm.getTelemetry()))

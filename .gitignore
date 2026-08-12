@@ -1,5 +1,6 @@
 # List of untracked files to ignore
 
+.claude/*
 .venv*
 *.pyc
 *__pycache__*
@@ -14,3 +15,6 @@ data/sweeps/
 !model_composer/qcm_rp/outputs
 !model_composer/qcm_rp/outputs/*.fpg
 
+
+# Runtime state written by the server, not source
+data/settings.json

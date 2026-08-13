@@ -2,7 +2,7 @@ from dataclasses import dataclass, field
 from enum import Enum, auto
 from typing import Optional
 
-from domain.measurement import MeasurementData
+from domain.measurement import MeasurementData, TelemetryData
 
 @dataclass(kw_only=True)
 class ApiEvent:
@@ -25,12 +25,18 @@ class SweepPointEvent(ApiEvent):
 
 @dataclass
 class SweepCompleteEvent(ApiEvent):
-    pass
+    name: str | None = None  # CSV the sweep was recorded to, None = not recorded
 
 @dataclass
 class MeasurementEvent(ApiEvent):
     data: MeasurementData
-    
+
+@dataclass
+class TelemetryEvent(ApiEvent):
+    """Raw hardware readings, pushed while no run is in progress — see the
+    worker-side event of the same name."""
+    data: TelemetryData
+
 @dataclass
 class LockFailedEvent(ApiEvent):
     pass
@@ -45,6 +51,8 @@ class LogEvent(ApiEvent):
 class LockStatusEvent(ApiEvent):
     lock_mass: bool
     lock_temp: bool
+    quality_mass: float | None  # phase-error std (rad); None = window not full yet
+    quality_temp: float | None
 
 @dataclass
 class CapAdjustEvent(ApiEvent):
@@ -55,6 +63,23 @@ class CapAdjustEvent(ApiEvent):
 class StartFreqAutoUpdatedEvent(ApiEvent):
     freq_mass: float
     freq_temp: float
+
+@dataclass
+class RunLogStartedEvent(ApiEvent):
+    name: str  # CSV this run is being recorded to, on the Pitaya
+
+@dataclass
+class RunLogFailedEvent(ApiEvent):
+    reason: str  # why the run is not being recorded (disk full, write error, ...)
+
+@dataclass
+class TargetReachedEvent(ApiEvent):
+    """Target-thickness flag: True when the target is crossed, False when it is
+    cleared (run start / target change). Drives the UI popup, the REST flag and
+    the OPC TargetReached node."""
+    reached: bool
+    thickness: float
+    target: float
 
 @dataclass
 class SystemStatusEvent(ApiEvent):

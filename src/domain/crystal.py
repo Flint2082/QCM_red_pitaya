@@ -35,6 +35,7 @@ class CrystalProfile:
     # Sensor parameters
     mass_sensitivity: float = -13.3e-8  # kg/(m²·Hz) — negative: added mass lowers the frequency
     sens_area:        float = 5.25e-5  # m²
+    tooling_ratio:    float = 1.0  # proportional scaling of reported thickness; 1.0 = no scaling
     # Usage stats
     hours_active:    float = 0.0
     total_deposited: float = 0.0  # nm, cumulative across sessions

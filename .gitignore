@@ -1,15 +1,20 @@
 # List of untracked files to ignore
 
+.claude/*
 .venv*
 *.pyc
 *__pycache__*
 *.Xil*
 *.egg*
 
-# Server-side run logs written at runtime
+# Server-side run and sweep logs written at runtime
 data/runs/
+data/sweeps/
 
 !model_composer/qcm_rp
 !model_composer/qcm_rp/outputs
 !model_composer/qcm_rp/outputs/*.fpg
 
+
+# Runtime state written by the server, not source
+data/settings.json

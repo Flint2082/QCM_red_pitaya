@@ -12,6 +12,8 @@ import math
 import os
 import queue
 import re
+import shutil
+import subprocess
 import sys
 import threading
 import time
@@ -25,7 +27,8 @@ from fastapi.staticfiles import StaticFiles
 
 from domain.crystal import CrystalManager, CrystalProfile, sanitize_name
 from domain.qcm_interface import WINDOW_SIZE
-from domain.run_logger import RUNS_DIR
+from domain.run_logger import MIN_FREE_BYTES, RUNS_DIR
+from domain.sweep_logger import SWEEPS_DIR
 from plc.opc_worker import _READ_KEYS as OPC_READ_KEYS, _CTRL_KEYS as OPC_CTRL_KEYS
 from messaging.api_command import *
 from messaging.api_event import LogEvent
@@ -159,6 +162,11 @@ class RestServer:
         self._broadcaster_started = False  # guards against starting two broadcasters
         self._last_state: str = "IDLE"
         self._last_opc_status: dict | None = None
+        # Run log the worker is currently writing (None = not recording). Tracked
+        # so the UI downloads the run it just took rather than whichever file in
+        # data/runs/ happens to have the newest mtime.
+        self._current_run: str | None = None
+        self._run_log_error: str | None = None
         # Lock frequencies used by the GET LOCK command. These are NOT persisted:
         # the active crystal profile is the source of truth (applied on boot).
         # The values here are only a fallback until a crystal is applied.
@@ -166,13 +174,13 @@ class RestServer:
         self._lock_freq_temp: float = 6570000.0
         # Oscillator settings cache — defaults match QCMInterface post-lock state
         self._osc_settings: dict = {
-            1: {"int_gain": 0.00001, "prop_gain": 0.0, "lpf_freq": 200.0, "inverted": True, "phase_detect": 0},
-            2: {"int_gain": 0.00001, "prop_gain": 0.0, "lpf_freq": 200.0, "inverted": True, "phase_detect": 0},
+            1: {"int_gain": 0.00001, "lpf_freq": 200.0, "inverted": True},
+            2: {"int_gain": 0.00001, "lpf_freq": 200.0, "inverted": True},
         }
         self._output_mode: int = 0
         # Lock-detect conditions (defaults match QCMInterface)
-        self._lock_amp_threshold: float = 0.1
         self._lock_phase_tolerance: float = 0.05
+        self._lock_phase_std: float = 0.05
         # Automatic re-lock when lock is lost mid-measurement (default on)
         self._auto_relock: bool = True
         # Per-run measurement params — last values from a REST start, reused for
@@ -180,6 +188,15 @@ class RestServer:
         self._ambient_temp: float = 23.0
         self._mat_dens: float = 19320.0
         self._z_ratio: float = 1.0
+        # Target thickness in nm (0 = no target). The worker owns the comparison;
+        # these two mirror it so REST clients and the PLC can read the flag at
+        # any time rather than having to catch the event.
+        self._target_thickness: float = 0.0
+        self._target_reached: bool = False
+        self._target_reached_at: float | None = None
+        self._target_thickness_at: float | None = None  # thickness when it tripped
+        # Sweep the worker last recorded, for "download the sweep I just took".
+        self._current_sweep: str | None = None
         # Coefficient cache — reflects the active crystal (no standalone CSV)
         self._coefficients: dict | None = None
         # Crystal profiles
@@ -214,10 +231,13 @@ class RestServer:
             self._osc_settings = {int(k): v for k, v in d["osc_settings"].items()}
         if "output_mode" in d:
             self._output_mode = int(d["output_mode"])
-        if "lock_amp_threshold" in d:
-            self._lock_amp_threshold = float(d["lock_amp_threshold"])
         if "lock_phase_tolerance" in d:
             self._lock_phase_tolerance = float(d["lock_phase_tolerance"])
+        if "lock_phase_std" in d:
+            self._lock_phase_std = float(d["lock_phase_std"])
+        # "lock_amp_threshold" / "auto_amp_threshold" may still be present from
+        # before lock detect went amplitude-free; they are ignored and dropped on
+        # the next save.
         if "auto_relock" in d:
             self._auto_relock = bool(d["auto_relock"])
         if "active_crystal" in d:
@@ -228,6 +248,8 @@ class RestServer:
             self._mat_dens = float(d["mat_dens"])
         if "z_ratio" in d:
             self._z_ratio = float(d["z_ratio"])
+        if "target_thickness" in d:
+            self._target_thickness = float(d["target_thickness"])
         # Restore OPC connection parameters without triggering a reconnect
         if self._wago_client and "opc_url" in d:
             self._wago_client.url      = d["opc_url"]
@@ -240,13 +262,14 @@ class RestServer:
         data = {
             "osc_settings":   {str(k): v for k, v in self._osc_settings.items()},
             "output_mode":    self._output_mode,
-            "lock_amp_threshold":   self._lock_amp_threshold,
             "lock_phase_tolerance": self._lock_phase_tolerance,
+            "lock_phase_std":       self._lock_phase_std,
             "auto_relock":    self._auto_relock,
             "active_crystal": self._active_crystal,
             "ambient_temp": self._ambient_temp,
             "mat_dens": self._mat_dens,
             "z_ratio": self._z_ratio,
+            "target_thickness": self._target_thickness,
         }
         if self._wago_client:
             data["opc_url"]       = self._wago_client.url
@@ -274,6 +297,12 @@ class RestServer:
             "lock_freq_temp": self._lock_freq_temp,
         }
 
+    def _set_target_thickness(self, value: float):
+        """Push a new target to the worker (which owns the comparison) and cache
+        it here for GET /settings. Negative values mean "no target", same as 0."""
+        self._target_thickness = max(0.0, float(value))
+        self.command_queue.put(SetTargetThicknessCommand(self._target_thickness))
+
     def _apply_crystal(self, profile: CrystalProfile):
         """Push a crystal's settings into server state and the command queue.
         The active crystal is the source of truth for lock frequencies and
@@ -290,7 +319,7 @@ class RestServer:
             profile.fM_0, profile.fM_1, profile.fM_2, profile.fM_3,
             profile.fT_0, profile.fT_1, profile.fT_2, profile.fT_3,
         ))
-        self.command_queue.put(SetSensorParamsCommand(profile.mass_sensitivity, profile.sens_area, profile.freq_virgin))
+        self.command_queue.put(SetSensorParamsCommand(profile.mass_sensitivity, profile.sens_area, profile.freq_virgin, profile.tooling_ratio))
 
     def _enqueue_boot_settings(self):
         """Push persisted settings to the hardware at startup so saved values take
@@ -304,22 +333,19 @@ class RestServer:
         for osc, s in self._osc_settings.items():
             if "int_gain" in s:
                 self.command_queue.put(SetIntegratorGainCommand(osc, s["int_gain"]))
-            if "prop_gain" in s:
-                self.command_queue.put(SetProportionalGainCommand(osc, s["prop_gain"]))
             if "lpf_freq" in s:
                 self.command_queue.put(SetLPFFreqCommand(osc, s["lpf_freq"]))
             if "inverted" in s:
                 self.command_queue.put(SetInvertedCommand(osc, bool(s["inverted"])))
-            if "phase_detect" in s:
-                self.command_queue.put(SetPhaseDetectCommand(osc, int(s["phase_detect"])))
 
         try:
             self.command_queue.put(SetOutputModeCommand(1, OutputMode(self._output_mode)))
         except ValueError:
             print(f"[Settings] Skipping invalid persisted output_mode={self._output_mode} on boot")
 
-        self.command_queue.put(SetLockDetectCommand(self._lock_amp_threshold, self._lock_phase_tolerance))
+        self.command_queue.put(SetLockDetectCommand(self._lock_phase_tolerance, self._lock_phase_std))
         self.command_queue.put(SetAutoRelockCommand(self._auto_relock))
+        self.command_queue.put(SetTargetThicknessCommand(self._target_thickness))
 
         # Apply the active crystal's coefficients + lock frequencies, if any.
         if self._active_crystal:
@@ -331,6 +357,35 @@ class RestServer:
                 print(f"[Settings] Active crystal '{self._active_crystal}' not found; skipping")
 
         print("[Settings] Queued persisted settings to apply on boot")
+
+    # --------------------------------------------------
+    # System control
+    # --------------------------------------------------
+
+    @staticmethod
+    def _do_reboot():
+        """Reboot the box, off the request thread so the HTTP response is
+        delivered first — otherwise the UI sees a dropped connection instead of
+        an acknowledgement and cannot tell a reboot from a crash."""
+        time.sleep(0.5)
+        # systemctl is the clean path (it stops the units first); the plain
+        # reboot binary is the fallback when systemd is not the init. Each is
+        # run to completion so a non-zero exit falls through to the next one —
+        # Popen alone would "succeed" for a command that then refuses. Requires
+        # root, which the service already runs as.
+        for cmd in (["systemctl", "reboot"], ["/sbin/reboot"], ["reboot"]):
+            if shutil.which(cmd[0]) is None and not os.path.exists(cmd[0]):
+                continue
+            try:
+                # A reboot request returns promptly and the machine goes down
+                # afterwards, so a short timeout is a hang, not normal operation.
+                result = subprocess.run(cmd, timeout=30, capture_output=True, text=True)
+                if result.returncode == 0:
+                    return
+                print(f"[API] {' '.join(cmd)} exited {result.returncode}: {result.stderr.strip()}")
+            except Exception as e:
+                print(f"[API] {' '.join(cmd)} failed: {e}")
+        print("[API] Reboot failed — no working reboot command (are we running as root?)")
 
     # --------------------------------------------------
     # Lifecycle
@@ -423,6 +478,24 @@ class RestServer:
                     thickness = msg.get("calculated_thickness")
                     if thickness is not None:
                         self._session_thickness = max(self._session_thickness, float(thickness or 0))
+
+                elif msg.get("type") == "TargetReachedEvent":
+                    self._target_reached = bool(msg.get("reached"))
+                    self._target_reached_at = time.time() if self._target_reached else None
+                    self._target_thickness_at = msg.get("thickness") if self._target_reached else None
+
+                elif msg.get("type") == "SweepCompleteEvent":
+                    # None when the sweep could not be recorded — keep it None so
+                    # the UI greys the download rather than offering a stale file.
+                    self._current_sweep = msg.get("name")
+
+                elif msg.get("type") == "RunLogStartedEvent":
+                    self._current_run = msg.get("name")
+                    self._run_log_error = None
+
+                elif msg.get("type") == "RunLogFailedEvent":
+                    self._current_run = None
+                    self._run_log_error = msg.get("reason")
 
                 elif msg.get("type") == "OpcStatusEvent":
                     self._last_opc_status = msg
@@ -523,13 +596,6 @@ class RestServer:
             self._save_settings()
             return {"status": "ok"}
 
-        @app.post("/settings/proportional_gain")
-        def set_proportional_gain(oscillator_idx: int, gain: float):
-            self._osc_settings.setdefault(oscillator_idx, {})["prop_gain"] = gain
-            self.command_queue.put(SetProportionalGainCommand(oscillator_idx, gain))
-            self._save_settings()
-            return {"status": "ok"}
-
         @app.post("/settings/lpf_freq")
         def set_lpf_freq(oscillator_idx: int, freq: float):
             self._osc_settings.setdefault(oscillator_idx, {})["lpf_freq"] = freq
@@ -541,15 +607,6 @@ class RestServer:
         def set_inverted(oscillator_idx: int, inverted: bool):
             self._osc_settings.setdefault(oscillator_idx, {})["inverted"] = inverted
             self.command_queue.put(SetInvertedCommand(oscillator_idx, inverted))
-            self._save_settings()
-            return {"status": "ok"}
-
-        @app.post("/settings/phase_detect")
-        def set_phase_detect(oscillator_idx: int, mode: int):
-            # mult_sel: FPGA phase-detector type (1-bit register, 0 = ATAN, 1 = multiplier)
-            mode = 1 if mode else 0
-            self._osc_settings.setdefault(oscillator_idx, {})["phase_detect"] = mode
-            self.command_queue.put(SetPhaseDetectCommand(oscillator_idx, mode))
             self._save_settings()
             return {"status": "ok"}
 
@@ -592,10 +649,10 @@ class RestServer:
             return {"status": "ok"}
 
         @app.post("/settings/lock_detect")
-        def set_lock_detect(amp_threshold: float, phase_tolerance: float):
-            self._lock_amp_threshold = amp_threshold
+        def set_lock_detect(phase_tolerance: float, phase_std: float):
             self._lock_phase_tolerance = phase_tolerance
-            self.command_queue.put(SetLockDetectCommand(amp_threshold, phase_tolerance))
+            self._lock_phase_std = phase_std
+            self.command_queue.put(SetLockDetectCommand(phase_tolerance, phase_std))
             self._save_settings()
             return {"status": "ok"}
 
@@ -607,13 +664,36 @@ class RestServer:
             return {"status": "ok"}
 
         @app.post("/settings/measurement_params")
-        def set_measurement_params(ambient_temp: float, mat_dens: float, z_ratio: float):
+        def set_measurement_params(ambient_temp: float, mat_dens: float, z_ratio: float,
+                                   target_thickness: float | None = None):
             # Film/run parameters shown in the settings panel. /measurement/start
             # also captures these from the live form; persisting them on APPLY too
             # means an edit survives a restart even with no measurement in between.
             self._ambient_temp, self._mat_dens, self._z_ratio = ambient_temp, mat_dens, z_ratio
+            if target_thickness is not None:
+                self._set_target_thickness(target_thickness)
             self._save_settings()
             return {"status": "ok"}
+
+        @app.post("/settings/target_thickness")
+        def set_target_thickness(value: float):
+            """Compensated thickness in nm at which the target flag is raised.
+            0 disables the target. Takes effect immediately, mid-run included."""
+            self._set_target_thickness(value)
+            self._save_settings()
+            return {"status": "ok", "target_thickness": self._target_thickness}
+
+        @app.get("/measurement/target")
+        def get_target():
+            """The target-thickness flag, for clients that poll instead of
+            listening for TargetReachedEvent on the WebSocket."""
+            return {
+                "target_thickness": self._target_thickness,
+                "enabled":          self._target_thickness > 0,
+                "reached":          self._target_reached,
+                "reached_at":       self._target_reached_at,
+                "thickness_at_target": self._target_thickness_at,
+            }
 
         def _finite(v):
             return v if isinstance(v, float) and math.isfinite(v) else (None if isinstance(v, float) else v)
@@ -624,9 +704,10 @@ class RestServer:
                 "oscillators":      self._osc_settings,
                 "output_mode":      self._output_mode,
                 "measurement": {
-                    "ambient_temp": self._ambient_temp,
-                    "mat_dens":     self._mat_dens,
-                    "z_ratio":      self._z_ratio,
+                    "ambient_temp":     self._ambient_temp,
+                    "mat_dens":         self._mat_dens,
+                    "z_ratio":          self._z_ratio,
+                    "target_thickness": self._target_thickness,
                 },
                 # Derived from the PLL capture window so the UI never hard-codes it.
                 "pll": {
@@ -634,8 +715,8 @@ class RestServer:
                     "capture_range": WINDOW_SIZE / 2,
                 },
                 "lock_detect": {
-                    "amp_threshold":   self._lock_amp_threshold,
                     "phase_tolerance": self._lock_phase_tolerance,
+                    "phase_std":       self._lock_phase_std,
                 },
                 "auto_relock": self._auto_relock,
                 "lock_frequencies": {
@@ -703,7 +784,7 @@ class RestServer:
             fM_0: float, fM_1: float, fM_2: float, fM_3: float,
             fT_0: float, fT_1: float, fT_2: float, fT_3: float,
             mass_sensitivity: float = -13.3e-8, sens_area: float = 5.25e-5,
-            freq_virgin: float = 6000000.0,
+            freq_virgin: float = 6000000.0, tooling_ratio: float = 1.0,
         ):
             """Save explicit crystal data from the settings form and apply it immediately."""
             profile = self._crystals.load(name) or CrystalProfile(name=name)
@@ -714,6 +795,7 @@ class RestServer:
             profile.fT_0, profile.fT_1, profile.fT_2, profile.fT_3 = fT_0, fT_1, fT_2, fT_3
             profile.mass_sensitivity = mass_sensitivity
             profile.sens_area = sens_area
+            profile.tooling_ratio = tooling_ratio
             self._crystals.save(profile)
             self._apply_crystal(profile)
             self._active_crystal = name
@@ -763,7 +845,12 @@ class RestServer:
 
         @app.get("/runs")
         def list_runs():
-            """Run CSVs saved on the Pitaya, newest first."""
+            """Run CSVs saved on the Pitaya, newest first.
+
+            `current` is the run being recorded right now (or the last one this
+            session) — the UI downloads that in preference to "newest by mtime".
+            `free_bytes` drives the disk-full warning.
+            """
             out = []
             try:
                 for f in os.listdir(RUNS_DIR):
@@ -777,7 +864,46 @@ class RestServer:
             except FileNotFoundError:
                 pass
             out.sort(key=lambda r: r["modified"], reverse=True)
-            return {"runs": out}
+            try:
+                usage = shutil.disk_usage(RUNS_DIR)
+                free, total = usage.free, usage.total
+            except OSError:
+                free = total = None
+            return {
+                "runs": out,
+                "current": self._current_run,
+                "log_error": self._run_log_error,
+                "free_bytes": free,
+                "total_bytes": total,
+                "min_free_bytes": MIN_FREE_BYTES,
+            }
+
+        @app.delete("/runs/{name}")
+        def delete_run(name: str):
+            """Delete one run CSV. Only ever called after the operator confirms
+            the specific file in the UI — never automatically, and never the run
+            currently being written."""
+            safe = os.path.basename(name)
+            path = os.path.join(RUNS_DIR, safe)
+            if not safe.endswith(".csv") or not os.path.exists(path):
+                raise HTTPException(404, "Run not found")
+            if safe == self._current_run:
+                raise HTTPException(409, "That run is being recorded right now")
+            size = os.path.getsize(path)
+            os.remove(path)
+            print(f"[API] Deleted run {safe} ({size / 1024 ** 2:.0f} MB) to free space")
+            try:
+                free = shutil.disk_usage(RUNS_DIR).free
+            except OSError:
+                free = None
+            return {"status": "ok", "deleted": safe, "freed_bytes": size, "free_bytes": free}
+
+        @app.post("/runs/retry-log")
+        def retry_run_log():
+            """Re-open the log for a measurement that is running unrecorded (after
+            freeing space). Records the rest of the run; the lost part stays lost."""
+            self.command_queue.put(RetryRunLogCommand())
+            return {"status": "ok"}
 
         @app.get("/runs/{name}/download")
         def download_run(name: str):
@@ -798,6 +924,51 @@ class RestServer:
         def abort_sweep():
             self.command_queue.put(AbortSweepCommand())
             return {"status": "ok"}
+
+        # ---- Server-side sweep logs (written to disk by the worker) ----
+
+        @app.get("/sweeps")
+        def list_sweeps():
+            """Sweep CSVs saved on the Pitaya, newest first. `current` is the
+            sweep this session recorded last — the UI downloads that rather than
+            whichever file happens to have the newest mtime."""
+            out = []
+            try:
+                for f in os.listdir(SWEEPS_DIR):
+                    if not f.endswith(".csv"):
+                        continue
+                    try:
+                        st = os.stat(os.path.join(SWEEPS_DIR, f))
+                        out.append({"name": f, "size": st.st_size, "modified": st.st_mtime})
+                    except OSError:
+                        pass
+            except FileNotFoundError:
+                pass
+            out.sort(key=lambda r: r["modified"], reverse=True)
+            return {"sweeps": out, "current": self._current_sweep}
+
+        @app.get("/sweeps/{name}/download")
+        def download_sweep(name: str):
+            safe = os.path.basename(name)  # strip any path components (no traversal)
+            path = os.path.join(SWEEPS_DIR, safe)
+            if not safe.endswith(".csv") or not os.path.exists(path):
+                raise HTTPException(404, "Sweep not found")
+            return FileResponse(path, filename=safe, media_type="text/csv")
+
+        @app.delete("/sweeps/{name}")
+        def delete_sweep(name: str):
+            """Delete one sweep CSV. Only ever called after the operator confirms
+            the specific file in the UI."""
+            safe = os.path.basename(name)
+            path = os.path.join(SWEEPS_DIR, safe)
+            if not safe.endswith(".csv") or not os.path.exists(path):
+                raise HTTPException(404, "Sweep not found")
+            size = os.path.getsize(path)
+            os.remove(path)
+            if safe == self._current_sweep:
+                self._current_sweep = None
+            print(f"[API] Deleted sweep {safe} ({size / 1024:.0f} kB)")
+            return {"status": "ok", "deleted": safe, "freed_bytes": size}
 
         @app.get("/state")
         def get_state():
@@ -839,6 +1010,23 @@ class RestServer:
                 "read": entries(OPC_READ_KEYS, "QCM → PLC"),
                 "ctrl": entries(OPC_CTRL_KEYS, "PLC → QCM"),
             }
+
+        # ---- System ----
+
+        @app.post("/system/reboot")
+        def reboot(force: bool = False):
+            """Reboot the Red Pitaya. Everything restarts: the FPGA bitstream is
+            reloaded, the PLLs come up unlocked and the OPC link reconnects, so
+            it is the way out of a wedged FPGA or a hung network stack.
+
+            A reboot during a measurement ends that run where it stands, so it
+            takes an explicit force — the UI asks a second time before sending it.
+            """
+            if self._last_state == "RUNNING" and not force:
+                raise HTTPException(409, "A measurement is running — stop it first, or pass force=true")
+            print("[API] Reboot requested — going down now")
+            threading.Thread(target=self._do_reboot, daemon=True, name="reboot").start()
+            return {"status": "rebooting"}
 
         # ---- Health ----
 

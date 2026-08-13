@@ -123,6 +123,8 @@ class Application(threading.Thread):
                 ambient_temp=command.ambient_temp, mat_dens=command.mat_dens, z_ratio=command.z_ratio))
         elif isinstance(command, ac.StopMeasurementCommand):
             self.worker_command_queue.put(wc.StopMeasurementCommand())
+        elif isinstance(command, ac.RetryRunLogCommand):
+            self.worker_command_queue.put(wc.RetryRunLogCommand())
         elif isinstance(command, ac.StartupPLLCommand):
             self.worker_command_queue.put(wc.StartupPLLCommand(command.start_freq_mass, command.start_freq_temp))
         elif isinstance(command, ac.StartSweepCommand):
@@ -133,22 +135,20 @@ class Application(threading.Thread):
             self.worker_command_queue.put(wc.SetFrequencyCommand(command.oscillator_idx, command.frequency))
         elif isinstance(command, ac.SetIntegratorGainCommand):
             self.worker_command_queue.put(wc.SetIntegratorGainCommand(command.oscillator_idx, command.gain))
-        elif isinstance(command, ac.SetProportionalGainCommand):
-            self.worker_command_queue.put(wc.SetProportionalGainCommand(command.oscillator_idx, command.gain))
         elif isinstance(command, ac.SetInvertedCommand):
             self.worker_command_queue.put(wc.SetInvertedCommand(command.oscillator_idx, command.inverted))
-        elif isinstance(command, ac.SetPhaseDetectCommand):
-            self.worker_command_queue.put(wc.SetPhaseDetectCommand(command.oscillator_idx, command.mode))
         elif isinstance(command, ac.SetLPFFreqCommand):
             self.worker_command_queue.put(wc.SetLPFFreqCommand(command.oscillator_idx, command.freq))
         elif isinstance(command, ac.SetOutputModeCommand):
             self.worker_command_queue.put(wc.SetOutputModeCommand(command.oscillator_idx, command.mode))
         elif isinstance(command, ac.SetLockDetectCommand):
-            self.worker_command_queue.put(wc.SetLockDetectCommand(command.amp_threshold, command.phase_tolerance))
+            self.worker_command_queue.put(wc.SetLockDetectCommand(command.phase_tolerance, command.phase_std))
         elif isinstance(command, ac.SetAutoRelockCommand):
             self.worker_command_queue.put(wc.SetAutoRelockCommand(command.enabled))
+        elif isinstance(command, ac.SetTargetThicknessCommand):
+            self.worker_command_queue.put(wc.SetTargetThicknessCommand(command.target))
         elif isinstance(command, ac.SetSensorParamsCommand):
-            self.worker_command_queue.put(wc.SetSensorParamsCommand(command.mass_sensitivity, command.sens_area, command.freq_virgin))
+            self.worker_command_queue.put(wc.SetSensorParamsCommand(command.mass_sensitivity, command.sens_area, command.freq_virgin, command.tooling_ratio))
         elif isinstance(command, ac.StartCapAdjustCommand):
             self.worker_command_queue.put(wc.StartCapAdjustCommand(command.freq_mass, command.freq_temp))
         elif isinstance(command, ac.StopCapAdjustCommand):
@@ -190,19 +190,24 @@ class Application(threading.Thread):
                 frequency=event.frequency, amplitude=event.amplitude, phase=event.phase))
 
         elif isinstance(event, we.SweepCompleteEvent):
-            self._emit(ae.SweepCompleteEvent())
+            self._emit(ae.SweepCompleteEvent(name=event.name))
 
         elif isinstance(event, we.MeasurementEvent):
             if self.system_state:
                 self.system_state.update(event)
             self._emit(ae.MeasurementEvent(data=event.data))
 
+        elif isinstance(event, we.TelemetryEvent):
+            self._emit(ae.TelemetryEvent(data=event.data))
+
         elif isinstance(event, we.LockFailedEvent):
             print("[Application] PLL lock failed")
             self._emit(ae.LockFailedEvent())
 
         elif isinstance(event, we.LockStatusEvent):
-            self._emit(ae.LockStatusEvent(lock_mass=event.lock_mass, lock_temp=event.lock_temp))
+            self._emit(ae.LockStatusEvent(
+                lock_mass=event.lock_mass, lock_temp=event.lock_temp,
+                quality_mass=event.quality_mass, quality_temp=event.quality_temp))
 
         elif isinstance(event, we.CapAdjustEvent):
             self._emit(ae.CapAdjustEvent(amp_mass=event.amp_mass, amp_temp=event.amp_temp))
@@ -210,6 +215,19 @@ class Application(threading.Thread):
         elif isinstance(event, we.StartFreqAutoUpdatedEvent):
             print(f"[Application] Auto-updated start freqs: mass={event.freq_mass:.0f} Hz, temp={event.freq_temp:.0f} Hz")
             self._emit(ae.StartFreqAutoUpdatedEvent(freq_mass=event.freq_mass, freq_temp=event.freq_temp))
+
+        elif isinstance(event, we.RunLogStartedEvent):
+            self._emit(ae.RunLogStartedEvent(name=event.name))
+
+        elif isinstance(event, we.TargetReachedEvent):
+            if event.reached:
+                print(f"[Application] Target thickness reached: {event.thickness:.3f} / {event.target:.3f} nm")
+            self._emit(ae.TargetReachedEvent(
+                reached=event.reached, thickness=event.thickness, target=event.target))
+
+        elif isinstance(event, we.RunLogFailedEvent):
+            print(f"[Application] Run log unavailable: {event.reason}")
+            self._emit(ae.RunLogFailedEvent(reason=event.reason))
 
         elif isinstance(event, we.ErrorEvent):
             print(f"[Application] Worker error: {event.message}")

@@ -36,6 +36,12 @@ class StopMeasurementCommand(ApiCommand):
     pass
 
 @dataclass
+class RetryRunLogCommand(ApiCommand):
+    """Re-open the run log for a measurement that is running unrecorded, after
+    the operator has freed disk space."""
+    pass
+
+@dataclass
 class StartSweepCommand(ApiCommand):
     oscillator_idx: int
     start_freq: float
@@ -62,19 +68,9 @@ class SetIntegratorGainCommand(ApiCommand):
     gain: float
 
 @dataclass
-class SetProportionalGainCommand(ApiCommand):
-    oscillator_idx: int
-    gain: float
-
-@dataclass
 class SetInvertedCommand(ApiCommand):
     oscillator_idx: int
     inverted: bool
-
-@dataclass
-class SetPhaseDetectCommand(ApiCommand):
-    oscillator_idx: int
-    mode: int  # mult_sel: phase-detector type (0 = ATAN, 1 = multiplier)
 
 @dataclass
 class SetLPFFreqCommand(ApiCommand):
@@ -88,8 +84,8 @@ class SetOutputModeCommand(ApiCommand):
 
 @dataclass
 class SetLockDetectCommand(ApiCommand):
-    amp_threshold: float
-    phase_tolerance: float
+    phase_tolerance: float  # rad — max |mean phase error|
+    phase_std: float        # rad — max phase-error std ("lock quality")
 
 @dataclass
 class SetAutoRelockCommand(ApiCommand):
@@ -100,6 +96,11 @@ class SetSensorParamsCommand(ApiCommand):
     mass_sensitivity: float
     sens_area: float
     freq_virgin: float = 0.0  # Hz — pristine crystal frequency, 0 = unset
+    tooling_ratio: float = 1.0  # proportional scaling of reported thickness
+
+@dataclass
+class SetTargetThicknessCommand(ApiCommand):
+    target: float  # nm of compensated thickness; 0 disables the target
 
 @dataclass
 class StartCapAdjustCommand(ApiCommand):

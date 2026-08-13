@@ -2,21 +2,19 @@
   "permissions": {
     "allow": [
       "Bash(echo \"=== exit $? \\(1 = no matches, good\\) ===\")",
-      "PowerShell(python -m py_compile src\\\\processing\\\\TempCompAlgorithm.py src\\\\domain\\\\qcm_interface.py src\\\\workers\\\\qcm_worker.py src\\\\api\\\\server.py tools\\\\test_comp_alogrithm.py)",
+      "PowerShell(python -m py_compile *)",
       "PowerShell(if \\($?\\) { \"all compile OK\" })",
       "PowerShell(if \\($?\\) { \"server.py compile OK\" })",
-      "Bash(python -m py_compile tools/test_comp_alogrithm.py)",
-      "Bash(MPLBACKEND=Agg python tools/test_comp_alogrithm.py)",
-      "PowerShell(python -m py_compile src\\\\app\\\\application.py src\\\\workers\\\\qcm_worker.py)",
+      "Bash(python -m py_compile *)",
+      "Bash(MPLBACKEND=Agg python *)",
+      "PowerShell(python -m py_compile *)",
       "PowerShell(if \\($?\\) { \"compile OK\" })",
-      "PowerShell(python -m py_compile src\\\\processing\\\\TempCompAlgorithm.py src\\\\domain\\\\crystal.py src\\\\domain\\\\qcm_interface.py src\\\\messaging\\\\api_command.py src\\\\messaging\\\\worker_command.py src\\\\app\\\\application.py src\\\\workers\\\\qcm_worker.py src\\\\api\\\\server.py)",
+      "PowerShell(python -m py_compile *)",
       "Bash(python -c ' *)",
-      "Bash(python -m py_compile src/processing/TempCompAlgorithm.py src/domain/crystal.py src/domain/qcm_interface.py src/api/server.py)",
-      "Bash(python -m py_compile src/processing/TempCompAlgorithm.py src/domain/crystal.py src/domain/qcm_interface.py src/messaging/api_command.py src/messaging/worker_command.py src/app/application.py src/workers/qcm_worker.py src/api/server.py)",
-      "Bash(python -m py_compile src/domain/fpga_interface.py src/domain/qcm_interface.py src/messaging/api_command.py src/messaging/worker_command.py src/app/application.py src/workers/qcm_worker.py src/api/server.py)",
-      "Bash(echo \"\\(grep exit: $? — 1 = clean\\)\")",
+      "Bash(python -m py_compile *)",
+      "Bash(echo *)",
       "Bash(python3 -c ' *)",
-      "Bash(py -m py_compile src/api/server.py)"
+      "Bash(py -m py_compile *)"
     ]
   }
 }

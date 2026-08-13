@@ -16,6 +16,7 @@ import queue
 
 from domain.qcm_interface import QCMInterface
 from domain.run_logger import RunLogger
+from domain.sweep_logger import SweepLogger
 from messaging.defines import WorkerState
 from messaging.worker_event import *
 from messaging.worker_command import *
@@ -29,7 +30,23 @@ class QCMWorker(threading.Thread):
         self.running = True
         self.state = WorkerState.IDLE
         # Durable server-side CSV log of each run, independent of the WebSocket.
-        self.logger = RunLogger()
+        # Logging problems are pushed to the UI: the live plots keep working when
+        # the log is dead, so nothing else would give the operator a clue.
+        self.logger = RunLogger(
+            on_start=lambda name: self.event_queue.put(RunLogStartedEvent(name=name)),
+            on_error=lambda reason: self.event_queue.put(RunLogFailedEvent(reason=reason)),
+        )
+        # Durable server-side CSV of each sweep. Unlike the run log a failure here
+        # is only printed: the sweep still streams to the UI, and a sweep is cheap
+        # to repeat, so it does not warrant its own alarm in the GUI.
+        self.sweep_logger = SweepLogger()
+        self._run_command = None  # last StartMeasurementCommand, for RetryRunLogCommand
+        # Target thickness (nm of compensated thickness; 0 = no target). Checked
+        # against every measurement; crossing it raises a flag for the operator,
+        # the REST API and the PLC, but never stops the run on its own.
+        self.target_thickness = 0.0
+        self._target_reached = False
+        self._last_thickness = 0.0  # most recent compensated thickness, for target changes
         # Lock-status emission throttle: send on change, plus a periodic
         # heartbeat so new WS clients converge. Unthrottled this produced
         # ~10 events/sec of WS traffic even when idle.
@@ -93,6 +110,39 @@ class QCMWorker(threading.Thread):
         self._set_state(WorkerState.MEASURING if resume_measuring else WorkerState.IDLE)
         return locked
 
+    def _set_target_reached(self, reached: bool, thickness: float = 0.0):
+        """Raise or clear the target-thickness flag and tell everyone once.
+        Clearing is emitted too, so the UI, the REST API and the PLC never have
+        to guess when a new run invalidates the previous run's flag."""
+        if reached == self._target_reached:
+            return
+        self._target_reached = reached
+        self.event_queue.put(TargetReachedEvent(
+            reached=reached, thickness=thickness, target=self.target_thickness))
+
+    def _settings_snapshot(self, command) -> dict:
+        """Everything that affects how a run is acquired: the loop/lock config the
+        QCM owns, plus the worker's own automation flags and this run's material
+        parameters. Recorded once at run start."""
+        snapshot = self.qcm.getSettingsSnapshot()
+        snapshot["auto_relock"] = self.auto_relock
+        snapshot["measurement"] = {
+            "ambient_temp":     command.ambient_temp,
+            "mat_dens":         command.mat_dens,
+            "z_ratio":          command.z_ratio,
+            "target_thickness": self.target_thickness,
+        }
+        return snapshot
+
+    def _start_run_log(self, command) -> bool:
+        """Open the run log and write its opening rows. Returns whether recording
+        is live — RunLogger reports the failure itself, so callers just carry on."""
+        if not self.logger.start():
+            return False
+        self.logger.write_settings(self._settings_snapshot(command))
+        self.logger.write_event("RUN_START", f"T={command.ambient_temp} mat_dens={command.mat_dens} z_ratio={command.z_ratio}")
+        return True
+
     def handle_command(self, command: WorkerCommand):
 
         # ============================
@@ -114,9 +164,17 @@ class QCMWorker(threading.Thread):
         # Start measurement
         elif isinstance(command, StartMeasurementCommand) and self.state == WorkerState.IDLE:
             self.qcm.setMeasurementReference(T=command.ambient_temp, mat_dens=command.mat_dens, z_ratio=command.z_ratio)
-            self.logger.start()
-            self.logger.write_event("RUN_START", f"T={command.ambient_temp} mat_dens={command.mat_dens} z_ratio={command.z_ratio}")
+            self._run_command = command
+            self._set_target_reached(False)  # a fresh run starts below its target again
+            self._start_run_log(command)
             self._set_state(WorkerState.MEASURING)
+
+        # Recording was disabled (usually a full disk) and the operator has since
+        # freed space — pick the log back up for the rest of the run.
+        elif isinstance(command, RetryRunLogCommand):
+            if self.state == WorkerState.MEASURING and self._run_command and not self.logger.active:
+                if self._start_run_log(self._run_command):
+                    self.logger.write_event("RECORDING_RESUMED", "log re-opened mid-run; earlier points are lost")
 
         # Stop measurement
         elif isinstance(command, StopMeasurementCommand) and self.state == WorkerState.MEASURING:
@@ -124,8 +182,8 @@ class QCMWorker(threading.Thread):
             lock_mass = self.qcm.getLockDetect(1)
             lock_temp = self.qcm.getLockDetect(2)
             if lock_mass and lock_temp:
-                freq_mass = round(self.qcm.getFreq(1) / 1000) * 1000
-                freq_temp = round(self.qcm.getFreq(2) / 1000) * 1000
+                freq_mass = round(self.qcm.getFreq(1) / 100) * 100
+                freq_temp = round(self.qcm.getFreq(2) / 100) * 100
                 self.event_queue.put(StartFreqAutoUpdatedEvent(freq_mass=freq_mass, freq_temp=freq_temp))
             self.logger.write_event("RUN_STOP")
             self.logger.stop()
@@ -145,23 +203,26 @@ class QCMWorker(threading.Thread):
             self.qcm.setFreq(command.oscillator_idx, command.frequency)
         elif isinstance(command, SetIntegratorGainCommand):
             self.qcm.setOscConfig(command.oscillator_idx, int_gain=command.gain)
-        elif isinstance(command, SetProportionalGainCommand):
-            self.qcm.setOscConfig(command.oscillator_idx, prop_gain=command.gain)
         elif isinstance(command, SetLPFFreqCommand):
             self.qcm.setOscConfig(command.oscillator_idx, lpf_freq=command.freq)
         elif isinstance(command, SetInvertedCommand):
             self.qcm.setOscConfig(command.oscillator_idx, inverted=command.inverted)
-        elif isinstance(command, SetPhaseDetectCommand):
-            self.qcm.setOscConfig(command.oscillator_idx, phase_detect=command.mode)
         elif isinstance(command, SetOutputModeCommand):
             self.qcm.setOutputMode(command.mode.value)
         elif isinstance(command, SetLockDetectCommand):
-            self.qcm.setLockDetect(command.amp_threshold, command.phase_tolerance)
+            self.qcm.setLockDetect(command.phase_tolerance, command.phase_std)
         elif isinstance(command, SetAutoRelockCommand):
             self.auto_relock = bool(command.enabled)
             self._lock_lost_since = None  # drop any in-flight timer so toggling can't fire a stale re-lock
+        elif isinstance(command, SetTargetThicknessCommand):
+            self.target_thickness = max(0.0, float(command.target))
+            # Raising the target mid-run means the film is below it again, so the
+            # flag has to drop; the next crossing then reports honestly.
+            if self._target_reached and (self.target_thickness == 0.0 or
+                                         self.target_thickness > self._last_thickness):
+                self._set_target_reached(False, self._last_thickness)
         elif isinstance(command, SetSensorParamsCommand):
-            self.qcm.setSensorParams(command.mass_sensitivity, command.sens_area, command.freq_virgin)
+            self.qcm.setSensorParams(command.mass_sensitivity, command.sens_area, command.freq_virgin, command.tooling_ratio)
         elif isinstance(command, SetCoefficientsCommand):
             self.qcm.setCoefficients(
                 command.fM_0, command.fM_1, command.fM_2, command.fM_3,
@@ -178,12 +239,25 @@ class QCMWorker(threading.Thread):
         # make sure the LPF cutoff is set to the default for sweeps to keep things consistent
         self.qcm.setLPFFreq(command.oscillator_idx, self.qcm.LPF_FREQ)
         n_points = int(math.floor((command.stop_freq - command.start_freq) / command.step_size)) + 1
+        # Record the sweep to disk as it is taken, so it survives a WS drop and
+        # can be downloaded or re-plotted later. An abort still yields the file
+        # written so far — a partial sweep is worth keeping.
+        self.sweep_logger.start({
+            "oscillator_idx": command.oscillator_idx,
+            "start_freq":     command.start_freq,
+            "stop_freq":      command.stop_freq,
+            "step_size":      command.step_size,
+            "settle_time":    command.settle_time,
+            "n_points":       n_points,
+            "lpf_freq":       self.qcm.LPF_FREQ,
+        })
         for i in range(n_points):
             # Check for abort between points
             try:
                 cmd = self.command_queue.get_nowait()
                 if isinstance(cmd, AbortSweepCommand):
-                    self.event_queue.put(SweepCompleteEvent())
+                    self.sweep_logger.write_event("SWEEP_ABORTED", f"stopped after {i} of {n_points} points")
+                    self.event_queue.put(SweepCompleteEvent(name=self.sweep_logger.stop()))
                     return
             except queue.Empty:
                 pass
@@ -194,18 +268,45 @@ class QCMWorker(threading.Thread):
             time.sleep(command.settle_time)
             amplitude = self.qcm.getMag(command.oscillator_idx)
             phase = self.qcm.getPhase(command.oscillator_idx)
+            self.sweep_logger.write_point(freq, amplitude, phase, time.time())
             self.event_queue.put(SweepPointEvent(frequency=freq, amplitude=amplitude, phase=phase))
-        self.event_queue.put(SweepCompleteEvent())
+        self.event_queue.put(SweepCompleteEvent(name=self.sweep_logger.stop()))
+
+    def _check_target(self, data):
+        """Raise the target-thickness flag the first time the compensated
+        thickness reaches the target. The run is left running on purpose — the
+        operator (or the PLC reading the flag) decides what happens next, and an
+        unattended stop on a mis-set threshold would end the deposition early.
+
+        Only the upward crossing counts: thickness dips back below the target
+        (noise, a re-lock) must not retract a flag the PLC has already acted on.
+        """
+        thickness = data.calculated_thickness
+        if thickness is None or not math.isfinite(thickness):
+            return
+        self._last_thickness = thickness
+        if self.target_thickness <= 0 or self._target_reached:
+            return
+        if thickness >= self.target_thickness:
+            print(f"[QCM] Target thickness reached: {thickness:.3f} nm >= {self.target_thickness:.3f} nm")
+            self.logger.write_event("TARGET_REACHED", f"{thickness:.4f} nm >= target {self.target_thickness:.4f} nm")
+            self._set_target_reached(True, thickness)
 
     def update(self):
+        # Advance the phase-error window by exactly one sample per channel per
+        # cycle. This is the only place that samples it during normal running, so
+        # the window length translates directly into a time constant.
+        lock_mass, quality_mass = self.qcm.sampleLock(1)
+        lock_temp, quality_temp = self.qcm.sampleLock(2)
+
         # Emit lock status on change (immediate UI feedback) or as a periodic
         # heartbeat — not every loop iteration, which floods the WS clients.
-        lock_mass = self.qcm.getLockDetect(1)
-        lock_temp = self.qcm.getLockDetect(2)
         now = time.time()
         status = (lock_mass, lock_temp)
         if status != self._last_lock_status or now - self._last_lock_emit >= self.LOCK_STATUS_HEARTBEAT:
-            self.event_queue.put(LockStatusEvent(lock_mass=lock_mass, lock_temp=lock_temp))
+            self.event_queue.put(LockStatusEvent(
+                lock_mass=lock_mass, lock_temp=lock_temp,
+                quality_mass=quality_mass, quality_temp=quality_temp))
             self._last_lock_status = status
             self._last_lock_emit = now
 
@@ -230,5 +331,13 @@ class QCMWorker(threading.Thread):
 
             data = self.qcm.getMeasurement()
             self.logger.write_measurement(data)  # durable on-disk record (WS-independent)
+            self._check_target(data)
             self.event_queue.put(MeasurementEvent(data=data))
             self.qcm.moveWindow(data.freq_mass_mode, data.freq_temp_mode)  # keep the PLL capture window centered on the current frequencies
+            return
+
+        # Not measuring: push the raw readings anyway. Frequencies, amplitudes,
+        # phases and lock quality need neither a measurement reference nor a
+        # calibration, so there is no reason for the monitor to sit blank while
+        # the operator is locking up or judging a lock before starting a run.
+        self.event_queue.put(TelemetryEvent(data=self.qcm.getTelemetry()))

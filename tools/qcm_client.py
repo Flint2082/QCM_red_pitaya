@@ -52,15 +52,22 @@ class QCMClient:
     def state(self) -> str:
         return self._get("/state")["state"]
 
+    # ------------------------------------------------------------ target thickness
+    def set_target_thickness(self, value: float):
+        """Compensated thickness (nm) at which the target flag is raised; 0 = off.
+        Reaching it sets the flag here and on the PLC but does not stop the run."""
+        return self._post("/settings/target_thickness", value=value)
+
+    def target(self) -> dict:
+        """{target_thickness, enabled, reached, reached_at, thickness_at_target}."""
+        return self._get("/measurement/target")
+
     # -------------------------------------------------- oscillator / lock settings
     def set_frequency(self, oscillator_idx: int, frequency: float):
         return self._post("/settings/frequency", oscillator_idx=oscillator_idx, frequency=frequency)
 
     def set_integrator_gain(self, oscillator_idx: int, gain: float):
         return self._post("/settings/integrator_gain", oscillator_idx=oscillator_idx, gain=gain)
-
-    def set_proportional_gain(self, oscillator_idx: int, gain: float):
-        return self._post("/settings/proportional_gain", oscillator_idx=oscillator_idx, gain=gain)
 
     def set_lpf_freq(self, oscillator_idx: int, freq: float):
         """Demodulator low-pass cutoff frequency in Hz."""
@@ -69,15 +76,13 @@ class QCMClient:
     def set_inverted(self, oscillator_idx: int, inverted: bool):
         return self._post("/settings/inverted", oscillator_idx=oscillator_idx, inverted=bool(inverted))
 
-    def set_phase_detect(self, oscillator_idx: int, mode: int):
-        """Phase-detector type (FPGA mult_sel): 0 = ATAN (default), 1 = multiplier."""
-        return self._post("/settings/phase_detect", oscillator_idx=oscillator_idx, mode=int(mode))
-
     def set_output_mode(self, mode: int):
         return self._post("/settings/output_mode", mode=mode)
 
-    def set_lock_detect(self, amp_threshold: float, phase_tolerance: float):
-        return self._post("/settings/lock_detect", amp_threshold=amp_threshold, phase_tolerance=phase_tolerance)
+    def set_lock_detect(self, phase_tolerance: float, phase_std: float):
+        """Lock-detect limits, both in radians: max |mean phase error| and max
+        phase-error standard deviation over the lock window (lock quality)."""
+        return self._post("/settings/lock_detect", phase_tolerance=phase_tolerance, phase_std=phase_std)
 
     def set_auto_relock(self, enabled: bool):
         """Automatically re-acquire when lock is lost mid-measurement (default on)."""
@@ -110,7 +115,7 @@ class QCMClient:
         return self._post(f"/crystals/{name}/activate")
 
     def apply_crystal(self, name: str, **fields):
-        """fields: freq_mass, freq_temp, fM_0..fT_3, mass_sensitivity, sens_area, freq_virgin."""
+        """fields: freq_mass, freq_temp, fM_0..fT_3, mass_sensitivity, sens_area, freq_virgin, tooling_ratio."""
         return self._post(f"/crystals/{name}/apply", **fields)
 
     def save_current_to_crystal(self, name: str):
@@ -127,6 +132,44 @@ class QCMClient:
 
     def abort_sweep(self):
         return self._post("/sweep/abort")
+
+    # Window and step used by the SWEEP fM / SWEEP fT buttons in the web UI.
+    MODE_SWEEP_WINDOW = 500000.0  # Hz, total span
+    MODE_SWEEP_STEP   = 1000.0    # Hz
+
+    def sweep_mode(self, oscillator_idx: int, settle_time: float = 0.05):
+        """Sweep the standard window around the active crystal's lock frequency
+        for one mode (1 = mass, 2 = temp) — the scripted form of the SWEEP fM /
+        SWEEP fT buttons. Returns the sweep parameters that were started."""
+        freqs = self.get_lock_frequencies()
+        centre = freqs["mass"] if oscillator_idx == 1 else freqs["temp"]
+        if not centre:
+            raise RuntimeError(f"No lock frequency set for oscillator {oscillator_idx}")
+        start = centre - self.MODE_SWEEP_WINDOW / 2
+        stop = centre + self.MODE_SWEEP_WINDOW / 2
+        self.start_sweep(oscillator_idx, start, stop, self.MODE_SWEEP_STEP, settle_time)
+        return {"oscillator_idx": oscillator_idx, "start_freq": start, "stop_freq": stop,
+                "step_size": self.MODE_SWEEP_STEP, "settle_time": settle_time}
+
+    # --------------------------------------------------------- server-side sweeps
+    def sweeps(self) -> list:
+        return self._get("/sweeps")["sweeps"]
+
+    def download_sweep(self, name: str, dest_path: str):
+        r = requests.get(f"{self.base}/sweeps/{name}/download", timeout=self.timeout)
+        r.raise_for_status()
+        with open(dest_path, "wb") as f:
+            f.write(r.content)
+        return dest_path
+
+    def download_latest_sweep(self, dest_path: str):
+        sweeps = self.sweeps()
+        if not sweeps:
+            raise RuntimeError("No server-side sweeps available")
+        return self.download_sweep(sweeps[0]["name"], dest_path)
+
+    def delete_sweep(self, name: str):
+        return self._delete(f"/sweeps/{name}")
 
     # ------------------------------------------------------------ capacitor adjust
     def start_cap_adjust(self):
@@ -161,6 +204,14 @@ class QCMClient:
         if not runs:
             raise RuntimeError("No server-side runs available")
         return self.download_run(runs[0]["name"], dest_path)
+
+    # ------------------------------------------------------------------- system
+    def reboot(self, force: bool = False):
+        """Reboot the Red Pitaya. The FPGA bitstream reloads and the PLLs come up
+        unlocked, so it is the way out of a wedged instrument. Refused with HTTP
+        409 while a measurement is running unless force=True — a reboot ends that
+        run where it stands."""
+        return self._post("/system/reboot", force=force)
 
     # ------------------------------------------------------------- live streaming
     def stream(self, types=("MeasurementEvent",), limit=None):

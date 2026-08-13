@@ -1090,6 +1090,22 @@ function lockPhaseTarget() {
   return inv ? -Math.PI / 2 : Math.PI / 2;
 }
 
+// Direction of travel around the segment (i, i+1), taken from the steps either
+// side of it. Those neighbours sit off the steepest part of the transition, so
+// their shortest-path delta is trustworthy even when the crossing step's is not.
+// Returns null when there is no context at all (a two-point trace).
+function localTrend(phases, i) {
+  let sum = 0, n = 0;
+  const usable = v => v != null && isFinite(v);
+  if (i - 1 >= 0 && usable(phases[i - 1]) && usable(phases[i])) {
+    sum += wrapPi(phases[i] - phases[i - 1]); n++;
+  }
+  if (i + 2 < phases.length && usable(phases[i + 2]) && usable(phases[i + 1])) {
+    sum += wrapPi(phases[i + 2] - phases[i + 1]); n++;
+  }
+  return n ? sum : null;
+}
+
 // Returns the crossings in ascending frequency order.
 function findLockPoints(freqs, phases, amps, target) {
   const out = [];
@@ -1103,11 +1119,22 @@ function findLockPoints(freqs, phases, amps, target) {
     // errors come out negative.
     const ea = wrapPi(a - target), eb = wrapPi(b - target);
 
-    // The whole condition: previous sample above the lock point, next one below.
-    // Deliberately no limit on how far the phase moves in a single step — at a
-    // coarse step a high-Q resonance can swing most of its range between two
-    // samples, and requiring a small step is what made those go undetected.
+    // The core condition: previous sample above the lock point, next one below.
     if (!(ea > 0 && eb <= 0)) continue;
+
+    // That bracket alone is not decisive. The same pair of readings describes
+    // either a fall of (ea - eb) through the lock point, or a rise of the
+    // remaining 2π - (ea - eb) through the *opposite* quadrature point — which
+    // is why a trace rising through +π/2 was being marked while inverted.
+    //
+    // Below π the shortest path is the fall, and there is nothing to decide.
+    // Above it the pair is genuinely ambiguous (a coarse step across a sharp
+    // resonance lands here), so the neighbouring steps break the tie. No
+    // context at all means no evidence, and an unproven crossing is dropped.
+    if (ea - eb > Math.PI) {
+      const trend = localTrend(phases, i);
+      if (trend == null || trend >= 0) continue;
+    }
 
     // Linear interpolation on the phase error, so a 1 kHz step still puts the
     // frequency far closer than 1 kHz from the true crossing.

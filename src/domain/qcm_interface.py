@@ -384,6 +384,21 @@ class QCMInterface:
         
         if not bothLocked:
             print("Warning: PLLs did not lock within expected time. Check starting frequencies.")
+            # Lock now rests on two conditions per channel, so "did not lock" on
+            # its own narrows nothing down. Report both against their limits.
+            for i in (1, 2):
+                buf = self._phase_err[i]
+                if not buf:
+                    print(f"  Oscillator {i}: no phase samples taken")
+                    continue
+                mean, std = abs(float(np.mean(buf))), float(np.std(buf))
+                print(f"  Oscillator {i}: "
+                      f"|mean err| {mean:.4f} / {self.LOCK_PHASE_TOLERANCE} "
+                      f"{'ok' if mean < self.LOCK_PHASE_TOLERANCE else 'FAIL'}   "
+                      f"sigma {std:.4f} / {self.LOCK_PHASE_STD} "
+                      f"{'ok' if std < self.LOCK_PHASE_STD else 'FAIL'}   "
+                      f"(phase {self.getPhase(i):+.4f}, target "
+                      f"{self.getPhaseLockTarget(i):+.4f}, amp {self.getMag(i):.0f})")
         else:
             print("PLLs locked successfully at frequencies:")
             for i in (1, 2):

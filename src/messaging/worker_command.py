@@ -79,7 +79,8 @@ class SetLPFFreqCommand(WorkerCommand):
     
 @dataclass
 class SetOutputModeCommand(WorkerCommand):
-    oscillator_idx: int
+    # One analog output, one selector: the mode itself names the oscillator
+    # (MODE_1_* / MODE_2_*), so there is no separate oscillator index.
     mode: OutputMode
 
 @dataclass

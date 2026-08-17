@@ -18,6 +18,7 @@ import sys
 import threading
 import time
 from contextlib import asynccontextmanager
+from datetime import datetime, timezone
 
 import app
 import uvicorn
@@ -120,6 +121,31 @@ class _LoggingForwarder(logging.Handler):
 
 
 # ==================================================
+# Persistent settings
+# ==================================================
+
+# Every key _save_settings writes. Anything else found in settings.json comes
+# from an older version of this server: it is reported and dropped on load, so
+# the file never accumulates keys that no longer mean anything (which otherwise
+# makes it impossible to tell, while debugging, whether a value is in use).
+_SETTING_KEYS = frozenset({
+    "osc_settings", "output_mode", "lock_phase_tolerance", "lock_phase_std",
+    "auto_relock", "active_crystal", "ambient_temp", "mat_dens", "z_ratio",
+    "target_thickness",
+    "opc_url", "opc_user", "opc_password", "opc_base_node",
+})
+
+# OPC keys, kept together because they are carried through verbatim when the
+# bridge is disabled (see _save_settings).
+_OPC_SETTING_KEYS = ("opc_url", "opc_user", "opc_password", "opc_base_node")
+
+# What "restore defaults" covers: the instrument's own configuration. The OPC
+# connection is site wiring rather than a setting — resetting the PLC address
+# would cut the link to the coater, which is never what a restore is asking for.
+_DEFAULTABLE_KEYS = _SETTING_KEYS - set(_OPC_SETTING_KEYS)
+
+
+# ==================================================
 # WebSocket connection manager
 # ==================================================
 
@@ -207,8 +233,16 @@ class RestServer:
         self._session_thickness: float = 0.0
         # Persistent settings file
         self._settings_file = os.path.join(os.path.dirname(__file__), "..", "..", "data", "settings.json")
+        # OPC parameters as read from the file. Only used when the bridge is
+        # disabled (--no-opcua), where there is no client to read them back off.
+        self._opc_settings: dict = {}
+        # Settings RESTORE DEFAULTS returns to, and when they were captured.
+        self._defaults_file = os.path.join(os.path.dirname(__file__), "..", "..", "data", "defaults.json")
+        self._defaults: dict = {}
+        self._defaults_captured: str | None = None
         self._load_settings()   # override defaults with last saved values
-        self._enqueue_boot_settings()  # push persisted settings to the hardware on startup
+        self._load_defaults()   # after the settings: first run seeds from them
+        self._enqueue_settings("boot")  # push settings to the hardware on startup
         self.app = self._build_app()
         
 
@@ -217,27 +251,39 @@ class RestServer:
     # Persistent settings
     # --------------------------------------------------
 
-    def _load_settings(self):
-        try:
-            with open(self._settings_file) as f:
-                d = json.load(f)
-        except FileNotFoundError:
-            return  # first run — keep defaults
-        except Exception as e:
-            print(f"[Settings] Load failed: {e}")
-            return
+    def _instrument_settings(self) -> dict:
+        """How this instrument is configured, as plain data. Inner dicts are
+        copied so a caller holding the result (the defaults, in particular) does
+        not alias live state and quietly change with it."""
+        return {
+            "osc_settings":   {str(k): dict(v) for k, v in self._osc_settings.items()},
+            "output_mode":    self._output_mode,
+            "lock_phase_tolerance": self._lock_phase_tolerance,
+            "lock_phase_std":       self._lock_phase_std,
+            "auto_relock":    self._auto_relock,
+            "active_crystal": self._active_crystal,
+            "ambient_temp":   self._ambient_temp,
+            "mat_dens":       self._mat_dens,
+            "z_ratio":        self._z_ratio,
+            "target_thickness": self._target_thickness,
+        }
 
+    def _apply_settings(self, d: dict):
+        """Copy instrument settings out of a plain dict into live state. Shared by
+        the boot load and by restore-defaults, so both honour exactly the same
+        keys. Only the hardware push (_enqueue_settings) is left to the caller.
+
+        "lock_amp_threshold" / "auto_amp_threshold" may still be present in an old
+        settings.json from before lock detect went amplitude-free; unknown keys
+        are ignored here and dropped on the next save."""
         if "osc_settings" in d:
-            self._osc_settings = {int(k): v for k, v in d["osc_settings"].items()}
+            self._osc_settings = {int(k): dict(v) for k, v in d["osc_settings"].items()}
         if "output_mode" in d:
             self._output_mode = int(d["output_mode"])
         if "lock_phase_tolerance" in d:
             self._lock_phase_tolerance = float(d["lock_phase_tolerance"])
         if "lock_phase_std" in d:
             self._lock_phase_std = float(d["lock_phase_std"])
-        # "lock_amp_threshold" / "auto_amp_threshold" may still be present from
-        # before lock detect went amplitude-free; they are ignored and dropped on
-        # the next save.
         if "auto_relock" in d:
             self._auto_relock = bool(d["auto_relock"])
         if "active_crystal" in d:
@@ -250,38 +296,132 @@ class RestServer:
             self._z_ratio = float(d["z_ratio"])
         if "target_thickness" in d:
             self._target_thickness = float(d["target_thickness"])
-        # Restore OPC connection parameters without triggering a reconnect
-        if self._wago_client and "opc_url" in d:
-            self._wago_client.url      = d["opc_url"]
-            self._wago_client.user     = d.get("opc_user", "")
-            self._wago_client.password = d.get("opc_password", "")
+
+    def _load_settings(self):
+        try:
+            with open(self._settings_file) as f:
+                d = json.load(f)
+        except FileNotFoundError:
+            return  # first run — keep defaults
+        except Exception as e:
+            print(f"[Settings] Load failed: {e}")
+            return
+
+        self._apply_settings(d)
+
+        # Restore the OPC connection parameters. WagoClient is constructed — and
+        # has usually already auto-connected using its compiled-in defaults —
+        # before this runs, so assigning the attributes is not enough: the client
+        # would keep talking to the default server while reporting the persisted
+        # URL. set_connection drops the connection instead, and the OPC worker's
+        # reconnect loop brings it straight back up with the saved settings.
+        self._opc_settings = {k: d[k] for k in _OPC_SETTING_KEYS if k in d}
+        c = self._wago_client
+        if c and "opc_url" in d:
             if d.get("opc_base_node"):
-                self._wago_client.set_base_node_path(d["opc_base_node"])
+                c.set_base_node_path(d["opc_base_node"])
+            url, user, pwd = d["opc_url"], d.get("opc_user", ""), d.get("opc_password", "")
+            if (c.url, c.user, c.password) != (url, user, pwd):
+                c.set_connection(url, user, pwd)
+                print(f"[Settings] Applied persisted OPC connection {url}")
+
+        stale = set(d) - _SETTING_KEYS
+        if stale:
+            print(f"[Settings] Dropping obsolete keys: {', '.join(sorted(stale))}")
+            self._save_settings()
+
+    @staticmethod
+    def _write_json(path: str, data: dict, label: str) -> bool:
+        """Write JSON to a temp file and rename it into place.
+
+        Truncating the real file first means a full SD card (which this box has
+        hit before) or a power cut mid-write leaves a half-written file — which
+        fails to parse on the next boot and silently resets the instrument to
+        defaults. os.replace is atomic within a filesystem, so the old file
+        survives intact until the new one is complete.
+        """
+        tmp = path + ".tmp"
+        try:
+            os.makedirs(os.path.dirname(path), exist_ok=True)
+            with open(tmp, "w") as f:
+                json.dump(data, f, indent=2)
+                f.flush()
+                os.fsync(f.fileno())
+            os.replace(tmp, path)
+            return True
+        except Exception as e:
+            print(f"[{label}] Save failed: {e}")
+            try:
+                os.remove(tmp)
+            except OSError:
+                pass  # nothing to clean up
+            return False
 
     def _save_settings(self):
-        data = {
-            "osc_settings":   {str(k): v for k, v in self._osc_settings.items()},
-            "output_mode":    self._output_mode,
-            "lock_phase_tolerance": self._lock_phase_tolerance,
-            "lock_phase_std":       self._lock_phase_std,
-            "auto_relock":    self._auto_relock,
-            "active_crystal": self._active_crystal,
-            "ambient_temp": self._ambient_temp,
-            "mat_dens": self._mat_dens,
-            "z_ratio": self._z_ratio,
-            "target_thickness": self._target_thickness,
-        }
+        data = self._instrument_settings()
+        # The live client owns these while the bridge is enabled. With --no-opcua
+        # there is no client, so whatever was loaded from the file is written back
+        # unchanged — otherwise one run without the bridge would erase the PLC
+        # connection settings the moment any unrelated setting was saved.
         if self._wago_client:
             data["opc_url"]       = self._wago_client.url
             data["opc_user"]      = self._wago_client.user
             data["opc_password"]  = self._wago_client.password
             data["opc_base_node"] = self._wago_client.base_node_path
+        else:
+            data.update(self._opc_settings)
+        self._write_json(self._settings_file, data, "Settings")
+
+    # --------------------------------------------------
+    # Defaults
+    # --------------------------------------------------
+
+    def _load_defaults(self):
+        """Load the saved defaults, or seed them from the settings in force right
+        now.
+
+        Seeding on first run is what makes RESTORE DEFAULTS mean "back to the
+        setup this instrument was actually working with" rather than back to
+        values compiled in long ago that no deposition has ever been run with.
+        Re-capture at any time with POST /settings/defaults.
+        """
         try:
-            os.makedirs(os.path.dirname(self._settings_file), exist_ok=True)
-            with open(self._settings_file, "w") as f:
-                json.dump(data, f, indent=2)
+            with open(self._defaults_file) as f:
+                stored = json.load(f)
+            saved = stored.get("settings") or {}
+            if saved:
+                self._defaults = {k: v for k, v in saved.items() if k in _DEFAULTABLE_KEYS}
+                self._defaults_captured = stored.get("captured")
+                print(f"[Defaults] Loaded defaults captured {self._defaults_captured}")
+                return
+            print("[Defaults] defaults.json has no settings — re-seeding from current settings")
+        except FileNotFoundError:
+            print("[Defaults] No defaults yet — seeding from the current settings")
         except Exception as e:
-            print(f"[Settings] Save failed: {e}")
+            print(f"[Defaults] Load failed ({e}) — re-seeding from current settings")
+        self._capture_defaults()
+
+    def _capture_defaults(self) -> tuple[dict, bool]:
+        """Make the configuration in force right now the one RESTORE DEFAULTS
+        returns to. Returns the captured settings and whether they reached disk —
+        they hold for this session either way, but a failed write means the old
+        defaults come back at the next boot, which the operator has to be told."""
+        self._defaults = self._instrument_settings()
+        self._defaults_captured = datetime.now(timezone.utc).isoformat()
+        ok = self._write_json(self._defaults_file,
+                              {"captured": self._defaults_captured, "settings": self._defaults},
+                              "Defaults")
+        print(f"[Defaults] Captured the current settings as defaults ({self._defaults_captured})")
+        return self._defaults, ok
+
+    def _restore_defaults(self) -> dict:
+        """Put the defaults back into force — state, hardware and settings file.
+        Takes effect immediately, exactly as if each value had been set by hand;
+        the material parameters, as always, apply to the next run."""
+        self._apply_settings(self._defaults)
+        self._enqueue_settings("restore defaults")
+        self._save_settings()
+        return self._defaults
 
     # --------------------------------------------------
     # Control parameters (consumed by the OPC bridge for triggered actions)
@@ -321,10 +461,10 @@ class RestServer:
         ))
         self.command_queue.put(SetSensorParamsCommand(profile.mass_sensitivity, profile.sens_area, profile.freq_virgin, profile.tooling_ratio))
 
-    def _enqueue_boot_settings(self):
-        """Push persisted settings to the hardware at startup so saved values take
-        effect without a manual 'apply' click. These commands buffer on the queue
-        until the worker thread starts and drains them.
+    def _enqueue_settings(self, reason: str = "boot"):
+        """Push the current settings to the hardware so stored values take effect
+        without a manual 'apply' click. At startup these commands buffer on the
+        queue until the worker thread starts and drains them.
 
         Coefficients and lock frequencies come from the active crystal profile
         (the only persisted crystal state is which one is active), so the active
@@ -339,9 +479,9 @@ class RestServer:
                 self.command_queue.put(SetInvertedCommand(osc, bool(s["inverted"])))
 
         try:
-            self.command_queue.put(SetOutputModeCommand(1, OutputMode(self._output_mode)))
+            self.command_queue.put(SetOutputModeCommand(OutputMode(self._output_mode)))
         except ValueError:
-            print(f"[Settings] Skipping invalid persisted output_mode={self._output_mode} on boot")
+            print(f"[Settings] Skipping invalid output_mode={self._output_mode} ({reason})")
 
         self.command_queue.put(SetLockDetectCommand(self._lock_phase_tolerance, self._lock_phase_std))
         self.command_queue.put(SetAutoRelockCommand(self._auto_relock))
@@ -352,11 +492,11 @@ class RestServer:
             profile = self._crystals.load(self._active_crystal)
             if profile:
                 self._apply_crystal(profile)
-                print(f"[Settings] Applied active crystal '{self._active_crystal}' on boot")
+                print(f"[Settings] Applied active crystal '{self._active_crystal}' ({reason})")
             else:
                 print(f"[Settings] Active crystal '{self._active_crystal}' not found; skipping")
 
-        print("[Settings] Queued persisted settings to apply on boot")
+        print(f"[Settings] Queued settings to apply ({reason})")
 
     # --------------------------------------------------
     # System control
@@ -643,8 +783,15 @@ class RestServer:
 
         @app.post("/settings/output_mode")
         def set_output_mode(mode: int):
+            # Validate before storing: an unknown mode used to be written to
+            # _output_mode and only then raise, leaving the server reporting a
+            # mode the hardware never received.
+            try:
+                parsed = OutputMode(mode)
+            except ValueError:
+                raise HTTPException(400, f"Unknown output mode {mode}")
             self._output_mode = mode
-            self.command_queue.put(SetOutputModeCommand(1, OutputMode(mode)))
+            self.command_queue.put(SetOutputModeCommand(parsed))
             self._save_settings()
             return {"status": "ok"}
 
@@ -694,6 +841,33 @@ class RestServer:
                 "reached_at":       self._target_reached_at,
                 "thickness_at_target": self._target_thickness_at,
             }
+
+        # ---- Defaults ----
+
+        @app.get("/settings/defaults")
+        def get_defaults():
+            """The settings RESTORE DEFAULTS returns to, and when they were
+            captured. Seeded from whatever the instrument was configured with the
+            first time this server ran, so the defaults are a setup that works."""
+            return {"captured": self._defaults_captured, "settings": self._defaults}
+
+        @app.post("/settings/defaults")
+        def capture_defaults():
+            """Make the settings in force right now the defaults."""
+            settings, written = self._capture_defaults()
+            if not written:
+                raise HTTPException(500, "Defaults captured for this session but could not be "
+                                         "written to disk — check free space")
+            return {"status": "ok", "captured": self._defaults_captured, "settings": settings}
+
+        @app.post("/settings/restore_defaults")
+        def restore_defaults():
+            """Put the default settings back into force immediately. Covers
+            everything in the settings panel except the OPC connection; the
+            crystal calibration itself is untouched — only which profile is
+            active is restored."""
+            settings = self._restore_defaults()
+            return {"status": "ok", "captured": self._defaults_captured, "settings": settings}
 
         def _finite(v):
             return v if isinstance(v, float) and math.isfinite(v) else (None if isinstance(v, float) else v)
@@ -984,15 +1158,24 @@ class RestServer:
                 "user":      c.user      if c else "",
                 "base_node": c.base_node_path if c else "",
                 "connected": c.is_connected if c else False,
+                # The password itself is never handed back out; the UI only needs
+                # to know whether one is stored so it can say so in the field.
+                "has_password": bool(c.password) if c else False,
             }
 
         @app.post("/opc/connect")
-        def opc_connect(url: str, user: str = "", password: str = "", base_node: str | None = None):
+        def opc_connect(url: str, user: str = "", password: str | None = None,
+                        base_node: str | None = None):
             if not self._wago_client:
                 raise HTTPException(503, "OPC-UA bridge not enabled")
             if base_node is not None:
                 self._wago_client.set_base_node_path(base_node)
-            self._wago_client.set_connection(url, user, password)
+            # An omitted password means "keep the stored one". The UI never
+            # receives the saved password back, so its field is empty after every
+            # page load — sending that blank verbatim used to wipe the stored
+            # password whenever only the URL or username was edited.
+            pwd = self._wago_client.password if password is None else password
+            self._wago_client.set_connection(url, user, pwd)
             self._save_settings()
             return {"status": "ok", "url": url}
 

@@ -18,3 +18,5 @@ data/sweeps/
 
 # Runtime state written by the server, not source
 data/settings.json
+# Captured on the box from the setup in use there, so it is per-instrument
+data/defaults.json

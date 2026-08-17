@@ -417,7 +417,14 @@ footer { height: 24px; background: var(--surface); border-top: 1px solid var(--b
       <button class="btn btn-blue" id="btn-settings-apply" onclick="commitSettings()" disabled>APPLY</button>
       <button class="btn" id="btn-settings-undo" onclick="undoSettings()" disabled>UNDO</button>
       <div class="toolbar-sep"></div>
+      <button class="btn btn-orange" id="btn-settings-restore" onclick="restoreDefaults()"
+              title="Put the stored default settings back into force">RESTORE DEFAULTS</button>
+      <button class="btn" id="btn-settings-savedef" onclick="saveAsDefaults()"
+              title="Make the settings in force right now the defaults">SAVE AS DEFAULTS</button>
+      <div class="toolbar-sep"></div>
       <span id="settings-dirty-hint" style="font-family:'DM Mono',monospace;font-size:10px;color:var(--text-dim);letter-spacing:.06em">No pending changes</span>
+      <div class="header-spacer"></div>
+      <span id="settings-defaults-info" style="font-family:'DM Mono',monospace;font-size:10px;color:var(--text-dim);letter-spacing:.06em">—</span>
     </div>
     <div class="settings-layout">
       <div class="settings-nav">
@@ -526,7 +533,21 @@ footer { height: 24px; background: var(--surface); border-top: 1px solid var(--b
           <div class="settings-section-title">CRYSTAL PROFILE</div>
           <div class="settings-group">
             <div class="settings-row">
-              <div><div class="settings-row-label">Name</div><div class="settings-row-desc">Filename saved to data/crystals/</div></div>
+              <div><div class="settings-row-label">Saved Profiles</div><div class="settings-row-desc">Profiles stored on the Pitaya (data/crystals/). Selecting one loads it into the form below without changing anything on the instrument; ACTIVATE applies it and makes it the profile used on boot.</div></div>
+              <div></div>
+              <div style="display:flex;align-items:center;gap:6px">
+                <select class="settings-input" id="s-crystal-select" style="width:150px;text-align:left" onchange="onCrystalSelect(this.value)"><option value="">— none —</option></select>
+                <button class="btn btn-blue" onclick="activateSelectedCrystal()" title="Apply this profile to the instrument and remember it as the active crystal">ACTIVATE</button>
+                <button class="btn btn-red" onclick="deleteSelectedCrystal()" title="Delete this profile from the Pitaya">DELETE</button>
+              </div>
+            </div>
+            <div class="settings-row">
+              <div><div class="settings-row-label">Active Crystal</div><div class="settings-row-desc">Profile the instrument is using right now — its lock frequencies and calibration are what a run is acquired with</div></div>
+              <div></div>
+              <span id="s-crystal-active" style="font-family:'DM Mono',monospace;font-size:12px;color:var(--text-dim)">—</span>
+            </div>
+            <div class="settings-row">
+              <div><div class="settings-row-label">Name</div><div class="settings-row-desc">Filename saved to data/crystals/. APPLY writes the form to this name, so typing a new one saves a copy and activates it</div></div>
               <div></div>
               <div style="display:flex;align-items:center;gap:6px">
                 <input class="settings-input" type="text" id="s-crystal-name" style="width:150px;text-align:left" placeholder="my_crystal">
@@ -595,7 +616,8 @@ footer { height: 24px; background: var(--surface); border-top: 1px solid var(--b
           </div><!-- /crystal-advanced -->
 
           <div style="display:flex;gap:8px">
-            <button class="btn" onclick="revertCrystalDefaults()">REVERT TO DEFAULTS</button>
+            <button class="btn" onclick="revertCrystalDefaults()"
+                    title="Refill this form with the reference crystal values — does not touch the saved profile until APPLY">RESET FORM TO REFERENCE VALUES</button>
           </div>
         </div>
 
@@ -615,7 +637,7 @@ footer { height: 24px; background: var(--surface); border-top: 1px solid var(--b
                 <div class="notif-label">Sound alerts</div>
                 <div class="notif-desc">Audible beep on events</div>
               </div>
-              <label class="toggle-switch"><input type="checkbox" id="notif-sound" checked onchange="notifConfig.sound=this.checked"><span class="toggle-slider"></span></label>
+              <label class="toggle-switch"><input type="checkbox" id="notif-sound" checked onchange="setNotifOption('sound',this.checked)"><span class="toggle-slider"></span></label>
             </div>
           </div>
           <div class="settings-section-title">EVENTS</div>
@@ -625,35 +647,42 @@ footer { height: 24px; background: var(--surface); border-top: 1px solid var(--b
                 <div class="notif-label">Lock Lost</div>
                 <div class="notif-desc">PLL drops lock during measurement</div>
               </div>
-              <label class="toggle-switch"><input type="checkbox" id="notif-lockLost" checked onchange="notifConfig.lockLost=this.checked"><span class="toggle-slider"></span></label>
+              <label class="toggle-switch"><input type="checkbox" id="notif-lockLost" checked onchange="setNotifOption('lockLost',this.checked)"><span class="toggle-slider"></span></label>
             </div>
             <div class="notif-row">
               <div class="notif-row-info">
                 <div class="notif-label">Sweep Complete</div>
                 <div class="notif-desc">Frequency sweep finishes</div>
               </div>
-              <label class="toggle-switch"><input type="checkbox" id="notif-sweepComplete" checked onchange="notifConfig.sweepComplete=this.checked"><span class="toggle-slider"></span></label>
+              <label class="toggle-switch"><input type="checkbox" id="notif-sweepComplete" checked onchange="setNotifOption('sweepComplete',this.checked)"><span class="toggle-slider"></span></label>
             </div>
             <div class="notif-row">
               <div class="notif-row-info">
                 <div class="notif-label">Target Thickness Reached</div>
                 <div class="notif-desc">Deposition reaches the target set under Measurement</div>
               </div>
-              <label class="toggle-switch"><input type="checkbox" id="notif-targetReached" checked onchange="notifConfig.targetReached=this.checked"><span class="toggle-slider"></span></label>
+              <label class="toggle-switch"><input type="checkbox" id="notif-targetReached" checked onchange="setNotifOption('targetReached',this.checked)"><span class="toggle-slider"></span></label>
             </div>
             <div class="notif-row">
               <div class="notif-row-info">
                 <div class="notif-label">OPC Connection Lost</div>
                 <div class="notif-desc">WAGO PLC link drops</div>
               </div>
-              <label class="toggle-switch"><input type="checkbox" id="notif-opcLost" checked onchange="notifConfig.opcLost=this.checked"><span class="toggle-slider"></span></label>
+              <label class="toggle-switch"><input type="checkbox" id="notif-opcLost" checked onchange="setNotifOption('opcLost',this.checked)"><span class="toggle-slider"></span></label>
             </div>
             <div class="notif-row">
               <div class="notif-row-info">
                 <div class="notif-label">WebSocket Disconnected</div>
                 <div class="notif-desc">Backend server connection lost</div>
               </div>
-              <label class="toggle-switch"><input type="checkbox" id="notif-wsLost" checked onchange="notifConfig.wsLost=this.checked"><span class="toggle-slider"></span></label>
+              <label class="toggle-switch"><input type="checkbox" id="notif-wsLost" checked onchange="setNotifOption('wsLost',this.checked)"><span class="toggle-slider"></span></label>
+            </div>
+            <div class="notif-row">
+              <div class="notif-row-info">
+                <div class="notif-label">Run Not Being Recorded</div>
+                <div class="notif-desc">The run log could not be written (usually a full disk) — the measurement continues but no CSV is produced</div>
+              </div>
+              <label class="toggle-switch"><input type="checkbox" id="notif-recFailed" checked onchange="setNotifOption('recFailed',this.checked)"><span class="toggle-slider"></span></label>
             </div>
           </div>
           <button class="btn" onclick="testNotifSound()" style="margin-right:8px">TEST SOUND</button>
@@ -703,6 +732,42 @@ function setWindowMonitor(v) {
   MAX_PTS_MONITOR = Math.max(50, parseInt(v) || 300);
   document.getElementById('input-window-monitor').value = MAX_PTS_MONITOR;
 }
+
+// ---- UI preferences ----
+// Chart window lengths and sweep parameters are operator-side view/scan choices,
+// not instrument state, so they live in this browser rather than in the Pitaya's
+// settings.json. Without this every reload silently put back the hard-coded
+// defaults, which is a nuisance when a crystal needs a particular sweep span.
+const UI_STORE_KEY = 'qcm.ui';
+const UI_PREF_IDS = ['input-window-main', 'input-window-monitor',
+                     'sweep-osc', 'sweep-start', 'sweep-stop', 'sweep-step', 'sweep-settle'];
+
+function saveUiPrefs() {
+  try {
+    const out = {};
+    for (const id of UI_PREF_IDS) {
+      const el = document.getElementById(id);
+      if (el) out[id] = el.value;
+    }
+    localStorage.setItem(UI_STORE_KEY, JSON.stringify(out));
+  } catch(e) { /* private mode / storage disabled — defaults still work */ }
+}
+
+function loadUiPrefs() {
+  let saved = null;
+  try { saved = JSON.parse(localStorage.getItem(UI_STORE_KEY) || 'null'); } catch(e) {}
+  if (saved) {
+    for (const id of UI_PREF_IDS) {
+      const el = document.getElementById(id);
+      if (el && saved[id] != null && saved[id] !== '') el.value = saved[id];
+    }
+  }
+  // The chart windows are held in JS variables, not read from the DOM per point.
+  setWindowMain(document.getElementById('input-window-main').value);
+  setWindowMonitor(document.getElementById('input-window-monitor').value);
+  for (const id of UI_PREF_IDS) document.getElementById(id)?.addEventListener('change', saveUiPrefs);
+}
+loadUiPrefs();
 // ---- State tracking ----
 let lockMass = false;
 let lockTemp = false;
@@ -1480,8 +1545,41 @@ function showToast(msg, isError = false, isWarning = false) {
 }
 
 // ---- Notification system ----
+// Preferences are per-browser (two operators on two laptops want their own), so
+// they persist to localStorage rather than to the instrument's settings.json.
+const NOTIF_STORE_KEY = 'qcm.notifications';
 const notifConfig = { enabled: false, sound: true, lockLost: true, sweepComplete: true, opcLost: true, wsLost: true, recFailed: true, targetReached: true };
 let _audioCtx = null;
+
+function setNotifOption(key, value) {
+  notifConfig[key] = value;
+  try { localStorage.setItem(NOTIF_STORE_KEY, JSON.stringify(notifConfig)); } catch(e) {}
+}
+
+// Restore the saved preferences into both the config and the checkboxes. The
+// browser-notification toggle is additionally gated on the permission still
+// being granted — it can be revoked in the browser between sessions, and a
+// toggle that reads "on" while nothing can be delivered is worse than "off".
+function loadNotifConfig() {
+  let saved = null;
+  try { saved = JSON.parse(localStorage.getItem(NOTIF_STORE_KEY) || 'null'); } catch(e) {}
+  if (saved) {
+    for (const k of Object.keys(notifConfig)) {
+      if (typeof saved[k] === 'boolean') notifConfig[k] = saved[k];
+    }
+  }
+  if (notifConfig.enabled && !('Notification' in window && Notification.permission === 'granted')) {
+    notifConfig.enabled = false;
+  }
+  for (const [k, id] of Object.entries({ enabled: 'notif-browser', sound: 'notif-sound',
+        lockLost: 'notif-lockLost', sweepComplete: 'notif-sweepComplete',
+        targetReached: 'notif-targetReached', opcLost: 'notif-opcLost',
+        wsLost: 'notif-wsLost', recFailed: 'notif-recFailed' })) {
+    const el = document.getElementById(id);
+    if (el) el.checked = notifConfig[k];
+  }
+}
+loadNotifConfig();
 
 function getAudioCtx() {
   if (!_audioCtx) _audioCtx = new (window.AudioContext || window.webkitAudioContext)();
@@ -1556,15 +1654,14 @@ function sendNotif(title, body, eventType) {
 function requestNotifPermission() {
   if ('Notification' in window) {
     Notification.requestPermission().then(p => {
-      if (p === 'granted') {
-        notifConfig.enabled = true;
-        document.getElementById('notif-browser').checked = true;
-        showToast('Notifications enabled');
-      } else {
-        showToast('Permission denied', true);
-      }
+      const granted = p === 'granted';
+      setNotifOption('enabled', granted);
+      document.getElementById('notif-browser').checked = granted;
+      showToast(granted ? 'Notifications enabled' : 'Permission denied', !granted);
     });
   } else {
+    document.getElementById('notif-browser').checked = false;
+    setNotifOption('enabled', false);
     showToast('Notifications not supported', true);
   }
 }
@@ -1573,7 +1670,7 @@ function onNotifBrowserToggle(checked) {
   if (checked && 'Notification' in window && Notification.permission !== 'granted') {
     requestNotifPermission();
   } else {
-    notifConfig.enabled = checked;
+    setNotifOption('enabled', checked);
   }
 }
 
@@ -1858,6 +1955,65 @@ async function loadCrystalForm(name) {
   } catch(e) { console.warn('Could not load crystal form', e); }
 }
 
+// ---- Crystal profile management ----
+// The picker is the only way to see what is actually stored on the Pitaya: with
+// a bare name box there is no telling a typo from a new profile, and no way to
+// switch to or remove one. The endpoints have always been there.
+let _activeCrystal = null;
+
+async function refreshCrystalList(select = null) {
+  const sel = document.getElementById('s-crystal-select');
+  if (!sel) return;
+  try {
+    const d = await fetch(`${API_URL}/crystals`).then(r => r.json());
+    const names = d.crystals || [];
+    _activeCrystal = d.active || null;
+    // Names are sanitized server-side (alphanumerics, - and _ only).
+    const chosen = select ?? (sel.value || _activeCrystal || names[0] || '');
+    sel.innerHTML = names.length
+      ? names.map(n => `<option value="${n}"${n === chosen ? ' selected' : ''}>${n === _activeCrystal ? '● ' : ''}${n}</option>`).join('')
+      : '<option value="">— no profiles —</option>';
+    setText('s-crystal-active', _activeCrystal || 'none');
+  } catch(e) { /* crystals endpoint may not be available on a test server */ }
+}
+
+// Selecting loads the form only — nothing reaches the hardware until ACTIVATE
+// (or APPLY, which saves the form under its name and activates that).
+async function onCrystalSelect(name) {
+  if (!name) return;
+  await loadCrystalForm(name);
+  showToast(`Loaded "${name}" — ACTIVATE to apply it`);
+}
+
+async function activateSelectedCrystal() {
+  const name = document.getElementById('s-crystal-select').value;
+  if (!name) { showToast('No profile selected', true); return; }
+  try {
+    const r = await fetch(`${API_URL}/crystals/${encodeURIComponent(name)}/activate`, { method: 'POST' });
+    if (!r.ok) { showToast('Activate failed', true); return; }
+    await loadCrystalForm(name);
+    await refreshCrystalList(name);
+    snapshotBaseline();   // the form now matches what the instrument is using
+    showToast(`Crystal "${name}" is now active`);
+  } catch(e) { showToast('Activate failed', true); }
+}
+
+async function deleteSelectedCrystal() {
+  const name = document.getElementById('s-crystal-select').value;
+  if (!name) { showToast('No profile selected', true); return; }
+  const extra = (name === _activeCrystal)
+    ? '\n\nThis is the ACTIVE crystal — the instrument keeps its current settings but will boot with no profile until you activate another one.'
+    : '';
+  if (!confirm(`Delete crystal profile "${name}"?\n\nIts calibration lives only on the Pitaya and cannot be recovered.${extra}`)) return;
+  try {
+    const r = await fetch(`${API_URL}/crystals/${encodeURIComponent(name)}`, { method: 'DELETE' });
+    if (!r.ok) { showToast('Delete failed', true); return; }
+    showToast(`Deleted "${name}"`);
+    document.getElementById('s-crystal-select').value = '';
+    await refreshCrystalList();
+  } catch(e) { showToast('Delete failed', true); }
+}
+
 async function loadInitialSettings() {
   let s = null;
   try {
@@ -1889,13 +2045,11 @@ async function loadInitialSettings() {
   } catch(e) { /* backend not yet reachable */ }
 
   let crystalLoaded = false;
-  try {
-    const cl = await fetch(`${API_URL}/crystals`).then(r => r.json());
-    if (cl.active) {
-      await loadCrystalForm(cl.active);
-      crystalLoaded = true;
-    }
-  } catch(e) { /* crystals endpoint may not be available on test server */ }
+  await refreshCrystalList();   // also resolves _activeCrystal
+  if (_activeCrystal) {
+    await loadCrystalForm(_activeCrystal);
+    crystalLoaded = true;
+  }
 
   if (!crystalLoaded && s) {
     const lf = s.lock_frequencies;
@@ -1917,6 +2071,10 @@ async function loadInitialSettings() {
     if (opc.url)       document.getElementById('s-opc-url').value  = opc.url;
     if (opc.user)      document.getElementById('s-opc-user').value = opc.user;
     if (opc.base_node) document.getElementById('s-opc-base').value = opc.base_node;
+    // The stored password is never sent to the browser. Say whether one exists,
+    // so an empty field reads as "unchanged" rather than "no password set".
+    const pw = document.getElementById('s-opc-password');
+    if (pw) pw.placeholder = opc.has_password ? '•••••• (unchanged)' : '(none set)';
   } catch(e) { /* OPC bridge may not be enabled */ }
   loadOpcNodes();
 
@@ -1929,6 +2087,7 @@ async function loadInitialSettings() {
     document.getElementById('target-pill').style.display = _targetReached ? 'flex' : 'none';
   } catch(e) { /* older backend without the target endpoint */ }
   updateTargetStatus();
+  await loadDefaultsInfo();
   snapshotBaseline();   // everything just loaded is the clean baseline
 }
 loadInitialSettings();
@@ -1940,7 +2099,11 @@ async function connectOpc() {
   const base     = document.getElementById('s-opc-base').value.trim();
   if (!url) { showToast('Enter a server URL', true); return; }
   try {
-    const params = `url=${encodeURIComponent(url)}&user=${encodeURIComponent(user)}&password=${encodeURIComponent(password)}&base_node=${encodeURIComponent(base)}`;
+    const params = new URLSearchParams({ url, user, base_node: base });
+    // A blank field means "keep the stored password". The server never sends it
+    // back, so the box is empty after every page load — submitting that verbatim
+    // used to wipe the saved password whenever only the URL or user was edited.
+    if (password) params.set('password', password);
     const r = await fetch(`${API_URL}/opc/connect?${params}`, { method: 'POST' });
     if (r.ok) { showToast('Reconnecting…'); loadOpcNodes(); }
     else showToast('Connect failed', true);
@@ -2169,18 +2332,31 @@ async function sendCommand(action) {
   try { await fetch(url, { method: 'POST' }); } catch(e) { console.error('Command failed:', e); }
 }
 
+// POST that treats an HTTP error as a failure. fetch() only rejects on network
+// errors, so without this a 4xx/5xx from a settings endpoint sailed through and
+// APPLY reported success for a change the server had refused.
+async function postOrThrow(url) {
+  const r = await fetch(url, { method: 'POST' });
+  if (!r.ok) {
+    let detail = '';
+    try { detail = (await r.json()).detail || ''; } catch(e) {}
+    throw new Error(`${url.split('?')[0].replace(API_URL, '')} → ${r.status} ${detail || r.statusText}`);
+  }
+  return r;
+}
+
 async function applyOscSettings(osc) {
   const intGain  = parseFloat(document.getElementById(`s-osc${osc}-int`).value);
   const lpfFreq  = parseFloat(document.getElementById(`s-osc${osc}-lpf`).value);
   const inv      = document.getElementById(`s-osc${osc}-inv`).value === '1';
-  await fetch(`${API_URL}/settings/integrator_gain?oscillator_idx=${osc}&gain=${intGain}`, { method: 'POST' });
-  await fetch(`${API_URL}/settings/lpf_freq?oscillator_idx=${osc}&freq=${lpfFreq}`, { method: 'POST' });
-  await fetch(`${API_URL}/settings/inverted?oscillator_idx=${osc}&inverted=${inv}`, { method: 'POST' });
+  await postOrThrow(`${API_URL}/settings/integrator_gain?oscillator_idx=${osc}&gain=${intGain}`);
+  await postOrThrow(`${API_URL}/settings/lpf_freq?oscillator_idx=${osc}&freq=${lpfFreq}`);
+  await postOrThrow(`${API_URL}/settings/inverted?oscillator_idx=${osc}&inverted=${inv}`);
 }
 
 async function applyCrystal() {
   const name = document.getElementById('s-crystal-name').value.trim();
-  if (!name) { showToast('Enter a crystal name', true); return; }
+  if (!name) throw new Error('Enter a crystal name');
   const g = id => parseFloat(document.getElementById(id).value);
   const params = [
     `freq_mass=${g('s-crystal-freq-mass')}`, `freq_temp=${g('s-crystal-freq-temp')}`,
@@ -2192,15 +2368,16 @@ async function applyCrystal() {
     `tooling_ratio=${g('s-crystal-tooling')}`,
     `freq_virgin=${g('s-crystal-freq-virgin')}`,
   ].join('&');
-  try {
-    const r = await fetch(`${API_URL}/crystals/${encodeURIComponent(name)}/apply?${params}`, { method: 'POST' });
-    if (r.ok) showToast(`Crystal "${name}" applied`);
-    else showToast('Apply failed', true);
-  } catch(e) { showToast('Apply failed', true); }
+  // Saves the form under this name and makes it the active crystal. Errors
+  // propagate so APPLY can report them instead of claiming success.
+  await postOrThrow(`${API_URL}/crystals/${encodeURIComponent(name)}/apply?${params}`);
+  await refreshCrystalList(name);
 }
 
-// Default values for the crystal form (matches the CrystalProfile dataclass
-// defaults on the backend). Resets the form only — APPLY saves it.
+// Reference values for the crystal form (matching the CrystalProfile dataclass
+// defaults on the backend). This refills the form only — APPLY saves it — and is
+// separate from the toolbar's RESTORE DEFAULTS, which puts the whole instrument
+// configuration back and never rewrites a crystal's calibration.
 const CRYSTAL_DEFAULTS = {
   's-crystal-freq-mass': 5983000,
   's-crystal-freq-temp': 6570000,
@@ -2219,7 +2396,7 @@ function revertCrystalDefaults() {
   }
   updateCoeffCharts();
   updateDirtyState();
-  showToast('Crystal form reset to defaults — click APPLY to save');
+  showToast('Crystal form reset to the reference values — click APPLY to save');
 }
 
 async function downloadCrystal() {
@@ -2227,7 +2404,9 @@ async function downloadCrystal() {
   if (!name) { showToast('Enter a crystal name first', true); return; }
   const exists = await fetch(`${API_URL}/crystals/${encodeURIComponent(name)}`).then(r => r.ok);
   if (!exists) {
-    await applyCrystal();
+    // Nothing stored under this name yet — save the form first, then download it.
+    try { await applyCrystal(); }
+    catch(e) { showToast(`Could not save "${name}": ${e.message || e}`, true); return; }
     const saved = await fetch(`${API_URL}/crystals/${encodeURIComponent(name)}`).then(r => r.ok);
     if (!saved) return;
   }
@@ -2243,8 +2422,9 @@ async function uploadCrystal(input) {
     const r = await fetch(`${API_URL}/crystals/upload`, { method: 'POST', body: form });
     if (r.ok) {
       const { name } = await r.json();
-      showToast(`Uploaded "${name}"`);
+      showToast(`Uploaded "${name}" — ACTIVATE to apply it`);
       await loadCrystalForm(name);
+      await refreshCrystalList(name);
     } else { showToast('Upload failed', true); }
   } catch(e) { showToast('Upload failed', true); }
   input.value = '';
@@ -2269,31 +2449,50 @@ function goToCrystalSettings() {
 
 async function applyOutputMode() {
   const mode = parseInt(document.getElementById('s-output-mode').value);
-  await fetch(`${API_URL}/settings/output_mode?mode=${mode}`, { method: 'POST' });
+  await postOrThrow(`${API_URL}/settings/output_mode?mode=${mode}`);
 }
 
 async function applyLockDetect() {
   const phase = parseFloat(document.getElementById('s-lock-phase').value);
   const std   = parseFloat(document.getElementById('s-lock-std').value);
-  await fetch(`${API_URL}/settings/lock_detect?phase_tolerance=${phase}&phase_std=${std}`, { method: 'POST' });
+  await postOrThrow(`${API_URL}/settings/lock_detect?phase_tolerance=${phase}&phase_std=${std}`);
   const relock = document.getElementById('s-auto-relock').value === '1';
-  await fetch(`${API_URL}/settings/auto_relock?enabled=${relock}`, { method: 'POST' });
+  await postOrThrow(`${API_URL}/settings/auto_relock?enabled=${relock}`);
 }
 
 async function applyMeasurementParams() {
   const t    = parseFloat(document.getElementById('s-amb-temp').value);
   const dens = parseFloat(document.getElementById('s-mat-dens').value);
   const zr   = parseFloat(document.getElementById('s-mat-zratio').value);
-  if ([t, dens, zr].some(isNaN)) return;
+  if ([t, dens, zr].some(isNaN)) throw new Error('Ambient temp, density and Z-ratio must be numbers');
   const target = parseFloat(document.getElementById('s-target-thickness').value);
-  await fetch(`${API_URL}/settings/measurement_params?ambient_temp=${t}&mat_dens=${dens}&z_ratio=${zr}`
-            + (isNaN(target) ? '' : `&target_thickness=${target}`), { method: 'POST' });
+  await postOrThrow(`${API_URL}/settings/measurement_params?ambient_temp=${t}&mat_dens=${dens}&z_ratio=${zr}`
+            + (isNaN(target) ? '' : `&target_thickness=${target}`));
   updateTargetStatus();
 }
 
-async function applyAllSettings() { await applyOscSettings(1); await applyOscSettings(2); await applyMeasurementParams(); await applyOutputMode(); await applyLockDetect(); await applyCrystal(); }
+async function applyAllSettings() {
+  await applyOscSettings(1);
+  await applyOscSettings(2);
+  await applyMeasurementParams();
+  await applyOutputMode();
+  await applyLockDetect();
+  // Only when the crystal form itself changed. APPLY used to push it every time,
+  // so editing an unrelated field re-saved the profile from whatever happened to
+  // be in the form — and re-activated it — quietly overwriting a stored
+  // calibration with a stale one.
+  if (isDirty(CRYSTAL_SETTING_IDS)) await applyCrystal();
+}
 
 // ---- Dirty-state tracking for the unified APPLY / UNDO buttons ----
+// The crystal form is tracked as its own group because APPLY writes it back to a
+// named profile — a write worth doing only when the operator actually touched it.
+const CRYSTAL_SETTING_IDS = [
+  's-crystal-name', 's-crystal-freq-mass', 's-crystal-freq-temp', 's-crystal-freq-virgin',
+  's-crystal-mass-sens', 's-crystal-sens-area', 's-crystal-tooling',
+  's-coeff-fM0', 's-coeff-fM1', 's-coeff-fM2', 's-coeff-fM3',
+  's-coeff-fT0', 's-coeff-fT1', 's-coeff-fT2', 's-coeff-fT3',
+];
 // Every settings input that APPLY commits. OPC fields are excluded (they have
 // their own CONNECT action).
 const SETTING_IDS = [
@@ -2301,13 +2500,17 @@ const SETTING_IDS = [
   's-osc1-int', 's-osc1-lpf', 's-osc1-inv',
   's-osc2-int', 's-osc2-lpf', 's-osc2-inv',
   's-lock-phase', 's-lock-std', 's-auto-relock', 's-output-mode',
-  's-crystal-name', 's-crystal-freq-mass', 's-crystal-freq-temp', 's-crystal-freq-virgin',
-  's-crystal-mass-sens', 's-crystal-sens-area', 's-crystal-tooling',
-  's-coeff-fM0', 's-coeff-fM1', 's-coeff-fM2', 's-coeff-fM3',
-  's-coeff-fT0', 's-coeff-fT1', 's-coeff-fT2', 's-coeff-fT3',
+  ...CRYSTAL_SETTING_IDS,
 ];
 let _baseline = {};            // last applied / loaded values
 let _baselineReady = false;
+
+function isDirty(ids) {
+  return ids.some(id => {
+    const el = document.getElementById(id);
+    return el && String(el.value) !== String(_baseline[id] ?? '');
+  });
+}
 
 function snapshotBaseline() {
   _baseline = {};
@@ -2321,15 +2524,72 @@ function snapshotBaseline() {
 
 function updateDirtyState() {
   if (!_baselineReady) return;
-  let dirty = false;
-  for (const id of SETTING_IDS) {
-    const el = document.getElementById(id);
-    if (el && String(el.value) !== String(_baseline[id] ?? '')) { dirty = true; break; }
-  }
+  const dirty = isDirty(SETTING_IDS);
   document.getElementById('btn-settings-apply').disabled = !dirty;
   document.getElementById('btn-settings-undo').disabled  = !dirty;
   const hint = document.getElementById('settings-dirty-hint');
-  if (hint) hint.textContent = dirty ? 'Pending changes — APPLY takes effect on next START' : 'No pending changes';
+  // Most settings take effect the moment APPLY sends them (the material
+  // parameters are the ones that wait for the next START), so don't promise
+  // otherwise here.
+  if (hint) hint.textContent = dirty ? 'Pending changes — not applied yet' : 'No pending changes';
+}
+
+// ---- Defaults ----
+// RESTORE DEFAULTS returns to the configuration captured with SAVE AS DEFAULTS.
+// The backend seeds that from whatever the instrument was already running the
+// first time it started with this feature, so "default" means a setup that has
+// actually produced depositions — not values compiled in long ago.
+let _defaultsCaptured = null;
+
+function setDefaultsInfo(captured) {
+  _defaultsCaptured = captured || null;
+  const el = document.getElementById('settings-defaults-info');
+  if (!el) return;
+  el.textContent = _defaultsCaptured
+    ? `Defaults captured ${new Date(_defaultsCaptured).toLocaleString()}`
+    : 'No defaults stored';
+}
+
+async function loadDefaultsInfo() {
+  try {
+    const d = await fetch(`${API_URL}/settings/defaults`).then(r => r.json());
+    setDefaultsInfo(d.captured);
+  } catch(e) { /* backend without the defaults endpoint */ }
+}
+
+async function restoreDefaults() {
+  const when = _defaultsCaptured ? ` captured ${new Date(_defaultsCaptured).toLocaleString()}` : '';
+  const running = _isRunning
+    ? '\n\nA MEASUREMENT IS RUNNING — the loop gains and lock limits change under it.'
+    : '';
+  if (!confirm(
+      `Restore the default settings${when}?\n\n`
+    + 'Oscillator gains, LPF cutoffs, feedback inversion, output mode, lock detection, '
+    + 'auto re-lock, the film parameters, the target thickness and the active crystal all '
+    + 'go back to their defaults, immediately. Unapplied edits in this panel are discarded.\n\n'
+    + 'The OPC connection and the stored crystal calibrations are not touched.'
+    + running)) return;
+  try {
+    const d = await (await postOrThrow(`${API_URL}/settings/restore_defaults`)).json();
+    setDefaultsInfo(d.captured);
+    await loadInitialSettings();   // re-read everything, baseline included
+    showToast('Defaults restored');
+  } catch(e) { showToast(`Restore failed — ${e.message || e}`, true); }
+}
+
+async function saveAsDefaults() {
+  if (isDirty(SETTING_IDS) && !confirm(
+      'This panel has changes that have not been applied.\n\n'
+    + 'Only the settings actually in force are captured — APPLY first if the edits '
+    + 'should become part of the defaults. Continue anyway?')) return;
+  if (!confirm(
+      'Make the settings in force right now the defaults?\n\n'
+    + 'RESTORE DEFAULTS will return here from now on. The previous defaults are replaced.')) return;
+  try {
+    const d = await (await postOrThrow(`${API_URL}/settings/defaults`)).json();
+    setDefaultsInfo(d.captured);
+    showToast('Current settings saved as the defaults');
+  } catch(e) { showToast(`Could not save defaults — ${e.message || e}`, true); }
 }
 
 async function commitSettings() {
@@ -2340,7 +2600,9 @@ async function commitSettings() {
     showToast('Settings applied');
   } catch (e) {
     updateDirtyState();   // re-enable so the change can be retried
-    showToast('Apply failed', true);
+    // Name what failed: a silent "Apply failed" left no way to tell a rejected
+    // value from an unreachable backend.
+    showToast(`Apply failed — ${e.message || e}`, true);
   }
 }
 

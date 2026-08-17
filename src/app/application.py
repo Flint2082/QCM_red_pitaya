@@ -140,7 +140,7 @@ class Application(threading.Thread):
         elif isinstance(command, ac.SetLPFFreqCommand):
             self.worker_command_queue.put(wc.SetLPFFreqCommand(command.oscillator_idx, command.freq))
         elif isinstance(command, ac.SetOutputModeCommand):
-            self.worker_command_queue.put(wc.SetOutputModeCommand(command.oscillator_idx, command.mode))
+            self.worker_command_queue.put(wc.SetOutputModeCommand(command.mode))
         elif isinstance(command, ac.SetLockDetectCommand):
             self.worker_command_queue.put(wc.SetLockDetectCommand(command.phase_tolerance, command.phase_std))
         elif isinstance(command, ac.SetAutoRelockCommand):

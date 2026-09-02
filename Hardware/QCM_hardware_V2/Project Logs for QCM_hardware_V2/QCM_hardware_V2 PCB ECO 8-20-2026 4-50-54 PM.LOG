@@ -1,0 +1,177 @@
+Removed Pin From Net: NetName=GND Pin=J?-1
+Removed Pin From Net: NetName=+12 Pin=J?-2
+Change Component Footprint: Designator=J? Old Footprint=G125-FS12605L0P_MFG New Footprint=SFH11-PBPC-D13-ST-BK_MFG
+Change Component Footprint: Designator=J? Old Footprint=G125-FS12605L0P_MFG New Footprint=SFH11-PBPC-D13-ST-BK_MFG
+Change Component Footprint: Designator=J? Old Footprint=KYCN-KLDX-0202-B_V New Footprint=SFH11-PBPC-D13-ST-BK_MFG
+Change Component Footprint: Designator=J? Old Footprint=SMA_SM_JOHNSON_142-0701-841 New Footprint=SFH11-PBPC-D13-ST-BK_MFG
+Change Component Comment : Designator=J? Old Comment=G125-FS12605L0P New Comment=SFH11-PBPC-D13-ST-BK
+Change Component Comment : Designator=J? Old Comment=G125-FS12605L0P New Comment=SFH11-PBPC-D13-ST-BK
+Change Component Comment : Designator=J? Old Comment=KLDX-0202-B New Comment=SFH11-PBPC-D13-ST-BK
+Change Component Comment : Designator=J? Old Comment=SMA New Comment=SFH11-PBPC-D13-ST-BK
+Change Managed Component Library Link : Designator=J? Old VaultGUID=B7D15EC3-160A-466F-A46C-7801FE6295A7 New VaultGUID=B7D15EC3-160A-466F-A46C-7801FE6295A7 Old ItemGUID=5EE002E2-C51C-4DBF-A5BE-C4400F8A5E22 New ItemGUID=E904974A-BB8D-42F4-93A6-30731C509D82 Old RevisionGUID=1DFF7353-2FF9-4A97-9193-0FDA92E03F3D New RevisionGUID=9F913A6F-2768-4C2C-81FF-074DD0DE17B0
+Change Managed Component Library Link : Designator=J? Old VaultGUID=B7D15EC3-160A-466F-A46C-7801FE6295A7 New VaultGUID=B7D15EC3-160A-466F-A46C-7801FE6295A7 Old ItemGUID=5EE002E2-C51C-4DBF-A5BE-C4400F8A5E22 New ItemGUID=E904974A-BB8D-42F4-93A6-30731C509D82 Old RevisionGUID=1DFF7353-2FF9-4A97-9193-0FDA92E03F3D New RevisionGUID=9F913A6F-2768-4C2C-81FF-074DD0DE17B0
+Change Managed Component Library Link : Designator=J? Old VaultGUID=B7D15EC3-160A-466F-A46C-7801FE6295A7 New VaultGUID=B7D15EC3-160A-466F-A46C-7801FE6295A7 Old ItemGUID=C0009C7C-A9C7-4589-A8C0-755DD392E65D New ItemGUID=E904974A-BB8D-42F4-93A6-30731C509D82 Old RevisionGUID=0E02159F-7BE0-4063-864E-6E3487C6FDC9 New RevisionGUID=9F913A6F-2768-4C2C-81FF-074DD0DE17B0
+Change Managed Component Library Link : Designator=J? Old VaultGUID= New VaultGUID=B7D15EC3-160A-466F-A46C-7801FE6295A7 Old ItemGUID= New ItemGUID=E904974A-BB8D-42F4-93A6-30731C509D82 Old RevisionGUID= New RevisionGUID=9F913A6F-2768-4C2C-81FF-074DD0DE17B0
+Change component parameters: Designator = "J?" ("J?"); Footprint = "SMA_SM_JOHNSON_142-0701-841"; UniqueID = "\DHWWHLWR" ("\DHWWHLWR")
+Change component parameters (AddParameter): Name = "Color"; Value = "Black"; VariantName = "[No Variations]"
+Change component parameters (AddParameter): Name = "ComponentLink2Description"; Value = "Datasheet URL"; VariantName = "[No Variations]"
+Change component parameters (AddParameter): Name = "ComponentLink2URL"; Value = "https://drawings-pdf.s3.amazonaws.com/11160.pdf"; VariantName = "[No Variations]"
+Change component parameters (AddParameter): Name = "Connector Type"; Value = "Header, Socket"; VariantName = "[No Variations]"
+Change component parameters (AddParameter): Name = "Contact Gender"; Value = "Female"; VariantName = "[No Variations]"
+Change component parameters (AddParameter): Name = "Contact Plating"; Value = "Gold"; VariantName = "[No Variations]"
+Change component parameters (AddParameter): Name = "Contact Resistance"; Value = "20mO"; VariantName = "[No Variations]"
+Change component parameters (AddParameter): Name = "Current Rating"; Value = "3A"; VariantName = "[No Variations]"
+Change component parameters (AddParameter): Name = "HelpURL"; Value = "https://drawings-pdf.s3.amazonaws.com/11160.pdf"; VariantName = "[No Variations]"
+Change component parameters (AddParameter): Name = "Insulation Resistance"; Value = "1GO"; VariantName = "[No Variations]"
+Change component parameters (AddParameter): Name = "Introduction Date"; Value = "2011-09-15"; VariantName = "[No Variations]"
+Change component parameters (AddParameter): Name = "Lead Free"; Value = "Lead Free"; VariantName = "[No Variations]"
+Change component parameters (AddParameter): Name = "Lifecycle Status"; Value = "Production"; VariantName = "[No Variations]"
+Change component parameters (AddParameter): Name = "Max Operating Temperature"; Value = "105°C"; VariantName = "[No Variations]"
+Change component parameters (AddParameter): Name = "Min Operating Temperature"; Value = "-40°C"; VariantName = "[No Variations]"
+Change component parameters (AddParameter): Name = "Mount"; Value = "Through Hole"; VariantName = "[No Variations]"
+Change component parameters (AddParameter): Name = "Number of Pins"; Value = "26"; VariantName = "[No Variations]"
+Change component parameters (AddParameter): Name = "Number of Positions"; Value = "26"; VariantName = "[No Variations]"
+Change component parameters (AddParameter): Name = "Number of Rows"; Value = "2"; VariantName = "[No Variations]"
+Change component parameters (AddParameter): Name = "Pitch"; Value = "2.54mm"; VariantName = "[No Variations]"
+Change component parameters (AddParameter): Name = "REACH SVHC"; Value = "Yes"; VariantName = "[No Variations]"
+Change component parameters (AddParameter): Name = "RoHS"; Value = "Compliant"; VariantName = "[No Variations]"
+Change component parameters (AddParameter): Name = "Row Spacing"; Value = "2.54mm"; VariantName = "[No Variations]"
+Change component parameters (AddParameter): Name = "Terminal Pitch"; Value = "2.54mm"; VariantName = "[No Variations]"
+Change component parameters (AddParameter): Name = "Termination"; Value = "Solder"; VariantName = "[No Variations]"
+Change component parameters: Designator = "J?" ("J?"); Footprint = "G125-FS12605L0P_MFG"; UniqueID = "\NWQKFEOX" ("\NWQKFEOX")
+Change component parameters (AddParameter): Name = "Color"; Value = "Black"; VariantName = "[No Variations]"
+Change component parameters (AddParameter): Name = "ComponentLink2Description"; Value = "Datasheet URL"; VariantName = "[No Variations]"
+Change component parameters (AddParameter): Name = "ComponentLink2URL"; Value = "https://drawings-pdf.s3.amazonaws.com/11160.pdf"; VariantName = "[No Variations]"
+Change component parameters (AddParameter): Name = "Connector Type"; Value = "Header, Socket"; VariantName = "[No Variations]"
+Change component parameters (AddParameter): Name = "Contact Gender"; Value = "Female"; VariantName = "[No Variations]"
+Change component parameters (AddParameter): Name = "Contact Plating"; Value = "Gold"; VariantName = "[No Variations]"
+Change component parameters (AddParameter): Name = "Contact Resistance"; Value = "20mO"; VariantName = "[No Variations]"
+Change component parameters (AddParameter): Name = "Current Rating"; Value = "3A"; VariantName = "[No Variations]"
+Change component parameters (AddParameter): Name = "HelpURL"; Value = "https://drawings-pdf.s3.amazonaws.com/11160.pdf"; VariantName = "[No Variations]"
+Change component parameters (AddParameter): Name = "Insulation Resistance"; Value = "1GO"; VariantName = "[No Variations]"
+Change component parameters (AddParameter): Name = "Introduction Date"; Value = "2011-09-15"; VariantName = "[No Variations]"
+Change component parameters (AddParameter): Name = "Lead Free"; Value = "Lead Free"; VariantName = "[No Variations]"
+Change component parameters (AddParameter): Name = "Lifecycle Status"; Value = "Production"; VariantName = "[No Variations]"
+Change component parameters (AddParameter): Name = "Max Operating Temperature"; Value = "105°C"; VariantName = "[No Variations]"
+Change component parameters (AddParameter): Name = "Min Operating Temperature"; Value = "-40°C"; VariantName = "[No Variations]"
+Change component parameters (AddParameter): Name = "Mount"; Value = "Through Hole"; VariantName = "[No Variations]"
+Change component parameters (AddParameter): Name = "Number of Pins"; Value = "26"; VariantName = "[No Variations]"
+Change component parameters (AddParameter): Name = "Number of Positions"; Value = "26"; VariantName = "[No Variations]"
+Change component parameters (AddParameter): Name = "Number of Rows"; Value = "2"; VariantName = "[No Variations]"
+Change component parameters (AddParameter): Name = "Pitch"; Value = "2.54mm"; VariantName = "[No Variations]"
+Change component parameters (AddParameter): Name = "REACH SVHC"; Value = "Yes"; VariantName = "[No Variations]"
+Change component parameters (AddParameter): Name = "RoHS"; Value = "Compliant"; VariantName = "[No Variations]"
+Change component parameters (AddParameter): Name = "Row Spacing"; Value = "2.54mm"; VariantName = "[No Variations]"
+Change component parameters (AddParameter): Name = "Terminal Pitch"; Value = "2.54mm"; VariantName = "[No Variations]"
+Change component parameters (AddParameter): Name = "Termination"; Value = "Solder"; VariantName = "[No Variations]"
+Change component parameters: Designator = "J?" ("J?"); Footprint = "G125-FS12605L0P_MFG"; UniqueID = "\IETKLGUN" ("\IETKLGUN")
+Change component parameters (AddParameter): Name = "Color"; Value = "Black"; VariantName = "[No Variations]"
+Change component parameters (AddParameter): Name = "ComponentLink2Description"; Value = "Datasheet URL"; VariantName = "[No Variations]"
+Change component parameters (AddParameter): Name = "ComponentLink2URL"; Value = "https://drawings-pdf.s3.amazonaws.com/11160.pdf"; VariantName = "[No Variations]"
+Change component parameters (AddParameter): Name = "Connector Type"; Value = "Header, Socket"; VariantName = "[No Variations]"
+Change component parameters (AddParameter): Name = "Contact Gender"; Value = "Female"; VariantName = "[No Variations]"
+Change component parameters (AddParameter): Name = "Contact Plating"; Value = "Gold"; VariantName = "[No Variations]"
+Change component parameters (AddParameter): Name = "Contact Resistance"; Value = "20mO"; VariantName = "[No Variations]"
+Change component parameters (AddParameter): Name = "Current Rating"; Value = "3A"; VariantName = "[No Variations]"
+Change component parameters (AddParameter): Name = "HelpURL"; Value = "https://drawings-pdf.s3.amazonaws.com/11160.pdf"; VariantName = "[No Variations]"
+Change component parameters (AddParameter): Name = "Insulation Resistance"; Value = "1GO"; VariantName = "[No Variations]"
+Change component parameters (AddParameter): Name = "Introduction Date"; Value = "2011-09-15"; VariantName = "[No Variations]"
+Change component parameters (AddParameter): Name = "Lead Free"; Value = "Lead Free"; VariantName = "[No Variations]"
+Change component parameters (AddParameter): Name = "Lifecycle Status"; Value = "Production"; VariantName = "[No Variations]"
+Change component parameters (AddParameter): Name = "Max Operating Temperature"; Value = "105°C"; VariantName = "[No Variations]"
+Change component parameters (AddParameter): Name = "Min Operating Temperature"; Value = "-40°C"; VariantName = "[No Variations]"
+Change component parameters (AddParameter): Name = "Mount"; Value = "Through Hole"; VariantName = "[No Variations]"
+Change component parameters (AddParameter): Name = "Number of Pins"; Value = "26"; VariantName = "[No Variations]"
+Change component parameters (AddParameter): Name = "Number of Positions"; Value = "26"; VariantName = "[No Variations]"
+Change component parameters (AddParameter): Name = "Number of Rows"; Value = "2"; VariantName = "[No Variations]"
+Change component parameters (AddParameter): Name = "Pitch"; Value = "2.54mm"; VariantName = "[No Variations]"
+Change component parameters (AddParameter): Name = "REACH SVHC"; Value = "Yes"; VariantName = "[No Variations]"
+Change component parameters (AddParameter): Name = "RoHS"; Value = "Compliant"; VariantName = "[No Variations]"
+Change component parameters (AddParameter): Name = "Row Spacing"; Value = "2.54mm"; VariantName = "[No Variations]"
+Change component parameters (AddParameter): Name = "Terminal Pitch"; Value = "2.54mm"; VariantName = "[No Variations]"
+Change component parameters (AddParameter): Name = "Termination"; Value = "Solder"; VariantName = "[No Variations]"
+Change component parameters: Designator = "J?" ("J?"); Footprint = "KYCN-KLDX-0202-B_V"; UniqueID = "\HXBALUCB" ("\HXBALUCB")
+Change component parameters (AddParameter): Name = "Color"; Value = "Black"; VariantName = "[No Variations]"
+Change component parameters (AddParameter): Name = "ComponentLink2Description"; Value = "Datasheet URL"; VariantName = "[No Variations]"
+Change component parameters (AddParameter): Name = "ComponentLink2URL"; Value = "https://drawings-pdf.s3.amazonaws.com/11160.pdf"; VariantName = "[No Variations]"
+Change component parameters (AddParameter): Name = "Connector Type"; Value = "Header, Socket"; VariantName = "[No Variations]"
+Change component parameters (AddParameter): Name = "Contact Gender"; Value = "Female"; VariantName = "[No Variations]"
+Change component parameters (AddParameter): Name = "Contact Plating"; Value = "Gold"; VariantName = "[No Variations]"
+Change component parameters (AddParameter): Name = "Contact Resistance"; Value = "20mO"; VariantName = "[No Variations]"
+Change component parameters (AddParameter): Name = "Current Rating"; Value = "3A"; VariantName = "[No Variations]"
+Change component parameters (AddParameter): Name = "HelpURL"; Value = "https://drawings-pdf.s3.amazonaws.com/11160.pdf"; VariantName = "[No Variations]"
+Change component parameters (AddParameter): Name = "Insulation Resistance"; Value = "1GO"; VariantName = "[No Variations]"
+Change component parameters (AddParameter): Name = "Introduction Date"; Value = "2011-09-15"; VariantName = "[No Variations]"
+Change component parameters (AddParameter): Name = "Lead Free"; Value = "Lead Free"; VariantName = "[No Variations]"
+Change component parameters (AddParameter): Name = "Lifecycle Status"; Value = "Production"; VariantName = "[No Variations]"
+Change component parameters (AddParameter): Name = "Max Operating Temperature"; Value = "105°C"; VariantName = "[No Variations]"
+Change component parameters (AddParameter): Name = "Min Operating Temperature"; Value = "-40°C"; VariantName = "[No Variations]"
+Change component parameters (AddParameter): Name = "Mount"; Value = "Through Hole"; VariantName = "[No Variations]"
+Change component parameters (AddParameter): Name = "Number of Pins"; Value = "26"; VariantName = "[No Variations]"
+Change component parameters (AddParameter): Name = "Number of Positions"; Value = "26"; VariantName = "[No Variations]"
+Change component parameters (AddParameter): Name = "Number of Rows"; Value = "2"; VariantName = "[No Variations]"
+Change component parameters (AddParameter): Name = "Pitch"; Value = "2.54mm"; VariantName = "[No Variations]"
+Change component parameters (AddParameter): Name = "REACH SVHC"; Value = "Yes"; VariantName = "[No Variations]"
+Change component parameters (AddParameter): Name = "RoHS"; Value = "Compliant"; VariantName = "[No Variations]"
+Change component parameters (AddParameter): Name = "Row Spacing"; Value = "2.54mm"; VariantName = "[No Variations]"
+Change component parameters (AddParameter): Name = "Terminal Pitch"; Value = "2.54mm"; VariantName = "[No Variations]"
+Change component parameters (AddParameter): Name = "Termination"; Value = "Solder"; VariantName = "[No Variations]"
+Added Pin To Net: NetName=+12 Pin=J?-1
+Added Pin To Net: NetName=GND Pin=J?-1
+Added Pin To Net: NetName=GND Pin=J?-1
+Added Pin To Net: NetName=GND Pin=J?-2
+Added Pin To Net: NetName=GND Pin=J?-2
+Added Pin To Net: NetName=GND Pin=J?-2
+Added Pin To Net: NetName=GND Pin=J?-5
+Added Pin To Net: NetName=GND Pin=J?-6
+Added Pin To Net: NetName=GND Pin=J?-16
+Added Pin To Net: NetName=-4v Pin=J?-26
+Added Net: Name=-4v
+Added Pin To Net: NetName=+5v Pin=J?-25
+Added Net: Name=+5v
+Added Pin To Net: NetName=3v3 Pin=J?-25
+Added Pin To Net: NetName=3v3 Pin=J?-26
+Added Net: Name=3v3
+Add Net: Net with name "NetC?_1" already exists
+Add Net: Net with name "NetC?_1" already exists
+Add Net: Net with name "NetC?_1" already exists
+Add Net: Net with name "NetC?_1" already exists
+Add Net: Net with name "NetC?_1" already exists
+Add Net: Net with name "NetC?_2" already exists
+Add Net: Net with name "NetC?_2" already exists
+Add Net: Net with name "NetC?_2" already exists
+Add Net: Net with name "NetJ?_1" already exists
+Added Member To Class: ClassName=QCM_hardware_V2 Member=Component C? 100nF
+Added Member To Class: ClassName=QCM_hardware_V2 Member=Component C? 100nF
+Added Member To Class: ClassName=QCM_hardware_V2 Member=Component C? 100nF
+Added Member To Class: ClassName=QCM_hardware_V2 Member=Component C? 100nF
+Added Member To Class: ClassName=QCM_hardware_V2 Member=Component C? 100nF
+Added Member To Class: ClassName=QCM_hardware_V2 Member=Component C? 100nF
+Added Member To Class: ClassName=QCM_hardware_V2 Member=Component C? 100pF
+Added Member To Class: ClassName=QCM_hardware_V2 Member=Component C? 22uF
+Added Member To Class: ClassName=QCM_hardware_V2 Member=Component C? 330p
+Added Member To Class: ClassName=QCM_hardware_V2 Member=Component C? 330p
+Added Member To Class: ClassName=QCM_hardware_V2 Member=Component C? FC280832659
+Added Member To Class: ClassName=QCM_hardware_V2 Member=Component J? SMA
+Added Member To Class: ClassName=QCM_hardware_V2 Member=Component J? SMA
+Added Member To Class: ClassName=QCM_hardware_V2 Member=Component J? SMA
+Added Member To Class: ClassName=QCM_hardware_V2 Member=Component J? SMA
+Added Member To Class: ClassName=QCM_hardware_V2 Member=Component J? SFH11-PBPC-D13-ST-BK
+Added Member To Class: ClassName=QCM_hardware_V2 Member=Component J? SFH11-PBPC-D13-ST-BK
+Added Member To Class: ClassName=QCM_hardware_V2 Member=Component J? KLDX-0202-B
+Added Member To Class: ClassName=QCM_hardware_V2 Member=Component J? SFH11-PBPC-D13-ST-BK
+Added Member To Class: ClassName=QCM_hardware_V2 Member=Component R? 10
+Added Member To Class: ClassName=QCM_hardware_V2 Member=Component R? 10
+Added Member To Class: ClassName=QCM_hardware_V2 Member=Component R? 100k
+Added Member To Class: ClassName=QCM_hardware_V2 Member=Component R? 100k
+Added Member To Class: ClassName=QCM_hardware_V2 Member=Component R? 10k
+Added Member To Class: ClassName=QCM_hardware_V2 Member=Component R? 10k
+Added Member To Class: ClassName=QCM_hardware_V2 Member=Component R? 390k
+Added Member To Class: ClassName=QCM_hardware_V2 Member=Component R? 390k
+Added Member To Class: ClassName=QCM_hardware_V2 Member=Component R? CRCW080550R0FKTA
+Added Member To Class: ClassName=QCM_hardware_V2 Member=Component R? CRCW080550R0FKTA
+Added Member To Class: ClassName=QCM_hardware_V2 Member=Component U? OPA656NB/250
+Added Member To Class: ClassName=QCM_hardware_V2 Member=Component U? OPA656NB/250
+Added Rule: Name=Schematic Supply Nets_6
+Added Rule: Name=Schematic Supply Nets_7
+Added Rule: Name=Schematic Supply Nets_8

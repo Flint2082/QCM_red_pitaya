@@ -10,6 +10,10 @@ The theory behind this system is described in detail in the accompanying thesis 
 ## Setup
 Red Pitaya setup instructions are available in the [Red Pitaya documentation](src/README.md).
 
+Driving the instrument from a PC with **no internet connection** needs nothing
+downloaded at the bench — the web UI's libraries and the Python packages are
+committed to this repo. See [OFFLINE.md](OFFLINE.md).
+
 ## Controlling the system
 Once the control software is running on the Red Pitaya, the instrument can be
 driven from a script over its HTTP + WebSocket API. See

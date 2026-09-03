@@ -4,11 +4,18 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>QCM Monitor</title>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/hammerjs@2.0.8/hammer.min.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-zoom@2.0.1/dist/chartjs-plugin-zoom.min.js"></script>
+<!-- Everything this page needs is served by the Pitaya itself: the control PC
+     never has to reach the internet. These were CDN links (cdnjs, jsdelivr,
+     Google Fonts), which on an air-gapped bench left the page not merely
+     unstyled but dead — the first `new Chart()` threw, so the script never got
+     as far as opening the WebSocket and no control worked at all. Versions are
+     unchanged (Chart.js 4.4.1, Hammer 2.0.7, chartjs-plugin-zoom 2.0.1); see
+     OFFLINE.md to refresh them. -->
+<script src="vendor/chart.umd.min.js"></script>
+<script src="vendor/hammer.min.js"></script>
+<script src="vendor/chartjs-plugin-zoom.min.js"></script>
+<link rel="stylesheet" href="vendor/fonts.css">
 <style>
-@import url('https://fonts.googleapis.com/css2?family=DM+Mono:wght@300;400;500&family=DM+Sans:wght@300;400;500;600&display=swap');
 
 :root {
   --bg:          #1a1d23;
@@ -500,6 +507,12 @@ footer { height: 24px; background: var(--surface); border-top: 1px solid var(--b
             </select></div></div>
           </div>
 
+          <div class="settings-section-title">STORAGE</div>
+          <div class="settings-group">
+            <div class="settings-row"><div><div class="settings-row-label">Delete Old Runs When Full</div><div class="settings-row-desc">When the data partition runs low during a run, delete finished runs, oldest first, so recording continues. A run CSV is the only copy of that run — deleting it is permanent</div></div><div></div><div style="display:flex;align-items:center;gap:6px"><select class="settings-input" id="s-prune-runs" style="width:150px;text-align:left"><option value="1">Enabled</option><option value="0">Disabled</option></select></div></div>
+            <div class="settings-row"><div><div class="settings-row-label">Trim The Running Log</div><div class="settings-row-desc">If the run in progress is itself too big for the disk, drop its oldest chunks as it goes. It always keeps the chunk being written, so the most recent hours survive; everything older is gone for good. With this off, a run that outgrows the disk stops being recorded instead</div></div><div></div><div style="display:flex;align-items:center;gap:6px"><select class="settings-input" id="s-trim-run" style="width:150px;text-align:left"><option value="1">Enabled</option><option value="0">Disabled</option></select></div></div>
+          </div>
+
           <div class="settings-section-title">CAPACITOR ADJUST</div>
           <div class="settings-group">
             <div class="settings-row"><div style="max-width:520px"><div class="settings-row-label">Trim Capacitor Tuning</div><div class="settings-row-desc">Emits two static off-resonance tones — osc 1 at (Fm+Ft)/2 and osc 2 at Fm×0.9. Turn the adjustable capacitor on the PCB to <b>minimise</b> both amplitudes below. Lower is better (green); high is bad (red).</div></div></div>
@@ -679,6 +692,13 @@ footer { height: 24px; background: var(--surface); border-top: 1px solid var(--b
                 <div class="notif-desc">Backend server connection lost</div>
               </div>
               <label class="toggle-switch"><input type="checkbox" id="notif-wsLost" checked onchange="setNotifOption('wsLost',this.checked)"><span class="toggle-slider"></span></label>
+            </div>
+            <div class="notif-row">
+              <div class="notif-row-info">
+                <div class="notif-label">Old Run Data Deleted</div>
+                <div class="notif-desc">The disk filled up during a run and old run files were deleted to keep recording — permanently, so this one is worth hearing about</div>
+              </div>
+              <label class="toggle-switch"><input type="checkbox" id="notif-storageReclaim" checked onchange="setNotifOption('storageReclaim',this.checked)"><span class="toggle-slider"></span></label>
             </div>
             <div class="notif-row">
               <div class="notif-row-info">
@@ -1543,6 +1563,7 @@ function connect() {
       if (ev.type === 'StartFreqAutoUpdatedEvent') onStartFreqAutoUpdated(ev);
       if (ev.type === 'RunLogStartedEvent') onRunLogStarted(ev);
       if (ev.type === 'RunLogFailedEvent')  onRunLogFailed(ev);
+      if (ev.type === 'StorageReclaimedEvent') onStorageReclaimed(ev);
       if (ev.type === 'TargetReachedEvent') onTargetReached(ev);
       if (ev.type === 'LogEvent')           onLogEvent(ev);
     } catch(e) { console.warn('Bad WS msg', e); }
@@ -1564,7 +1585,7 @@ function showToast(msg, isError = false, isWarning = false) {
 // Preferences are per-browser (two operators on two laptops want their own), so
 // they persist to localStorage rather than to the instrument's settings.json.
 const NOTIF_STORE_KEY = 'qcm.notifications';
-const notifConfig = { enabled: false, sound: true, lockLost: true, sweepComplete: true, opcLost: true, wsLost: true, recFailed: true, targetReached: true };
+const notifConfig = { enabled: false, sound: true, lockLost: true, sweepComplete: true, opcLost: true, wsLost: true, recFailed: true, storageReclaim: true, targetReached: true };
 let _audioCtx = null;
 
 function setNotifOption(key, value) {
@@ -1590,7 +1611,8 @@ function loadNotifConfig() {
   for (const [k, id] of Object.entries({ enabled: 'notif-browser', sound: 'notif-sound',
         lockLost: 'notif-lockLost', sweepComplete: 'notif-sweepComplete',
         targetReached: 'notif-targetReached', opcLost: 'notif-opcLost',
-        wsLost: 'notif-wsLost', recFailed: 'notif-recFailed' })) {
+        wsLost: 'notif-wsLost', recFailed: 'notif-recFailed',
+        storageReclaim: 'notif-storageReclaim' })) {
     const el = document.getElementById(id);
     if (el) el.checked = notifConfig[k];
   }
@@ -1643,6 +1665,12 @@ function playNotifSound(eventType) {
       playBeep(440, 0.2);
       playBeep(440, 0.2, 0.25, 0.26);
       playBeep(300, 0.4, 0.25, 0.52);
+      break;
+    case 'storageReclaim':
+      // Falling pair: something was given up, but the run carries on — not the
+      // same alarm as losing the recording altogether.
+      playBeep(520, 0.18);
+      playBeep(390, 0.28, 0.25, 0.20);
       break;
     case 'targetReached':
       // Rising three-tone: unmistakably the "done" chime, not an alarm.
@@ -1755,6 +1783,19 @@ function onRunLogFailed(ev) {
   showRecFailedModal();
 }
 
+// Data was deleted to keep the run recording. Permanent, so it is said out
+// loud rather than left in the journal: a toast, a line in the log tab, and a
+// desktop notification, plus a refresh of the storage figures if the operator
+// happens to be looking at them.
+function onStorageReclaimed(ev) {
+  const free = ev.free_bytes != null ? ` — ${fmtBytes(ev.free_bytes)} free` : '';
+  onLogEvent({ level: 'WARN', message: `[REC] ${ev.summary}`, timestamp: Date.now() / 1000 });
+  sendNotif('QCM — Old run data deleted to keep recording', ev.summary + free, 'storageReclaim');
+  // sendNotif only toasts its title, and the detail is the part worth reading.
+  showToast(ev.summary, false, true);
+  if (document.getElementById('modal-rec-failed').style.display === 'flex') refreshStorageInfo();
+}
+
 async function showRecFailedModal() {
   document.getElementById('rec-fail-reason').textContent = _recFailReason || 'The run log is not open.';
   document.getElementById('rec-confirm-row').style.display = 'none';
@@ -1775,12 +1816,13 @@ async function refreshStorageInfo() {
     const used = runs.reduce((a, r) => a + r.size, 0);
     storageEl.textContent = `${fmtBytes(d.free_bytes)} free of ${fmtBytes(d.total_bytes)} · `
                           + `${runs.length} runs using ${fmtBytes(used)}`;
-    const oldest = runs.filter(r => r.name !== d.current)
+    const oldest = runs.filter(r => !(d.recording && r.name === d.current))
                        .sort((a, b) => a.modified - b.modified)[0];
     _pendingDelete = oldest || null;
     if (oldest) {
       const when = new Date(oldest.modified * 1000).toLocaleDateString();
-      oldestEl.textContent = `${oldest.name} — ${fmtBytes(oldest.size)}, ${when}`;
+      oldestEl.textContent = `${oldest.name} — ${fmtBytes(oldest.size)}, ${when}`
+                           + (oldest.parts > 1 ? ` (${oldest.parts} files)` : '');
       delBtn.disabled = false;
       delBtn.textContent = `DELETE OLDEST (${fmtBytes(oldest.size)})`;
     } else {
@@ -1813,7 +1855,8 @@ async function refreshStorageInfo() {
 function askDeleteOldest() {
   if (!_pendingDelete) return;
   document.getElementById('rec-confirm-name').textContent =
-    `${_pendingDelete.name} (${fmtBytes(_pendingDelete.size)})`;
+    `${_pendingDelete.name} (${fmtBytes(_pendingDelete.size)}`
+    + (_pendingDelete.parts > 1 ? `, ${_pendingDelete.parts} files` : '') + ')';
   document.getElementById('rec-confirm-row').style.display = 'block';
 }
 
@@ -2059,6 +2102,10 @@ async function loadInitialSettings() {
     }
     if (s.auto_relock != null) document.getElementById('s-auto-relock').value = s.auto_relock ? '1' : '0';
     if (s.temp_hold != null)   document.getElementById('s-temp-hold').value   = s.temp_hold ? '1' : '0';
+    if (s.storage_reclaim) {
+      document.getElementById('s-prune-runs').value = s.storage_reclaim.prune_old_runs ? '1' : '0';
+      document.getElementById('s-trim-run').value   = s.storage_reclaim.trim_current_run ? '1' : '0';
+    }
     if (s.freq_tracking) {
       document.getElementById('s-freq-track').value = s.freq_tracking.enabled ? '1' : '0';
       if (s.freq_tracking.interval != null) document.getElementById('s-freq-track-interval').value = s.freq_tracking.interval;
@@ -2510,6 +2557,12 @@ async function applyLockSettings() {
   await postOrThrow(`${API_URL}/settings/freq_tracking?enabled=${track}&interval=${interval}`);
 }
 
+async function applyStorageReclaim() {
+  const prune = document.getElementById('s-prune-runs').value === '1';
+  const trim  = document.getElementById('s-trim-run').value === '1';
+  await postOrThrow(`${API_URL}/settings/storage_reclaim?prune_old_runs=${prune}&trim_current_run=${trim}`);
+}
+
 async function applyMeasurementParams() {
   const t    = parseFloat(document.getElementById('s-amb-temp').value);
   const dens = parseFloat(document.getElementById('s-mat-dens').value);
@@ -2527,6 +2580,7 @@ async function applyAllSettings() {
   await applyMeasurementParams();
   await applyOutputMode();
   await applyLockSettings();
+  await applyStorageReclaim();
   // Only when the crystal form itself changed. APPLY used to push it every time,
   // so editing an unrelated field re-saved the profile from whatever happened to
   // be in the form — and re-activated it — quietly overwriting a stored
@@ -2551,6 +2605,7 @@ const SETTING_IDS = [
   's-osc2-int', 's-osc2-lpf', 's-osc2-inv',
   's-lock-phase', 's-lock-std', 's-auto-relock', 's-temp-hold',
   's-freq-track', 's-freq-track-interval', 's-output-mode',
+  's-prune-runs', 's-trim-run',
   ...CRYSTAL_SETTING_IDS,
 ];
 let _baseline = {};            // last applied / loaded values

@@ -35,13 +35,23 @@ curl http://<red_pitaya_ip>:8000/health        # -> {"status":"ok"}
 ## 2. Install the client dependencies (on your PC)
 
 The client needs `requests`; live streaming additionally needs
-`websocket-client`:
+`websocket-client`. Both are pinned in
+[requirements-client.txt](../requirements-client.txt):
 
 ```bash
-pip install requests websocket-client
+pip install -r requirements-client.txt
 ```
 
-Both are listed at the bottom of [requirements.txt](../requirements.txt).
+**With no internet**, install the same set from the wheels committed to the
+repo — no download needed at the bench:
+
+```bash
+pip install --no-index --find-links vendor/wheels -r requirements-client.txt
+```
+
+The plotters further down this page need numpy, pandas and matplotlib
+([requirements-plot.txt](../requirements-plot.txt)), which are vendored the same
+way. See [OFFLINE.md](../OFFLINE.md).
 
 ## 3. Connect
 
@@ -333,8 +343,38 @@ The worker writes a CSV for every measurement run on the Pitaya itself.
 | `runs_info()` | the full payload: runs, the one recording now, free/total bytes |
 | `download_run(name, dest_path)` | save a specific run locally |
 | `download_latest_run(dest_path)` | save the most recent run locally |
-| `delete_run(name)` | delete one run CSV — the only copy; 409 for the run recording now |
+| `delete_run(name)` | delete a run and every file it consists of — the only copy; 409 for the run recording *now* |
 | `retry_run_log()` | re-open the log for a run going unrecorded, after freeing space |
+| `set_storage_reclaim(prune_old_runs, trim_current_run)` | `POST /settings/storage_reclaim` — what may be deleted when the disk fills (both on by default) |
+
+#### When the disk fills up
+The SD card is small and a run writes about 100 MB a day, so a long run will
+eventually run into the end of it. Rather than stopping the recording, the logger
+deletes CSVs to keep going, and says so every time — a toast, a line in the LOGS
+tab, a desktop notification, and a `STORAGE_RECLAIM` event row in the run log
+itself. **Deletions are permanent: a run CSV is the only copy of that run.** Both
+halves are switchable in the settings panel under **STORAGE**, and with both off
+the old behaviour returns — a full disk stops the recording and raises the
+"RUN NOT BEING RECORDED" alarm.
+
+It gives things up in this order, and stops as soon as there is room:
+
+1. **Finished runs, oldest first** (`prune_old_runs`).
+2. **The oldest chunks of the run in progress** (`trim_current_run`) — for the
+   case where the run is by itself bigger than the disk. A run is one CSV until
+   it passes 64 MB (~18 h), after which it continues in a numbered part
+   (`….p02.csv`); it is those earlier parts that get dropped. The part being
+   written is never deleted, so the most recent hours always survive. This is
+   why a run rolls over at all: deleting a whole part is instant, where cutting
+   rows off the front of one huge file would mean rewriting everything after
+   them — tens of seconds of SD I/O on the worker thread, mid-deposition.
+
+Parts are invisible from here. `runs()` reports a run as one entry (`size` totals
+its parts, `parts` counts them), `download_run()` serves them back as a single
+CSV with the header once, and `delete_run()` removes all of them. Every part
+repeats the run's `SETTINGS` row, so a part that outlives the first one can
+still be interpreted, and `PART_END` / `PART_START` rows name the file on the
+other side of each seam.
 
 ### OPC-UA / PLC bridge
 | method | endpoint |

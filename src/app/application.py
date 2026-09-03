@@ -151,6 +151,9 @@ class Application(threading.Thread):
             self.worker_command_queue.put(wc.SetFreqTrackingCommand(command.enabled, command.interval))
         elif isinstance(command, ac.SetTargetThicknessCommand):
             self.worker_command_queue.put(wc.SetTargetThicknessCommand(command.target))
+        elif isinstance(command, ac.SetStorageReclaimCommand):
+            self.worker_command_queue.put(wc.SetStorageReclaimCommand(
+                command.prune_old_runs, command.trim_current_run))
         elif isinstance(command, ac.SetSensorParamsCommand):
             self.worker_command_queue.put(wc.SetSensorParamsCommand(command.mass_sensitivity, command.sens_area, command.freq_virgin, command.tooling_ratio))
         elif isinstance(command, ac.StartCapAdjustCommand):
@@ -230,6 +233,11 @@ class Application(threading.Thread):
                 print(f"[Application] Target thickness reached: {event.thickness:.3f} / {event.target:.3f} nm")
             self._emit(ae.TargetReachedEvent(
                 reached=event.reached, thickness=event.thickness, target=event.target))
+
+        elif isinstance(event, we.StorageReclaimedEvent):
+            print(f"[Application] Storage reclaim: {event.summary}")
+            self._emit(ae.StorageReclaimedEvent(
+                summary=event.summary, free_bytes=event.free_bytes))
 
         elif isinstance(event, we.RunLogFailedEvent):
             print(f"[Application] Run log unavailable: {event.reason}")

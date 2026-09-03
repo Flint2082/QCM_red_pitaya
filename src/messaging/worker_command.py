@@ -107,6 +107,13 @@ class SetFreqTrackingCommand(WorkerCommand):
     interval: float  # seconds between updates
 
 @dataclass
+class SetStorageReclaimCommand(WorkerCommand):
+    """What the run logger may delete when the data partition runs low. Both are
+    permanent — a run CSV is the only copy of that run."""
+    prune_old_runs: bool     # delete finished runs, oldest first
+    trim_current_run: bool   # drop the oldest parts of the run in progress
+
+@dataclass
 class SetSensorParamsCommand(WorkerCommand):
     mass_sensitivity: float
     sens_area: float

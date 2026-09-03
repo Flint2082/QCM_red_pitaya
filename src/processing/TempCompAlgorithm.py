@@ -1,6 +1,5 @@
 import csv
 import numpy as np
-import matplotlib.pyplot as plt
 
 class TempCompAlgorithm:
     def __init__(self, coefficients, T_start, fT_start, fM_start,
@@ -133,6 +132,15 @@ class TempCompAlgorithm:
         
     
 def calculateCoeffecients(calibration_file, coeffecient_file):
+    # matplotlib is imported here rather than at the top of the module because
+    # this is the only thing in src/ that needs it, and it is an interactive
+    # bench helper (it prompts on stdin and calls plt.show()) that the running
+    # instrument never invokes. At module level the import made matplotlib a
+    # hard install dependency of the measurement service — a big one, with no
+    # wheel for the Pitaya's armv7 platform, so an offline install would have to
+    # build it from source. See OFFLINE.md.
+    import matplotlib.pyplot as plt
+
     
     with open(calibration_file, mode='r') as file:
         reader = csv.DictReader(file)

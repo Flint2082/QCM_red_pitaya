@@ -1,0 +1,14 @@
+# The PC-side analysis tools: tools/csv_plotter.py, tools/sweep_plotter.py,
+# tools/test_comp_alogrithm.py. Not needed to control the instrument, and not
+# needed on the Pitaya.
+#
+# Pinned to the versions these tools are known to work with — the same ones the
+# vendored wheels hold:
+#     pip install --no-index --find-links vendor/wheels -r requirements-plot.txt
+#
+# Unlike requirements-client.txt these are compiled wheels, so the vendored set
+# is specific to one OS and one Python minor version (see vendor/wheels/README.md
+# for which, and tools/fetch_wheels.py to add another).
+numpy==2.4.2
+pandas==3.0.1
+matplotlib==3.10.8

@@ -1,13 +1,21 @@
+# Red Pitaya control software (src/, the measurement service itself).
+# Install on the Pitaya — see src/README.md. For a box with no internet, see
+# OFFLINE.md.
 opcua
 numpy
-utils
-ipython
 uvicorn
 fastapi
 aiofiles
 websockets
 python-multipart
 
-# Python control client (tools/qcm_client.py, tools/qcm_demo.py) — client-side only
-requests
-websocket-client
+# Optional: only for `python main.py --shell`, which drops into an interactive
+# session with the system objects in scope. main.py catches the ImportError and
+# tells you, so the service runs fine without it — and it is a large install on
+# a box that has to fetch it over a slow link, so it is left out by default.
+# ipython
+
+# The PC-side requirements live in their own files, so an offline control PC
+# installs only what it actually needs:
+#   requirements-client.txt   driving the instrument from a script (tiny)
+#   requirements-plot.txt     the CSV/sweep plotters (numpy, pandas, matplotlib)

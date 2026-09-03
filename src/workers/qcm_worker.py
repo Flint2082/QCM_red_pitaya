@@ -35,6 +35,8 @@ class QCMWorker(threading.Thread):
         self.logger = RunLogger(
             on_start=lambda name: self.event_queue.put(RunLogStartedEvent(name=name)),
             on_error=lambda reason: self.event_queue.put(RunLogFailedEvent(reason=reason)),
+            on_reclaim=lambda summary, free: self.event_queue.put(
+                StorageReclaimedEvent(summary=summary, free_bytes=free)),
         )
         # Durable server-side CSV of each sweep. Unlike the run log a failure here
         # is only printed: the sweep still streams to the UI, and a sweep is cheap
@@ -142,6 +144,10 @@ class QCMWorker(threading.Thread):
         snapshot = self.qcm.getSettingsSnapshot()
         snapshot["auto_relock"] = self.auto_relock
         snapshot["temp_hold"] = self.temp_hold
+        snapshot["storage_reclaim"] = {
+            "prune_old_runs":   self.logger.prune_old_runs,
+            "trim_current_run": self.logger.trim_current_run,
+        }
         snapshot["freq_tracking"] = {
             "enabled":  self.freq_tracking,
             "interval": self.freq_track_interval,
@@ -251,6 +257,8 @@ class QCMWorker(threading.Thread):
             if self._target_reached and (self.target_thickness == 0.0 or
                                          self.target_thickness > self._last_thickness):
                 self._set_target_reached(False, self._last_thickness)
+        elif isinstance(command, SetStorageReclaimCommand):
+            self.logger.set_reclaim(command.prune_old_runs, command.trim_current_run)
         elif isinstance(command, SetSensorParamsCommand):
             self.qcm.setSensorParams(command.mass_sensitivity, command.sens_area, command.freq_virgin, command.tooling_ratio)
         elif isinstance(command, SetCoefficientsCommand):

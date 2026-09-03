@@ -26,3 +26,10 @@
 *.pdf binary
 *.png binary
 *.xlsx binary
+
+## Vendored offline dependencies (see OFFLINE.md). These must survive a clone
+## byte for byte: a wheel or a font that has been through line-ending
+## conversion is corrupt, and it would fail on the air-gapped bench PC that has
+## no way to re-download it.
+*.whl binary
+*.woff2 binary

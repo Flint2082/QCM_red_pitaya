@@ -9,6 +9,7 @@ import asyncio
 import json
 import logging
 import math
+import mimetypes
 import os
 import queue
 import re
@@ -22,12 +23,12 @@ from contextlib import asynccontextmanager
 import app
 import uvicorn
 from fastapi import FastAPI, File, HTTPException, UploadFile, WebSocket, WebSocketDisconnect
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 
 from domain.crystal import CrystalManager, CrystalProfile, sanitize_name
 from domain.qcm_interface import WINDOW_SIZE
-from domain.run_logger import MIN_FREE_BYTES, RUNS_DIR
+from domain.run_logger import MIN_FREE_BYTES, RUNS_DIR, part_number, run_base
 from domain.sweep_logger import SWEEPS_DIR
 from plc.opc_worker import _READ_KEYS as OPC_READ_KEYS, _CTRL_KEYS as OPC_CTRL_KEYS
 from messaging.api_command import *
@@ -130,6 +131,7 @@ class _LoggingForwarder(logging.Handler):
 _SETTING_KEYS = frozenset({
     "osc_settings", "output_mode", "lock_phase_tolerance", "lock_phase_std",
     "auto_relock", "temp_hold", "freq_tracking", "freq_track_interval",
+    "prune_old_runs", "trim_current_run",
     "active_crystal", "ambient_temp", "mat_dens", "z_ratio",
     "target_thickness",
     "opc_url", "opc_user", "opc_password", "opc_base_node",
@@ -165,11 +167,58 @@ DEFAULT_SETTINGS = {
     "temp_hold": True,              # hold the last temperature while temp lock is lost
     "freq_tracking": True,          # follow the locked frequencies for re-lock
     "freq_track_interval": 10.0,    # s between lock-frequency updates
+    "prune_old_runs": True,         # delete finished runs when the disk runs low
+    "trim_current_run": True,       # drop the oldest parts of the run in progress
     "ambient_temp": 23.0,           # degC, room temperature
     "mat_dens": 19320.0,            # kg/m3, gold
     "z_ratio": 1.0,                 # 1.0 = plain Sauerbrey, no Z-match
     "target_thickness": 0.0,        # nm, 0 = no target
 }
+
+
+# ==================================================
+# Run files on disk
+# ==================================================
+
+# Block size for streaming a multi-part run back out. 1 MB keeps the copy loop
+# out of the way of the worker's own writes without holding much.
+_DOWNLOAD_BLOCK = 1024 ** 2
+
+
+def _run_files(base: str) -> list[str]:
+    """The parts of one run that are still on disk, in order. A run is normally
+    a single CSV; a long one is several, and the reclaim may have taken the
+    earliest of them, so this is the authority on what a run currently consists
+    of rather than the base name existing as a file."""
+    try:
+        names = [f for f in os.listdir(RUNS_DIR)
+                 if f.endswith(".csv") and run_base(f) == base]
+    except OSError:
+        return []
+    return sorted(names, key=part_number)
+
+
+def _grouped_runs() -> list[dict]:
+    """Runs on disk, newest first, with the parts of each folded into one entry:
+    `size` totals them and `parts` counts them."""
+    groups: dict[str, dict] = {}
+    try:
+        for f in os.listdir(RUNS_DIR):
+            if not f.endswith(".csv"):
+                continue
+            try:
+                st = os.stat(os.path.join(RUNS_DIR, f))
+            except OSError:
+                continue  # vanished under us (the reclaim runs concurrently)
+            base = run_base(f)
+            g = groups.setdefault(base, {"name": base, "size": 0,
+                                         "modified": 0.0, "parts": 0})
+            g["size"] += st.st_size
+            g["modified"] = max(g["modified"], st.st_mtime)
+            g["parts"] += 1
+    except FileNotFoundError:
+        pass
+    return sorted(groups.values(), key=lambda r: r["modified"], reverse=True)
 
 
 # ==================================================
@@ -219,6 +268,11 @@ class RestServer:
         # so the UI downloads the run it just took rather than whichever file in
         # data/runs/ happens to have the newest mtime.
         self._current_run: str | None = None
+        # Whether that run is being written *right now*. _current_run keeps
+        # naming the last run of the session (the download button wants it), so
+        # it cannot on its own answer "is this file open" — which is what decides
+        # whether a delete has to be refused.
+        self._recording: bool = False
         self._run_log_error: str | None = None
         # Lock frequencies used by the GET LOCK command. These are NOT persisted:
         # the active crystal profile is the source of truth (applied on boot).
@@ -275,6 +329,8 @@ class RestServer:
             "temp_hold":      self._temp_hold,
             "freq_tracking":  self._freq_tracking,
             "freq_track_interval": self._freq_track_interval,
+            "prune_old_runs":   self._prune_old_runs,
+            "trim_current_run": self._trim_current_run,
             "active_crystal": self._active_crystal,
             "ambient_temp":   self._ambient_temp,
             "mat_dens":       self._mat_dens,
@@ -306,6 +362,10 @@ class RestServer:
             self._freq_tracking = bool(d["freq_tracking"])
         if "freq_track_interval" in d:
             self._freq_track_interval = max(1.0, float(d["freq_track_interval"]))
+        if "prune_old_runs" in d:
+            self._prune_old_runs = bool(d["prune_old_runs"])
+        if "trim_current_run" in d:
+            self._trim_current_run = bool(d["trim_current_run"])
         if "active_crystal" in d:
             self._active_crystal = d["active_crystal"]
         if "ambient_temp" in d:
@@ -472,6 +532,7 @@ class RestServer:
         self.command_queue.put(SetAutoRelockCommand(self._auto_relock))
         self.command_queue.put(SetTempHoldCommand(self._temp_hold))
         self.command_queue.put(SetFreqTrackingCommand(self._freq_tracking, self._freq_track_interval))
+        self.command_queue.put(SetStorageReclaimCommand(self._prune_old_runs, self._trim_current_run))
         self.command_queue.put(SetTargetThicknessCommand(self._target_thickness))
 
         # Apply the active crystal's coefficients + lock frequencies, if any.
@@ -592,6 +653,7 @@ class RestServer:
                         self._session_thickness = 0.0
                     # Flush stats when measurement ends
                     elif old_state == "RUNNING" and new_state != "RUNNING":
+                        self._recording = False  # the worker closes the log when a run ends
                         if self._measurement_start_time is not None and self._active_crystal:
                             elapsed_h = (time.time() - self._measurement_start_time) / 3600
                             profile = self._crystals.load(self._active_crystal)
@@ -626,11 +688,16 @@ class RestServer:
                     self._current_sweep = msg.get("name")
 
                 elif msg.get("type") == "RunLogStartedEvent":
+                    # Also fires when a long run rolls over into its next part;
+                    # the name is then that part, and run_base() maps it back to
+                    # the run it belongs to.
                     self._current_run = msg.get("name")
+                    self._recording = True
                     self._run_log_error = None
 
                 elif msg.get("type") == "RunLogFailedEvent":
                     self._current_run = None
+                    self._recording = False
                     self._run_log_error = msg.get("reason")
 
                 elif msg.get("type") == "OpcStatusEvent":
@@ -831,6 +898,20 @@ class RestServer:
             self._save_settings()
             return {"status": "ok"}
 
+        @app.post("/settings/storage_reclaim")
+        def set_storage_reclaim(prune_old_runs: bool, trim_current_run: bool):
+            """What the run logger may delete when the data partition runs low.
+            `prune_old_runs` gives up finished runs, oldest first;
+            `trim_current_run` drops the oldest parts of the run in progress,
+            which always keeps the part it is writing. Both are permanent — a run
+            CSV is the only copy of that run — and with both off a full disk stops
+            the recording instead, as it always did."""
+            self._prune_old_runs = prune_old_runs
+            self._trim_current_run = trim_current_run
+            self.command_queue.put(SetStorageReclaimCommand(prune_old_runs, trim_current_run))
+            self._save_settings()
+            return {"status": "ok"}
+
         @app.post("/settings/measurement_params")
         def set_measurement_params(ambient_temp: float, mat_dens: float, z_ratio: float,
                                    target_thickness: float | None = None):
@@ -908,6 +989,10 @@ class RestServer:
                 "freq_tracking": {
                     "enabled":  self._freq_tracking,
                     "interval": self._freq_track_interval,
+                },
+                "storage_reclaim": {
+                    "prune_old_runs":   self._prune_old_runs,
+                    "trim_current_run": self._trim_current_run,
                 },
                 "lock_frequencies": {
                     "mass": _finite(self._lock_freq_mass),
@@ -1035,25 +1120,20 @@ class RestServer:
 
         @app.get("/runs")
         def list_runs():
-            """Run CSVs saved on the Pitaya, newest first.
+            """Runs saved on the Pitaya, newest first.
 
             `current` is the run being recorded right now (or the last one this
-            session) — the UI downloads that in preference to "newest by mtime".
-            `free_bytes` drives the disk-full warning.
+            session) — the UI downloads that in preference to "newest by mtime";
+            `recording` says which of the two it is. `free_bytes` drives the
+            disk-full warning.
+
+            A run long enough to have rolled over is several CSVs on disk (see
+            run_logger.run_base) but one run here: `size` is the total across its
+            parts and `parts` says how many there are. Nothing above this layer
+            needs to know about parts — download and delete both take the run
+            name and act on all of them.
             """
-            out = []
-            try:
-                for f in os.listdir(RUNS_DIR):
-                    if not f.endswith(".csv"):
-                        continue
-                    try:
-                        st = os.stat(os.path.join(RUNS_DIR, f))
-                        out.append({"name": f, "size": st.st_size, "modified": st.st_mtime})
-                    except OSError:
-                        pass
-            except FileNotFoundError:
-                pass
-            out.sort(key=lambda r: r["modified"], reverse=True)
+            out = _grouped_runs()
             try:
                 usage = shutil.disk_usage(RUNS_DIR)
                 free, total = usage.free, usage.total
@@ -1061,7 +1141,8 @@ class RestServer:
                 free = total = None
             return {
                 "runs": out,
-                "current": self._current_run,
+                "current": run_base(self._current_run) if self._current_run else None,
+                "recording": self._recording,
                 "log_error": self._run_log_error,
                 "free_bytes": free,
                 "total_bytes": total,
@@ -1070,23 +1151,43 @@ class RestServer:
 
         @app.delete("/runs/{name}")
         def delete_run(name: str):
-            """Delete one run CSV. Only ever called after the operator confirms
-            the specific file in the UI — never automatically, and never the run
-            currently being written."""
-            safe = os.path.basename(name)
-            path = os.path.join(RUNS_DIR, safe)
-            if not safe.endswith(".csv") or not os.path.exists(path):
+            """Delete a run and every part of it. Operator-driven: this is the
+            confirmed "delete the oldest run" button in the UI. The logger also
+            deletes on its own when the partition runs low, but through its own
+            reclaim (see run_logger) rather than through here.
+
+            Refused for the run being recorded right now. `current` keeps naming
+            the last run of the session after it ends, so the refusal is keyed on
+            whether the log is actually open — deleting the run you just finished
+            is allowed."""
+            base = run_base(os.path.basename(name))
+            parts = _run_files(base)
+            if not parts:
                 raise HTTPException(404, "Run not found")
-            if safe == self._current_run:
+            if self._recording and self._current_run and run_base(self._current_run) == base:
                 raise HTTPException(409, "That run is being recorded right now")
-            size = os.path.getsize(path)
-            os.remove(path)
-            print(f"[API] Deleted run {safe} ({size / 1024 ** 2:.0f} MB) to free space")
+            freed, deleted, failed = 0, [], []
+            for part in parts:
+                path = os.path.join(RUNS_DIR, part)
+                try:
+                    size = os.path.getsize(path)
+                    os.remove(path)
+                except OSError as e:
+                    # Keep going: the point of this button is free space, and the
+                    # parts that did go are progress. The reply says what stuck.
+                    print(f"[API] Could not delete {part}: {e}")
+                    failed.append(part)
+                    continue
+                freed += size
+                deleted.append(part)
+            print(f"[API] Deleted run {base} ({len(deleted)} file(s), "
+                  f"{freed / 1024 ** 2:.0f} MB) to free space")
             try:
                 free = shutil.disk_usage(RUNS_DIR).free
             except OSError:
                 free = None
-            return {"status": "ok", "deleted": safe, "freed_bytes": size, "free_bytes": free}
+            return {"status": "ok", "deleted": base, "parts": deleted, "failed": failed,
+                    "freed_bytes": freed, "free_bytes": free}
 
         @app.post("/runs/retry-log")
         def retry_run_log():
@@ -1097,11 +1198,47 @@ class RestServer:
 
         @app.get("/runs/{name}/download")
         def download_run(name: str):
-            safe = os.path.basename(name)  # strip any path components (no traversal)
-            path = os.path.join(RUNS_DIR, safe)
-            if not safe.endswith(".csv") or not os.path.exists(path):
+            # run_base() strips any path components as well as the part suffix,
+            # so there is no traversal and any part of a run resolves to the run.
+            base = run_base(os.path.basename(name))
+            parts = _run_files(base)
+            if not parts:
                 raise HTTPException(404, "Run not found")
-            return FileResponse(path, filename=safe, media_type="text/csv")
+            if len(parts) == 1:
+                return FileResponse(os.path.join(RUNS_DIR, parts[0]),
+                                    filename=base, media_type="text/csv")
+            # A run that outgrew one file is still one run: serve the parts as a
+            # single CSV, header once. Streamed rather than joined in memory —
+            # the parts are tens of MB each and the box has 512 MB of RAM. If the
+            # reclaim has since eaten the earliest parts, what is left downloads
+            # as the run it now is; the remaining rows are untouched and each
+            # part still carries the run's SETTINGS row.
+            def stitched():
+                header_sent = False
+                for part in parts:
+                    try:
+                        fh = open(os.path.join(RUNS_DIR, part), "rb")
+                    except OSError:
+                        # Reclaimed between listing the parts and reading them:
+                        # serve the rest rather than breaking the download over a
+                        # file that no longer exists.
+                        print(f"[API] {part} vanished mid-download (reclaimed?)")
+                        continue
+                    with fh:
+                        # Keep the header from whichever part is served first —
+                        # keyed on what has actually been sent, not on the part's
+                        # position, or a first part that vanished just above would
+                        # take the only header with it.
+                        if header_sent:
+                            fh.readline()  # drop the header this part repeats
+                        header_sent = True
+                        while True:
+                            block = fh.read(_DOWNLOAD_BLOCK)
+                            if not block:
+                                break
+                            yield block
+            return StreamingResponse(stitched(), media_type="text/csv", headers={
+                "Content-Disposition": f'attachment; filename="{base}"'})
 
         # ---- Sweep ----
 
@@ -1235,6 +1372,16 @@ class RestServer:
 
         # ---- Static files (for frontend) ----
                 
+        # StaticFiles types a response from `mimetypes`, which is seeded from the
+        # host: on Linux from /etc/mime.types, on Windows from the registry —
+        # where .js can come back as text/plain and .woff2 as nothing at all
+        # (starlette then sends text/plain). Browsers tolerate that today only
+        # because these responses carry no nosniff header. Nail the two types the
+        # vendored offline assets depend on, so the UI does not rest on the MIME
+        # database of whichever box happens to be serving it. See OFFLINE.md.
+        mimetypes.add_type("text/javascript", ".js")
+        mimetypes.add_type("font/woff2", ".woff2")
+
         static_dir = os.path.join(os.path.dirname(__file__), "..", "static")
         app.mount("/", StaticFiles(directory=static_dir, html=True), name="static")
 

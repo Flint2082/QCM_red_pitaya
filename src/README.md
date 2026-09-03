@@ -12,6 +12,14 @@ ssh root@<red_pitaya_ip_address>
 
 Make sure the Red Pitaya is connected to the internet. See [this][RP_internet] link for instructions on how to set up the network connection.
 
+The board needs internet for this install only, to fetch its Python
+dependencies — several of them have no wheel for its armv7 platform, so they
+cannot be downloaded on another machine and carried over. Once it is running,
+neither the board nor the PCs controlling it need internet again:
+[OFFLINE.md](../OFFLINE.md) covers running the instrument on an isolated
+network, including how to keep a wheelhouse so this box can be reinstalled
+offline later.
+
 [RP_internet]: https://redpitaya.readthedocs.io/en/latest/networking/ethernet.html
 
 ---

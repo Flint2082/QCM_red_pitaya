@@ -1,0 +1,11 @@
+# Driving the instrument from a PC: tools/qcm_client.py, tools/qcm_demo.py.
+#
+# Pinned to the versions the vendored wheels in vendor/wheels/ hold, so an
+# offline install is exactly reproducible:
+#     pip install --no-index --find-links vendor/wheels -r requirements-client.txt
+#
+# Every wheel in this set is pure Python (charset-normalizer ships both a
+# compiled and a pure fallback, and both are vendored), so it installs on any
+# OS and any Python 3 without needing a wheelhouse rebuilt for that machine.
+requests==2.34.2
+websocket-client==1.9.2

@@ -13,7 +13,8 @@ to one HTTP endpoint of the running control software.
     qcm.stop_measurement()
 
 Requires `requests`; live streaming additionally needs `websocket-client`
-(`pip install requests websocket-client`).
+(`pip install -r requirements-client.txt`, or `--no-index --find-links
+vendor/wheels` on a PC with no internet — see OFFLINE.md).
 """
 
 import os
@@ -112,6 +113,17 @@ class QCMClient:
         were. The profile on disk is left alone — use save_current_to_crystal()
         to keep a tracked set. Minimum interval 1 s."""
         return self._post("/settings/freq_tracking", enabled=bool(enabled), interval=interval)
+
+    def set_storage_reclaim(self, prune_old_runs: bool, trim_current_run: bool):
+        """What the run logger may delete when the data partition runs low
+        (both on by default). `prune_old_runs` gives up finished runs, oldest
+        first; `trim_current_run` drops the oldest chunks of the run in
+        progress, which always keeps the chunk it is writing. Both are
+        permanent — a run CSV is the only copy of that run — and with both off a
+        full disk stops the recording instead."""
+        return self._post("/settings/storage_reclaim",
+                          prune_old_runs=bool(prune_old_runs),
+                          trim_current_run=bool(trim_current_run))
 
     def set_lock_frequencies(self, mass: float, temp: float):
         return self._post("/settings/lock_frequencies", mass=mass, temp=temp)
@@ -257,6 +269,9 @@ class QCMClient:
 
     # ----------------------------------------------------------- server-side runs
     def runs(self) -> list:
+        """Runs on the Pitaya, newest first. A long run is several CSVs on the
+        box but one entry here: `size` totals them, `parts` counts them, and
+        download_run() serves them back as a single CSV."""
         return self._get("/runs")["runs"]
 
     def runs_info(self) -> dict:
@@ -274,8 +289,9 @@ class QCMClient:
         return self.download_run(runs[0]["name"], dest_path)
 
     def delete_run(self, name: str):
-        """Delete one run CSV. It is the only copy of that run — nothing else
-        holds it. Refused with HTTP 409 for the run being recorded right now."""
+        """Delete a run and every file it consists of. It is the only copy of
+        that run — nothing else holds it. Refused with HTTP 409 for the run being
+        recorded right now (the run you just finished can be deleted)."""
         return self._delete(f"/runs/{name}")
 
     def retry_run_log(self):

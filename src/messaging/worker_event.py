@@ -71,6 +71,13 @@ class RunLogStartedEvent(Event):
     name: str  # CSV this run is being recorded to, on the Pitaya
 
 @dataclass
+class StorageReclaimedEvent(Event):
+    """Run CSVs were deleted to keep recording. Permanent, so it is surfaced —
+    the operator has to be able to see that data went away and what is left."""
+    summary: str
+    free_bytes: int | None
+
+@dataclass
 class RunLogFailedEvent(Event):
     reason: str  # why the run is not being recorded (disk full, write error, ...)
 

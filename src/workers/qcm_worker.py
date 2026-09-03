@@ -77,6 +77,10 @@ class QCMWorker(threading.Thread):
         self.freq_tracking = True
         self.freq_track_interval = 10.0  # seconds between updates
         self._last_freq_track = 0.0
+        # Automatic gain control. The QCM owns the servo itself; the worker owns
+        # when it is allowed to run (see _update_agc) and reports a channel that
+        # has run out of drive range.
+        self._agc_railed = {1: False, 2: False}
         
     def stop(self):
         self.running = False
@@ -234,6 +238,9 @@ class QCMWorker(threading.Thread):
             self.qcm.setOscConfig(command.oscillator_idx, int_gain=command.gain)
         elif isinstance(command, SetLPFFreqCommand):
             self.qcm.setOscConfig(command.oscillator_idx, lpf_freq=command.freq)
+        elif isinstance(command, SetAGCCommand):
+            self.qcm.setAGC(command.oscillator_idx, enabled=command.enabled,
+                            manual_gain=command.manual_gain, target_amp=command.target_amp)
         elif isinstance(command, SetInvertedCommand):
             self.qcm.setOscConfig(command.oscillator_idx, inverted=command.inverted)
         elif isinstance(command, SetOutputModeCommand):
@@ -352,6 +359,46 @@ class QCMWorker(threading.Thread):
         self.event_queue.put(StartFreqAutoUpdatedEvent(
             freq_mass=freqs[0], freq_temp=freqs[1], source="tracking"))
 
+    def _update_agc(self, data, lock_mass: bool, lock_temp: bool):
+        """Advance the drive-gain servo by one cycle per channel, using the
+        amplitudes this cycle's telemetry has already read.
+
+        Gated on the worker state for the same reason _track_lock_freqs is:
+        during a sweep or a capacitor adjustment the oscillators are parked
+        open-loop, where the phase can sit quiet enough to pass the lock test at
+        a frequency that is not a resonance at all. Those states want a fixed,
+        known drive and set it themselves — the servo must not walk it.
+        """
+        if self.state not in (WorkerState.MEASURING, WorkerState.IDLE):
+            return
+        for osc, amp, locked in ((1, data.amp_mass, lock_mass),
+                                 (2, data.amp_temp, lock_temp)):
+            self.qcm.updateAGC(osc, amp, locked)
+            self._note_agc_rail(osc)
+
+    def _note_agc_rail(self, osc: int):
+        """Report the edges of a railed AGC, once each.
+
+        A channel sitting at the end of its gain range with the amplitude still
+        off target is not a fault worth stopping a run for — the loop is locked
+        and the frequency is good — but the drive has stopped holding the
+        amplitude anywhere near where it was asked to, which is the one thing the
+        AGC was there to do. Said once at each edge, it cannot pass silently and
+        cannot flood the log either."""
+        railed = self.qcm.getAGCRailed(osc)
+        if railed == self._agc_railed[osc]:
+            return
+        self._agc_railed[osc] = railed
+        gain = self.qcm.getOutputGain(osc)
+        where = "?" if gain is None else f"{gain:.4f}"
+        if railed:
+            print(f"[QCM] AGC osc {osc} out of range at gain {where} — "
+                  f"the target amplitude cannot be reached")
+            self.logger.write_event(
+                "AGC_RAIL", f"osc {osc} at drive gain limit {where}; target amplitude unreachable")
+        else:
+            self.logger.write_event("AGC_RAIL_END", f"osc {osc} back in range at drive gain {where}")
+
     def _note_temp_hold(self, holding: bool, data):
         """Record the edges of a temperature hold in the run log, once each.
 
@@ -468,6 +515,7 @@ class QCMWorker(threading.Thread):
             data = self.qcm.getMeasurement(hold_temp=hold_temp)
             self.logger.write_measurement(data)  # durable on-disk record (WS-independent)
             self._note_temp_hold(hold_temp, data)
+            self._update_agc(data, lock_mass, lock_temp)
             self._check_target(data)
             self.event_queue.put(MeasurementEvent(data=data))
             # Keep each PLL capture window centred on its current frequency — but
@@ -486,4 +534,9 @@ class QCMWorker(threading.Thread):
         # phases and lock quality need neither a measurement reference nor a
         # calibration, so there is no reason for the monitor to sit blank while
         # the operator is locking up or judging a lock before starting a run.
-        self.event_queue.put(TelemetryEvent(data=self.qcm.getTelemetry()))
+        telemetry = self.qcm.getTelemetry()
+        # The AGC runs while idle too. A run is started on a lock that is already
+        # up, so the drive has to have settled *before* the operator presses
+        # start — otherwise every run would open with the servo still hunting.
+        self._update_agc(telemetry, lock_mass, lock_temp)
+        self.event_queue.put(TelemetryEvent(data=telemetry))

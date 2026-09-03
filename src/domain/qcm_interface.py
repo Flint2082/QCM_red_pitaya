@@ -16,6 +16,19 @@ from domain.measurement import MeasurementData, TelemetryData
 # capture range without needing a QCMInterface instance.
 WINDOW_SIZE = 2**12
 
+# Drive gain, written to output_gain_1/2 in Fixed 32.24: the FPGA multiplies the
+# excitation sinewave by it, so 1.0 is the drive the hardware had before the
+# register existed and stays the value everything falls back to.
+#
+# The word is capped at what 32.24 holds whether the FPGA reads it as signed or
+# unsigned (Fix_32_24 stops at 2**31-1). Giving up the top half of an unsigned
+# range costs nothing real — a drive gain anywhere near 128x is a fault, not a
+# setting — and it means a sign convention decided later in the FPGA cannot turn
+# a large gain into a negative one, which would invert the feedback and break the
+# lock rather than merely being too loud.
+OUTPUT_GAIN_FRAC_BITS = 24
+OUTPUT_GAIN_MAX = (2 ** 31 - 1) / 2 ** OUTPUT_GAIN_FRAC_BITS  # ~128.0
+
 
 class QCMInterface:
     def __init__(self, fpga):
@@ -80,6 +93,38 @@ class QCMInterface:
         self._int_gain = {1: self.INT_GAIN_POST_LOCK, 2: self.INT_GAIN_POST_LOCK}  # post-lock integrator gain
         self._lpf_freq = {1: self.LPF_FREQ, 2: self.LPF_FREQ}                   # LPF cutoff frequency (Hz)
 
+        # Automatic gain control on the drive. The FPGA scales each oscillator's
+        # excitation sinewave by output_gain_N; the AGC trims that so the
+        # amplitude coming back off the crystal sits at the configured target.
+        # Holding the demodulated amplitude constant holds the loop's SNR — and
+        # with it the phase noise the lock detect measures — steady while the
+        # crystal's own response falls off with temperature and film loading,
+        # which is exactly the drift that made an absolute amplitude threshold
+        # unusable as a lock test (see LOCK_PHASE_STD above).
+        #
+        # It only servos a *locked* channel. Off resonance the returned amplitude
+        # says nothing about the drive a resonance would need, so servoing on it
+        # would wind the gain to a rail while the loop is still trying to
+        # acquire; unlocked, the channel gets the manual value instead — which is
+        # also what a sweep and a capacitor adjustment want, a fixed known drive.
+        self._agc_enabled = {1: False, 2: False}     # False = manual override
+        self._manual_gain = {1: 1.0, 2: 1.0}         # drive whenever the AGC is not adjusting
+        self._target_amp  = {1: 2048.0, 2: 2048.0}   # demodulated amplitude the AGC aims for
+        self._output_gain_raw = {1: None, 2: None}   # last value written (None = never written)
+        self._agc_railed  = {1: False, 2: False}     # out of gain range and still off target
+        # Servo tuning. Amplitude is roughly proportional to drive, so
+        # gain *= target/amp would be the one-step solution; AGC_LOOP_GAIN takes
+        # a fraction of that correction and AGC_MAX_STEP caps a single move.
+        # Deliberately slow: drive level pulls the quartz resonance slightly, so
+        # a gain that chases every amplitude wobble writes that wobble straight
+        # into the frequency being measured. At ~10 Hz these let the drive cover
+        # a factor of ten in a few seconds, far faster than a deposition changes
+        # the crystal and far slower than the measurement it must not disturb.
+        self.AGC_LOOP_GAIN = 0.2     # fraction of the ideal correction per cycle
+        self.AGC_MAX_STEP = 1.1      # largest gain ratio in one cycle
+        self.AGC_DEADBAND = 0.02     # relative amplitude error left alone
+        self.AGC_MIN_GAIN = 2 ** -8  # floor — a multiplicative servo cannot climb out of 0
+
         # Rolling phase-error history per oscillator, fed one sample per
         # acquisition cycle by sampleLock. Lock state and lock quality are both
         # read back out of these, so every consumer judges lock the same way.
@@ -95,6 +140,19 @@ class QCMInterface:
         except Exception as e:
             print(f"Failed to upload FPGA program: {e}")
             raise
+
+        # The gain registers are newer than some bitstreams still in use, and the
+        # software is deployed separately from the .fpg. Decide once whether the
+        # feature exists rather than raising on every write: without the
+        # registers the drive is whatever the FPGA hard-codes, which is the same
+        # thing the default gain of 1.0 asks for, so everything else still works.
+        self._has_output_gain = all(self.fpga.has_register(f'output_gain_{i}') for i in (1, 2))
+        if self._has_output_gain:
+            for i in (1, 2):
+                self.setOutputGain(i, self._manual_gain[i])
+        else:
+            print("[QCM] Bitstream has no output_gain registers — drive gain "
+                  "control and AGC are inactive (fixed hardware drive)")
 
     def to_signed(self, value, bits):
         """Interpret unsigned integer as signed."""
@@ -116,6 +174,41 @@ class QCMInterface:
     def setLPFFreq(self, osc_index, freq):
         gain = ( 2 * np.pi * freq ) / ( self.fpga.sample_rate + ( 2 * np.pi * freq ) )
         self.fpga.write_register(register_name='lpf_gain_'+str(osc_index),value=int(gain*2**32)) # multiplication to account for fixed-point (32F32) representation in FPGA
+
+    def setOutputGain(self, osc_index, gain):
+        """Write one oscillator's drive gain (Fixed 32.24) and return the value
+        actually applied — None when this bitstream has no gain register.
+
+        A repeat of the value already in the register is skipped: the gain is
+        re-asserted every acquisition cycle, and write_register reads back and
+        compares on every call, so the no-change case is worth not paying for."""
+        if not self._has_output_gain:
+            return None
+        gain = min(max(float(gain), 0.0), OUTPUT_GAIN_MAX)
+        raw = int(round(gain * 2 ** OUTPUT_GAIN_FRAC_BITS))
+        if raw != self._output_gain_raw[osc_index]:
+            self.fpga.write_register(register_name='output_gain_' + str(osc_index), value=raw)
+            self._output_gain_raw[osc_index] = raw
+        return raw / 2 ** OUTPUT_GAIN_FRAC_BITS
+
+    def setAGC(self, osc_index, enabled=None, manual_gain=None, target_amp=None):
+        """Configure automatic gain control for one oscillator; only the fields
+        given are changed. `enabled` False is the manual override — the drive
+        stays at `manual_gain` whatever the loop is doing."""
+        if enabled is not None:
+            self._agc_enabled[osc_index] = bool(enabled)
+        if manual_gain is not None:
+            self._manual_gain[osc_index] = min(max(float(manual_gain), 0.0), OUTPUT_GAIN_MAX)
+        if target_amp is not None:
+            self._target_amp[osc_index] = abs(float(target_amp))
+        # Apply now rather than on the next acquisition cycle whenever the manual
+        # value is the one in force, so editing it is visible immediately. A
+        # locked channel the AGC is actively servoing keeps the gain it has
+        # arrived at — dropping that back to the manual value would restart the
+        # servo mid-measurement for what may have been an edit to the target.
+        if not (self._agc_enabled[osc_index] and self.getLockDetect(osc_index)):
+            self._agc_railed[osc_index] = False
+            self.setOutputGain(osc_index, self._manual_gain[osc_index])
 
     def setLockDetect(self, phase_tolerance, phase_std):
         self.LOCK_PHASE_TOLERANCE = phase_tolerance
@@ -207,6 +300,19 @@ class QCMInterface:
         phase = self.to_signed(self.fpga.read_register(f'phase_out_{osc_index}'),30)
         return phase/2**12           # FIX_30_12
 
+    def getOutputGain(self, osc_index):
+        """The drive gain currently in the register, or None if this bitstream
+        has no gain register (the drive is then fixed in hardware)."""
+        raw = self._output_gain_raw[osc_index]
+        return None if raw is None else raw / 2 ** OUTPUT_GAIN_FRAC_BITS
+
+    def getAGCRailed(self, osc_index):
+        """True when the AGC has run out of gain range and the amplitude is still
+        off target — the drive cannot reach the requested amplitude, so the
+        target is set beyond what this crystal returns (or the channel is not
+        being driven into anything)."""
+        return self._agc_railed[osc_index]
+
     def getPhaseLockTarget(self, osc_index):
         """Phase (radians) this channel settles at once locked. The loop locks in
         quadrature, and inverting the feedback flips which of the two quadrature
@@ -287,10 +393,67 @@ class QCMInterface:
     # Control methods
     # ===========================
     
+    def updateAGC(self, osc_index, amplitude, locked):
+        """Advance one oscillator's gain servo by a single acquisition cycle and
+        return the gain now in force (None without the gain registers).
+
+        Call once per cycle per channel with that cycle's demodulated amplitude —
+        the same figure the telemetry already carries, so this costs no extra
+        register reads.
+
+        `locked` is the caller's judgement rather than getLockDetect's on
+        purpose. Only the worker knows whether the loops are actually closed: a
+        sweep and a capacitor adjustment park the oscillators open-loop, where a
+        quiet phase can pass the lock test at a frequency that is not a resonance
+        at all — and servoing the drive against *that* amplitude would leave the
+        gain somewhere arbitrary for the lock that follows.
+        """
+        if not self._has_output_gain:
+            return None
+
+        if not (self._agc_enabled[osc_index] and locked):
+            # Manual override, or no lock worth servoing on: hold the manual
+            # drive. Re-asserted every cycle so the channel comes out of a sweep,
+            # a capacitor adjustment or a lost lock at a known drive level.
+            self._agc_railed[osc_index] = False
+            return self.setOutputGain(osc_index, self._manual_gain[osc_index])
+
+        target = self._target_amp[osc_index]
+        gain = self.getOutputGain(osc_index)
+        if gain is None:
+            gain = self._manual_gain[osc_index]
+        if target <= 0:
+            return gain  # no target set — nothing to servo towards
+
+        amp = abs(float(amplitude))
+        if abs(amp / target - 1.0) < self.AGC_DEADBAND:
+            # Close enough. The deadband is what stops the servo rewriting the
+            # register on measurement noise alone, which would modulate the drive
+            # — and through it the resonance — at the acquisition rate.
+            self._agc_railed[osc_index] = False
+            return gain
+
+        if amp <= 0:
+            correction = self.AGC_MAX_STEP  # nothing coming back at all: climb
+        else:
+            correction = (target / amp) ** self.AGC_LOOP_GAIN
+        correction = min(max(correction, 1 / self.AGC_MAX_STEP), self.AGC_MAX_STEP)
+
+        wanted = gain * correction
+        applied = self.setOutputGain(osc_index, min(max(wanted, self.AGC_MIN_GAIN), OUTPUT_GAIN_MAX))
+        self._agc_railed[osc_index] = not (self.AGC_MIN_GAIN <= wanted <= OUTPUT_GAIN_MAX)
+        return applied
+
     def standby(self, osc_index: int):
         self.setFreq(osc_index,0)
         self.setInt(osc_index,0)
         self.reset()
+        # Open loop from here: the AGC has no resonance to servo against, and a
+        # sweep wants the same known drive at every point of it. Written after
+        # the reset, not before, so it stands whatever the reset does to the
+        # gain register — a sweep resets once per point, and a drive silently
+        # zeroed by the first of those would take the whole sweep with it.
+        self.setOutputGain(osc_index, self._manual_gain[osc_index])
 
     def startCapAdjust(self, freq_mass, freq_temp):
         """Emit two static (open-loop) tones for nulling the trim capacitor:
@@ -306,6 +469,11 @@ class QCMInterface:
         self.setInt(2, 0.0)
         self.setLPFFreq(1, self._lpf_freq[1])
         self.setLPFFreq(2, self._lpf_freq[2])
+        # Fixed drive throughout: the operator is nulling C0 by watching these
+        # amplitudes fall, and a gain moving underneath them would be
+        # indistinguishable from turning the capacitor.
+        self.setOutputGain(1, self._manual_gain[1])
+        self.setOutputGain(2, self._manual_gain[2])
         self.setFreq(1, f1)
         self.setFreq(2, f2)
         print(f"[QCM] Capacitor-adjust tones: osc1={f1:.0f} Hz, osc2={f2:.0f} Hz")
@@ -354,12 +522,17 @@ class QCMInterface:
         
         print(f"Starting up PLLs around frequencies {start_freq_mass} and {start_freq_temp}")
 
-        ## Apply the configured per-oscillator settings (inversion + LPF cutoff)
+        ## Apply the configured per-oscillator settings (inversion + LPF cutoff),
+        ## and acquire at the manual drive — the AGC only takes over once there
+        ## is a lock for it to servo against, so every attempt starts from the
+        ## same known drive level rather than wherever the last one ended up.
         self.setInv(1, self._inv[1])
         self.setLPFFreq(1, self._lpf_freq[1])
+        self.setOutputGain(1, self._manual_gain[1])
 
         self.setInv(2, self._inv[2])
         self.setLPFFreq(2, self._lpf_freq[2])
+        self.setOutputGain(2, self._manual_gain[2])
 
         for t in range(self.MAX_STARTUP_TRIES): # try to lock for up to MAX_STARTUP_TRIES
             self.setFreq(1,start_freq_mass-self.WINDOW_SIZE/2)
@@ -425,6 +598,14 @@ class QCMInterface:
                     "lpf_freq":          self._lpf_freq.get(i),
                     "inverted":          self._inv.get(i),
                     "phase_lock_target": self.getPhaseLockTarget(i),
+                    # Drive gain: what the AGC was allowed to do, and the gain it
+                    # happened to be holding when the run opened. A run taken at a
+                    # servoed drive is not directly comparable with one taken at a
+                    # fixed drive, so the mode belongs in the record.
+                    "agc_enabled":       self._agc_enabled.get(i),
+                    "manual_gain":       self._manual_gain.get(i),
+                    "target_amp":        self._target_amp.get(i),
+                    "output_gain":       self.getOutputGain(i),
                 }
                 for i in (1, 2)
             },
@@ -434,6 +615,12 @@ class QCMInterface:
                 "window":          self.LOCK_WINDOW,
             },
             "window_size": self.WINDOW_SIZE,
+            "agc": {
+                "available":  self._has_output_gain,
+                "loop_gain":  self.AGC_LOOP_GAIN,
+                "max_step":   self.AGC_MAX_STEP,
+                "deadband":   self.AGC_DEADBAND,
+            },
         }
 
     def getCoefficients(self) -> dict:

@@ -76,7 +76,18 @@ class SetInvertedCommand(WorkerCommand):
 class SetLPFFreqCommand(WorkerCommand):
     oscillator_idx: int
     freq: float  # LPF cutoff frequency in Hz
-    
+
+@dataclass
+class SetAGCCommand(WorkerCommand):
+    """Drive gain for one oscillator. With `enabled` the gain is servoed to hold
+    the demodulated amplitude at `target_amp` while that channel is locked;
+    without it — the manual override — the drive stays at `manual_gain`, which is
+    also what an unlocked channel gets either way."""
+    oscillator_idx: int
+    enabled: bool
+    manual_gain: float  # output_gain_N while not servoing; 1.0 = unscaled
+    target_amp: float   # demodulated amplitude the AGC holds
+
 @dataclass
 class SetOutputModeCommand(WorkerCommand):
     # One analog output, one selector: the mode itself names the oscillator

@@ -125,8 +125,15 @@ header { height: var(--header-h); background: var(--surface); border-bottom: 1px
 .settings-section-title { font-family: 'DM Mono', monospace; font-size: 11px; letter-spacing: 0.1em; text-transform: uppercase; color: var(--text-mid); margin-bottom: 14px; padding-bottom: 8px; border-bottom: 1px solid var(--border); }
 .settings-group { margin-bottom: 28px; }
 .settings-row { display: grid; grid-template-columns: 220px 1fr auto; align-items: center; gap: 16px; padding: 8px 0; border-bottom: 1px solid rgba(255,255,255,0.03); }
-.settings-row-label { font-size: 12px; color: var(--text-mid); }
+.settings-row-label { font-size: 12px; color: var(--text-mid); display: flex; align-items: center; gap: 6px; }
 .settings-row-desc { font-size: 11px; color: var(--text-dim); margin-top: 2px; }
+/* Descriptions are folded away behind the row's "i" button (see initSettingsInfo).
+   Doing that moves them out of the 220px label column and onto the row itself, so
+   an open one gets the full width to read across instead of a narrow ribbon. */
+.settings-row > .settings-row-desc { grid-column: 1 / -1; max-width: 760px; margin: 6px 0 2px; line-height: 1.55; }
+.settings-info { flex: none; width: 15px; height: 15px; padding: 0; border: 1px solid var(--border); border-radius: 50%; background: transparent; color: var(--text-dim); font-family: 'DM Mono', monospace; font-size: 9px; line-height: 1; cursor: pointer; transition: color 0.12s, border-color 0.12s; }
+.settings-info:hover { color: var(--text); border-color: var(--text-dim); }
+.settings-info[aria-expanded="true"] { color: var(--blue); border-color: var(--blue); }
 .settings-input { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); color: var(--text); font-family: 'DM Mono', monospace; font-size: 12px; padding: 4px 10px; width: 150px; text-align: right; outline: none; transition: border-color 0.12s; }
 .settings-input:focus { border-color: var(--blue); }
 .settings-input::-webkit-outer-spin-button, .settings-input::-webkit-inner-spin-button { -webkit-appearance: none; }
@@ -466,6 +473,9 @@ footer { height: 24px; background: var(--surface); border-top: 1px solid var(--b
             <div class="settings-row"><div><div class="settings-row-label">Integrator Gain</div><div class="settings-row-desc">PLL loop integrator coefficient</div></div><div></div><div style="display:flex;align-items:center;gap:6px"><input class="settings-input" type="number" id="s-osc1-int" value="0.00001" step="0.000001"><span class="settings-unit"></span></div></div>
             <div class="settings-row"><div><div class="settings-row-label">LPF Cutoff</div><div class="settings-row-desc">Demodulator low-pass cutoff frequency</div></div><div></div><div style="display:flex;align-items:center;gap:6px"><input class="settings-input" type="number" id="s-osc1-lpf" value="200" step="1" min="0"><span class="settings-unit">Hz</span></div></div>
             <div class="settings-row"><div><div class="settings-row-label">Invert Feedback</div><div class="settings-row-desc">Invert the feedback signal</div></div><div></div><div style="display:flex;align-items:center;gap:6px"><select class="settings-input" id="s-osc1-inv" style="width:150px;text-align:left"><option value="0">Disabled</option><option value="1">Enabled</option></select></div></div>
+            <div class="settings-row"><div><div class="settings-row-label">Drive Gain Control</div><div class="settings-row-desc"><b>Automatic</b> scales the excitation sinewave (FPGA register <b>output_gain_1</b>) to hold the demodulated amplitude at the target below, keeping the loop's signal-to-noise — and the phase noise the lock detection judges on — steady as the crystal's response falls off with temperature and film loading. Only ever adjusted <i>while this mode is locked</i>: off resonance the returned amplitude says nothing about the drive a resonance needs, so an unlocked channel falls back to the manual gain — as do sweeps and the capacitor adjustment, which want a fixed known drive. <b>Manual</b> is the override: the manual gain applies at all times</div></div><div></div><div style="display:flex;align-items:center;gap:6px"><select class="settings-input" id="s-osc1-agc" style="width:150px;text-align:left"><option value="0">Manual</option><option value="1">Automatic</option></select></div></div>
+            <div class="settings-row"><div><div class="settings-row-label">Manual Drive Gain</div><div class="settings-row-desc">Amplitude multiplier on the output sinewave whenever the AGC is not adjusting: always in Manual, and on either setting while this mode is unlocked. 1.0 is the unscaled drive the hardware had before the gain register existed</div></div><div></div><div style="display:flex;align-items:center;gap:6px"><input class="settings-input" type="number" id="s-osc1-gain" value="1" step="0.01" min="0" max="127.999"><span class="settings-unit">×</span></div></div>
+            <div class="settings-row"><div><div class="settings-row-label">Target Amplitude</div><div class="settings-row-desc">Demodulated amplitude the AGC holds while locked, in the same units as the amplitude trace on the Monitor tab. Read one off a good lock and set the level you want held rather than guessing — a target this crystal cannot return simply parks the gain at its limit, which is reported as an <b>AGC_RAIL</b> event in the run log</div></div><div></div><div style="display:flex;align-items:center;gap:6px"><input class="settings-input" type="number" id="s-osc1-amp" value="2048" step="1" min="0"><span class="settings-unit"></span></div></div>
           </div>
 
           <div class="settings-section-title">PLL — OSCILLATOR 2 (TEMP MODE)</div>
@@ -473,6 +483,9 @@ footer { height: 24px; background: var(--surface); border-top: 1px solid var(--b
             <div class="settings-row"><div><div class="settings-row-label">Integrator Gain</div><div class="settings-row-desc">PLL loop integrator coefficient</div></div><div></div><div style="display:flex;align-items:center;gap:6px"><input class="settings-input" type="number" id="s-osc2-int" value="0.00001" step="0.000001"><span class="settings-unit"></span></div></div>
             <div class="settings-row"><div><div class="settings-row-label">LPF Cutoff</div><div class="settings-row-desc">Demodulator low-pass cutoff frequency</div></div><div></div><div style="display:flex;align-items:center;gap:6px"><input class="settings-input" type="number" id="s-osc2-lpf" value="200" step="1" min="0"><span class="settings-unit">Hz</span></div></div>
             <div class="settings-row"><div><div class="settings-row-label">Invert Feedback</div><div class="settings-row-desc">Invert the feedback signal</div></div><div></div><div style="display:flex;align-items:center;gap:6px"><select class="settings-input" id="s-osc2-inv" style="width:150px;text-align:left"><option value="0">Disabled</option><option value="1">Enabled</option></select></div></div>
+            <div class="settings-row"><div><div class="settings-row-label">Drive Gain Control</div><div class="settings-row-desc"><b>Automatic</b> scales the excitation sinewave (FPGA register <b>output_gain_2</b>) to hold the demodulated amplitude at the target below, keeping the loop's signal-to-noise — and the phase noise the lock detection judges on — steady as the crystal's response falls off with temperature and film loading. Only ever adjusted <i>while this mode is locked</i>: off resonance the returned amplitude says nothing about the drive a resonance needs, so an unlocked channel falls back to the manual gain — as do sweeps and the capacitor adjustment, which want a fixed known drive. <b>Manual</b> is the override: the manual gain applies at all times</div></div><div></div><div style="display:flex;align-items:center;gap:6px"><select class="settings-input" id="s-osc2-agc" style="width:150px;text-align:left"><option value="0">Manual</option><option value="1">Automatic</option></select></div></div>
+            <div class="settings-row"><div><div class="settings-row-label">Manual Drive Gain</div><div class="settings-row-desc">Amplitude multiplier on the output sinewave whenever the AGC is not adjusting: always in Manual, and on either setting while this mode is unlocked. 1.0 is the unscaled drive the hardware had before the gain register existed</div></div><div></div><div style="display:flex;align-items:center;gap:6px"><input class="settings-input" type="number" id="s-osc2-gain" value="1" step="0.01" min="0" max="127.999"><span class="settings-unit">×</span></div></div>
+            <div class="settings-row"><div><div class="settings-row-label">Target Amplitude</div><div class="settings-row-desc">Demodulated amplitude the AGC holds while locked, in the same units as the amplitude trace on the Monitor tab. Read one off a good lock and set the level you want held rather than guessing — a target this crystal cannot return simply parks the gain at its limit, which is reported as an <b>AGC_RAIL</b> event in the run log</div></div><div></div><div style="display:flex;align-items:center;gap:6px"><input class="settings-input" type="number" id="s-osc2-amp" value="2048" step="1" min="0"><span class="settings-unit"></span></div></div>
           </div>
 
           <div class="settings-section-title">LOCK DETECTION</div>
@@ -2073,6 +2086,43 @@ async function deleteSelectedCrystal() {
   } catch(e) { showToast('Delete failed', true); }
 }
 
+// Fold the long settings descriptions away behind a small "i" on their row. The
+// panel carries a lot of prose — most of it wanted once, while deciding what a
+// setting should be, and never again — and reading it end to end used to mean
+// scrolling past all of it to find the field you came for. Done here rather than
+// in the markup so it covers every row, including any added later, and so the
+// text is still plain HTML for anyone reading the source.
+//
+// Only real explanations fold. Plenty of rows carry a four-word subtitle instead
+// ("PLL loop integrator coefficient", "at (Fm + Ft) / 2"), which says what the
+// row *is* rather than explaining it: putting that behind a click costs a
+// keystroke and saves no space at all. This is the line between the two — raise
+// it to fold more, drop it to 0 to fold everything.
+const INFO_FOLD_CHARS = 90;
+
+function initSettingsInfo() {
+  for (const desc of document.querySelectorAll('.settings-row-desc')) {
+    const row = desc.closest('.settings-row');
+    const label = row?.querySelector('.settings-row-label');
+    if (!row || !label) continue;   // e.g. the standalone note above the OPC node list
+    if (desc.textContent.trim().length < INFO_FOLD_CHARS) continue;
+    desc.hidden = true;
+    row.appendChild(desc);          // out of the label column, onto the row (see CSS)
+    const btn = document.createElement('button');
+    btn.type = 'button';            // never a form submit
+    btn.className = 'settings-info';
+    btn.textContent = 'i';
+    btn.title = 'What this setting does';
+    btn.setAttribute('aria-expanded', 'false');
+    btn.addEventListener('click', () => {
+      desc.hidden = !desc.hidden;
+      btn.setAttribute('aria-expanded', String(!desc.hidden));
+    });
+    label.appendChild(btn);
+  }
+}
+initSettingsInfo();
+
 async function loadInitialSettings() {
   let s = null;
   try {
@@ -2083,6 +2133,9 @@ async function loadInitialSettings() {
       document.getElementById(`s-osc${osc}-int`).value = os.int_gain ?? '';
       document.getElementById(`s-osc${osc}-lpf`).value  = os.lpf_freq  ?? '';
       document.getElementById(`s-osc${osc}-inv`).value = os.inverted ? '1' : '0';
+      document.getElementById(`s-osc${osc}-agc`).value = os.agc_enabled ? '1' : '0';
+      if (os.manual_gain != null) document.getElementById(`s-osc${osc}-gain`).value = os.manual_gain;
+      if (os.target_amp  != null) document.getElementById(`s-osc${osc}-amp`).value  = os.target_amp;
     }
     if (s.output_mode != null) document.getElementById('s-output-mode').value = s.output_mode;
     if (s.measurement) {
@@ -2440,9 +2493,15 @@ async function applyOscSettings(osc) {
   const intGain  = parseFloat(document.getElementById(`s-osc${osc}-int`).value);
   const lpfFreq  = parseFloat(document.getElementById(`s-osc${osc}-lpf`).value);
   const inv      = document.getElementById(`s-osc${osc}-inv`).value === '1';
+  const agc      = document.getElementById(`s-osc${osc}-agc`).value === '1';
+  const gain     = parseFloat(document.getElementById(`s-osc${osc}-gain`).value);
+  const amp      = parseFloat(document.getElementById(`s-osc${osc}-amp`).value);
   await postOrThrow(`${API_URL}/settings/integrator_gain?oscillator_idx=${osc}&gain=${intGain}`);
   await postOrThrow(`${API_URL}/settings/lpf_freq?oscillator_idx=${osc}&freq=${lpfFreq}`);
   await postOrThrow(`${API_URL}/settings/inverted?oscillator_idx=${osc}&inverted=${inv}`);
+  // Mode, manual gain and target go together — the server takes them as one
+  // setting because two of the three are meaningless on their own.
+  await postOrThrow(`${API_URL}/settings/agc?oscillator_idx=${osc}&enabled=${agc}&manual_gain=${gain}&target_amp=${amp}`);
 }
 
 async function applyCrystal() {
@@ -2601,8 +2660,8 @@ const CRYSTAL_SETTING_IDS = [
 // their own CONNECT action).
 const SETTING_IDS = [
   's-mat-dens', 's-mat-zratio', 's-amb-temp', 's-target-thickness',
-  's-osc1-int', 's-osc1-lpf', 's-osc1-inv',
-  's-osc2-int', 's-osc2-lpf', 's-osc2-inv',
+  's-osc1-int', 's-osc1-lpf', 's-osc1-inv', 's-osc1-agc', 's-osc1-gain', 's-osc1-amp',
+  's-osc2-int', 's-osc2-lpf', 's-osc2-inv', 's-osc2-agc', 's-osc2-gain', 's-osc2-amp',
   's-lock-phase', 's-lock-std', 's-auto-relock', 's-temp-hold',
   's-freq-track', 's-freq-track-interval', 's-output-mode',
   's-prune-runs', 's-trim-run',
@@ -2651,7 +2710,8 @@ async function restoreDefaults() {
     : '';
   if (!confirm(
       'Restore the standard settings?\n\n'
-    + 'Oscillator gains, LPF cutoffs, feedback inversion, output mode, lock detection, '
+    + 'Oscillator gains, LPF cutoffs, feedback inversion, drive gain control (back to '
+    + 'manual at 1.0), output mode, lock detection, '
     + 'auto re-lock, the film parameters and the target thickness go back to the values '
     + 'that ship with the software, immediately. Unapplied edits in this panel are discarded.\n\n'
     + 'The active crystal and the OPC connection describe this instrument, so they are '

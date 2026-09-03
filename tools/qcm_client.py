@@ -16,6 +16,7 @@ Requires `requests`; live streaming additionally needs `websocket-client`
 (`pip install requests websocket-client`).
 """
 
+import os
 from types import SimpleNamespace
 
 import requests
@@ -38,6 +39,13 @@ class QCMClient:
     def _get(self, path, **p):    return self._request("GET", path, **p)
     def _post(self, path, **p):   return self._request("POST", path, **p)
     def _delete(self, path, **p): return self._request("DELETE", path, **p)
+
+    def _download(self, path: str, dest_path: str) -> str:
+        r = requests.get(self.base + path, timeout=self.timeout)
+        r.raise_for_status()
+        with open(dest_path, "wb") as f:
+            f.write(r.content)
+        return dest_path
 
     # ------------------------------------------------------- measurement control
     def get_lock(self):
@@ -88,6 +96,23 @@ class QCMClient:
         """Automatically re-acquire when lock is lost mid-measurement (default on)."""
         return self._post("/settings/auto_relock", enabled=bool(enabled))
 
+    def set_temp_hold(self, enabled: bool):
+        """Hold the last calculated temperature while the temp-mode lock is lost
+        (default on), instead of solving the compensation from an fT that is no
+        longer sitting on a resonance. The mass mode keeps being measured, so
+        only the thermal correction freezes — the compensated thickness carries
+        on following the film. Held samples are the ones with lock_temp = 0."""
+        return self._post("/settings/temp_hold", enabled=bool(enabled))
+
+    def set_freq_tracking(self, enabled: bool, interval: float = 10.0):
+        """Follow the locked frequencies (default on, every 10 s): while both
+        modes are locked, the re-lock start frequencies are re-pointed at what
+        the PLLs are actually holding, so a lost lock is re-acquired from where
+        the resonances are now rather than where the crystal profile says they
+        were. The profile on disk is left alone — use save_current_to_crystal()
+        to keep a tracked set. Minimum interval 1 s."""
+        return self._post("/settings/freq_tracking", enabled=bool(enabled), interval=interval)
+
     def set_lock_frequencies(self, mass: float, temp: float):
         return self._post("/settings/lock_frequencies", mass=mass, temp=temp)
 
@@ -100,6 +125,30 @@ class QCMClient:
 
     def settings(self) -> dict:
         return self._get("/settings")
+
+    def get_coefficients(self) -> dict:
+        """The compensation coefficients in force (from the active crystal)."""
+        return self._get("/settings/coefficients")
+
+    def set_measurement_params(self, ambient_temp: float, mat_dens: float, z_ratio: float,
+                               target_thickness: float | None = None):
+        """Persist the film/run parameters (and optionally the target) without
+        starting a run. They take effect at the next start_measurement()."""
+        return self._post("/settings/measurement_params", ambient_temp=ambient_temp,
+                          mat_dens=mat_dens, z_ratio=z_ratio, target_thickness=target_thickness)
+
+    # ------------------------------------------------------------------ defaults
+    def defaults(self) -> dict:
+        """The standard settings restore_defaults() returns to. They ship with
+        the software (DEFAULT_SETTINGS in src/api/server.py), so they are the
+        same on every instrument and cannot be changed over the API."""
+        return self._get("/settings/defaults")
+
+    def restore_defaults(self) -> dict:
+        """Put the standard settings back into force immediately. The active
+        crystal and the OPC connection describe this particular box, so they are
+        left as they are."""
+        return self._post("/settings/restore_defaults")
 
     # ----------------------------------------------------------------- crystals
     def crystals(self) -> dict:
@@ -124,6 +173,19 @@ class QCMClient:
     def delete_crystal(self, name: str):
         return self._delete(f"/crystals/{name}")
 
+    def upload_crystal(self, path: str) -> dict:
+        """Upload a profile JSON. The filename (minus .json) becomes its name;
+        uploading does not activate it — call activate_crystal() for that."""
+        with open(path, "rb") as f:
+            r = requests.post(f"{self.base}/crystals/upload",
+                              files={"file": (os.path.basename(path), f, "application/json")},
+                              timeout=self.timeout)
+        r.raise_for_status()
+        return r.json()
+
+    def download_crystal(self, name: str, dest_path: str):
+        return self._download(f"/crystals/{name}/download", dest_path)
+
     # -------------------------------------------------------------------- sweep
     def start_sweep(self, oscillator_idx: int, start_freq: float, stop_freq: float,
                     step_size: float, settle_time: float):
@@ -134,8 +196,11 @@ class QCMClient:
         return self._post("/sweep/abort")
 
     # Window and step used by the SWEEP fM / SWEEP fT buttons in the web UI.
-    MODE_SWEEP_WINDOW = 500000.0  # Hz, total span
-    MODE_SWEEP_STEP   = 1000.0    # Hz
+    # Keep these in step with MODE_SWEEP_WINDOW / MODE_SWEEP_STEP in
+    # src/static/index.html — reproducing those buttons is the whole point of
+    # sweep_mode(), and the two have drifted apart once already.
+    MODE_SWEEP_WINDOW = 50000.0  # Hz, total span (25 kHz either side of centre)
+    MODE_SWEEP_STEP   = 100.0    # Hz
 
     def sweep_mode(self, oscillator_idx: int, settle_time: float = 0.05):
         """Sweep the standard window around the active crystal's lock frequency
@@ -156,11 +221,7 @@ class QCMClient:
         return self._get("/sweeps")["sweeps"]
 
     def download_sweep(self, name: str, dest_path: str):
-        r = requests.get(f"{self.base}/sweeps/{name}/download", timeout=self.timeout)
-        r.raise_for_status()
-        with open(dest_path, "wb") as f:
-            f.write(r.content)
-        return dest_path
+        return self._download(f"/sweeps/{name}/download", dest_path)
 
     def download_latest_sweep(self, dest_path: str):
         sweeps = self.sweeps()
@@ -185,25 +246,42 @@ class QCMClient:
     def opc_nodes(self) -> dict:
         return self._get("/opc/nodes")
 
-    def opc_connect(self, url: str, user: str = "", password: str = "", base_node: str | None = None):
+    def opc_connect(self, url: str, user: str = "", password: str | None = None,
+                    base_node: str | None = None):
+        """Point the bridge at an OPC-UA server and reconnect.
+
+        password=None keeps the stored one. The server never hands the password
+        back, so a client that always sent a value would wipe it every time only
+        the URL or the user changed."""
         return self._post("/opc/connect", url=url, user=user, password=password, base_node=base_node)
 
     # ----------------------------------------------------------- server-side runs
     def runs(self) -> list:
         return self._get("/runs")["runs"]
 
+    def runs_info(self) -> dict:
+        """The whole /runs payload: the runs, the one being recorded right now,
+        free/total bytes, and the free space a run log needs to open."""
+        return self._get("/runs")
+
     def download_run(self, name: str, dest_path: str):
-        r = requests.get(f"{self.base}/runs/{name}/download", timeout=self.timeout)
-        r.raise_for_status()
-        with open(dest_path, "wb") as f:
-            f.write(r.content)
-        return dest_path
+        return self._download(f"/runs/{name}/download", dest_path)
 
     def download_latest_run(self, dest_path: str):
         runs = self.runs()
         if not runs:
             raise RuntimeError("No server-side runs available")
         return self.download_run(runs[0]["name"], dest_path)
+
+    def delete_run(self, name: str):
+        """Delete one run CSV. It is the only copy of that run — nothing else
+        holds it. Refused with HTTP 409 for the run being recorded right now."""
+        return self._delete(f"/runs/{name}")
+
+    def retry_run_log(self):
+        """Re-open the log for a run that is going unrecorded, once space has
+        been freed. Records the rest of the run; what was lost stays lost."""
+        return self._post("/runs/retry-log")
 
     # ------------------------------------------------------------------- system
     def reboot(self, force: bool = False):
@@ -212,6 +290,10 @@ class QCMClient:
         409 while a measurement is running unless force=True — a reboot ends that
         run where it stands."""
         return self._post("/system/reboot", force=force)
+
+    def health(self) -> dict:
+        """Liveness check — {"status": "ok"} while the server is up."""
+        return self._get("/health")
 
     # ------------------------------------------------------------- live streaming
     def stream(self, types=("MeasurementEvent",), limit=None):

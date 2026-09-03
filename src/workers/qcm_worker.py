@@ -59,6 +59,21 @@ class QCMWorker(threading.Thread):
         self.auto_relock = True  # configurable; when off a lost lock is left alone
         self._lock_freqs: tuple | None = None  # (mass, temp) from the last GET LOCK
         self._lock_lost_since: float | None = None
+        # Temperature hold: while the temp-mode lock is lost, carry the last
+        # solved temperature into the compensation instead of solving it from an
+        # fT that is no longer a resonance. The mass mode is still measured, so
+        # only the thermal correction freezes — see TempCompAlgorithm.FreqToTemp.
+        self.temp_hold = True
+        self._temp_held = False  # currently holding, for one-shot logging
+        # Lock-frequency tracking: while both modes are locked, periodically
+        # re-point the re-lock start frequencies at what the PLLs are actually
+        # holding. Over a long deposition the resonances walk away from the
+        # crystal profile's stored frequencies (film loading, temperature), and a
+        # re-lock aimed at the stored values can end up outside the capture
+        # window; aimed at the last known good frequencies it lands in it.
+        self.freq_tracking = True
+        self.freq_track_interval = 10.0  # seconds between updates
+        self._last_freq_track = 0.0
         
     def stop(self):
         self.running = False
@@ -126,6 +141,11 @@ class QCMWorker(threading.Thread):
         parameters. Recorded once at run start."""
         snapshot = self.qcm.getSettingsSnapshot()
         snapshot["auto_relock"] = self.auto_relock
+        snapshot["temp_hold"] = self.temp_hold
+        snapshot["freq_tracking"] = {
+            "enabled":  self.freq_tracking,
+            "interval": self.freq_track_interval,
+        }
         snapshot["measurement"] = {
             "ambient_temp":     command.ambient_temp,
             "mat_dens":         command.mat_dens,
@@ -166,6 +186,7 @@ class QCMWorker(threading.Thread):
             self.qcm.setMeasurementReference(T=command.ambient_temp, mat_dens=command.mat_dens, z_ratio=command.z_ratio)
             self._run_command = command
             self._set_target_reached(False)  # a fresh run starts below its target again
+            self._temp_held = False          # nothing to hold over from the previous run
             self._start_run_log(command)
             self._set_state(WorkerState.MEASURING)
 
@@ -184,7 +205,8 @@ class QCMWorker(threading.Thread):
             if lock_mass and lock_temp:
                 freq_mass = round(self.qcm.getFreq(1) / 100) * 100
                 freq_temp = round(self.qcm.getFreq(2) / 100) * 100
-                self.event_queue.put(StartFreqAutoUpdatedEvent(freq_mass=freq_mass, freq_temp=freq_temp))
+                self.event_queue.put(StartFreqAutoUpdatedEvent(
+                    freq_mass=freq_mass, freq_temp=freq_temp, source="run_stop"))
             self.logger.write_event("RUN_STOP")
             self.logger.stop()
             self._set_state(WorkerState.IDLE)
@@ -214,6 +236,14 @@ class QCMWorker(threading.Thread):
         elif isinstance(command, SetAutoRelockCommand):
             self.auto_relock = bool(command.enabled)
             self._lock_lost_since = None  # drop any in-flight timer so toggling can't fire a stale re-lock
+        elif isinstance(command, SetTempHoldCommand):
+            self.temp_hold = bool(command.enabled)
+        elif isinstance(command, SetFreqTrackingCommand):
+            self.freq_tracking = bool(command.enabled)
+            # A sub-second interval would poll the frequency registers as fast as
+            # the acquisition loop itself for no benefit: the resonances move over
+            # minutes, not milliseconds.
+            self.freq_track_interval = max(1.0, float(command.interval))
         elif isinstance(command, SetTargetThicknessCommand):
             self.target_thickness = max(0.0, float(command.target))
             # Raising the target mid-run means the film is below it again, so the
@@ -272,6 +302,67 @@ class QCMWorker(threading.Thread):
             self.event_queue.put(SweepPointEvent(frequency=freq, amplitude=amplitude, phase=phase))
         self.event_queue.put(SweepCompleteEvent(name=self.sweep_logger.stop()))
 
+    def _track_lock_freqs(self, lock_mass: bool, lock_temp: bool, now: float):
+        """While both modes are locked, keep the re-lock start frequencies on the
+        frequencies actually being held.
+
+        The stored crystal frequencies are where the resonances were when the
+        profile was written. Film loading pulls the mass mode down by kHz over a
+        deposition and temperature moves both, so by the middle of a long run the
+        stored values can sit outside the PLL capture window (+/- WINDOW_SIZE/2)
+        of where the resonance now is — and a re-lock aimed there fails however
+        healthy the crystal is. Following the lock while it is good means a lost
+        lock is re-acquired from the last place it was known to be.
+
+        Only sampled while locked, and only in states where the loops are closed:
+        during a sweep or a capacitor adjustment the oscillators are parked
+        open-loop, where the phase readout can sit quiet enough to pass the lock
+        test at a frequency that is not a resonance at all.
+
+        This does not touch the crystal profile on disk. The profile's start
+        frequencies describe the crystal as calibrated; the operator saves a new
+        set deliberately (the run-stop update prompts for exactly that).
+        """
+        if not self.freq_tracking:
+            return
+        if self.state not in (WorkerState.MEASURING, WorkerState.IDLE):
+            return
+        if not (lock_mass and lock_temp):
+            return
+        if now - self._last_freq_track < self.freq_track_interval:
+            return
+        self._last_freq_track = now
+        # Rounded to 100 Hz: the capture window is thousands of Hz wide, so this
+        # is far finer than a re-lock needs, and it keeps the value readable in
+        # the settings field it lands in.
+        freqs = (round(self.qcm.getFreq(1) / 100) * 100,
+                 round(self.qcm.getFreq(2) / 100) * 100)
+        if freqs == self._lock_freqs:
+            return  # nothing moved — no event, no UI churn
+        self._lock_freqs = freqs
+        self.event_queue.put(StartFreqAutoUpdatedEvent(
+            freq_mass=freqs[0], freq_temp=freqs[1], source="tracking"))
+
+    def _note_temp_hold(self, holding: bool, data):
+        """Record the edges of a temperature hold in the run log, once each.
+
+        Every measurement row already carries lock_temp, so the interval is
+        recoverable from the data either way; these rows are here so that reading
+        the log top to bottom says plainly where the temperature stopped being a
+        measurement and started being a carried-over value."""
+        if holding == self._temp_held:
+            return
+        self._temp_held = holding
+        # calculated_temp is None when the compensation itself failed, which is a
+        # separate fault with its own message — don't format it as a number.
+        T = data.calculated_temp
+        held = f"{T:.4f}" if isinstance(T, (int, float)) and math.isfinite(T) else "?"
+        if holding:
+            print(f"[QCM] Temp-mode lock lost — holding T = {held} degC")
+            self.logger.write_event("TEMP_HOLD", f"temp-mode lock lost; holding T={held} C")
+        else:
+            self.logger.write_event("TEMP_HOLD_END", "temp-mode lock back; solving T from fT again")
+
     def _check_target(self, data):
         """Raise the target-thickness flag the first time the compensated
         thickness reaches the target. The run is left running on purpose — the
@@ -310,6 +401,10 @@ class QCMWorker(threading.Thread):
             self._last_lock_status = status
             self._last_lock_emit = now
 
+        # Keep the re-lock start frequencies on the frequencies being held, so a
+        # lost lock is re-acquired from where the resonances are now.
+        self._track_lock_freqs(lock_mass, lock_temp, now)
+
         # Live amplitude feedback while adjusting the trim capacitor.
         if self.state == WorkerState.CAP_ADJUST:
             self.event_queue.put(CapAdjustEvent(amp_mass=self.qcm.getMag(1), amp_temp=self.qcm.getMag(2)))
@@ -329,11 +424,28 @@ class QCMWorker(threading.Thread):
                     self._acquire_lock(*self._lock_freqs)
                     return  # state/timing changed during re-lock; resume next cycle
 
-            data = self.qcm.getMeasurement()
+            # A lost temp-mode lock leaves fT pointing at nothing in particular.
+            # Solving the compensation from it would throw the temperature — and
+            # with it the compensated thickness the deposition is controlled on —
+            # while the mass mode is still being measured perfectly well. Holding
+            # the last solved temperature freezes only the thermal correction, so
+            # the output keeps following the film until the lock is back.
+            hold_temp = self.temp_hold and not lock_temp
+            data = self.qcm.getMeasurement(hold_temp=hold_temp)
             self.logger.write_measurement(data)  # durable on-disk record (WS-independent)
+            self._note_temp_hold(hold_temp, data)
             self._check_target(data)
             self.event_queue.put(MeasurementEvent(data=data))
-            self.qcm.moveWindow(data.freq_mass_mode, data.freq_temp_mode)  # keep the PLL capture window centered on the current frequencies
+            # Keep each PLL capture window centred on its current frequency — but
+            # only for a channel that is locked. An unlocked loop's readout is not
+            # a resonance, and following it walks the window away from where the
+            # resonance actually is, which is precisely what the next re-lock
+            # attempt has to start from. An unlocked channel holds its last good
+            # centre instead.
+            self.qcm.moveWindow(
+                data.freq_mass_mode if lock_mass else None,
+                data.freq_temp_mode if lock_temp else None,
+            )
             return
 
         # Not measuring: push the raw readings anyway. Frequencies, amplitudes,

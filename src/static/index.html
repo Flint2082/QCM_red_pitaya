@@ -248,7 +248,7 @@ footer { height: 24px; background: var(--surface); border-top: 1px solid var(--b
     </div>
     <div class="stat-bar">
       <div class="stat"><div class="stat-label">Comp. Thickness</div><div class="stat-value" id="val-comp" style="color:var(--green)">—</div><div class="stat-unit">nm</div></div>
-      <div class="stat"><div class="stat-label">Temperature</div><div class="stat-value" id="val-T" style="color:var(--orange)">—</div><div class="stat-unit">°C</div></div>
+      <div class="stat"><div class="stat-label">Temperature</div><div class="stat-value" id="val-T" style="color:var(--orange)">—</div><div class="stat-unit" id="val-T-unit">°C</div></div>
       <div class="stat"><div class="stat-label">Uncomp. Thickness</div><div class="stat-value" id="val-uncomp">—</div><div class="stat-unit">nm</div></div>
       <div class="stat"><div class="stat-label">Sample Count</div><div class="stat-value" id="val-n">0</div><div class="stat-unit">points</div></div>
     </div>
@@ -284,7 +284,7 @@ footer { height: 24px; background: var(--surface); border-top: 1px solid var(--b
       <div class="stat"><div class="stat-label">Comp. Mass Freq</div><div class="stat-value" id="val-comp-fM" style="color:var(--purple)">—</div><div class="stat-unit">Hz</div></div>
       <div class="stat"><div class="stat-label">Comp. Thickness</div><div class="stat-value" id="val-comp-a" style="color:var(--green)">—</div><div class="stat-unit">nm</div></div>
       <div class="stat"><div class="stat-label">Uncomp. Thickness</div><div class="stat-value" id="val-uncomp-a">—</div><div class="stat-unit">nm</div></div>
-      <div class="stat"><div class="stat-label">Temperature</div><div class="stat-value" id="val-T-a" style="color:var(--orange)">—</div><div class="stat-unit">°C</div></div>
+      <div class="stat"><div class="stat-label">Temperature</div><div class="stat-value" id="val-T-a" style="color:var(--orange)">—</div><div class="stat-unit" id="val-T-a-unit">°C</div></div>
       <div class="stat" title="Phase-error standard deviation over the lock window. Lower is better; this is what the lock decision is made on."><div class="stat-label">Mass Lock σ</div><div class="stat-value" id="val-q-mass">—</div><div class="stat-unit">mrad</div></div>
       <div class="stat" title="Phase-error standard deviation over the lock window. Lower is better; this is what the lock decision is made on."><div class="stat-label">Temp Lock σ</div><div class="stat-value" id="val-q-temp">—</div><div class="stat-unit">mrad</div></div>
     </div>
@@ -418,13 +418,9 @@ footer { height: 24px; background: var(--surface); border-top: 1px solid var(--b
       <button class="btn" id="btn-settings-undo" onclick="undoSettings()" disabled>UNDO</button>
       <div class="toolbar-sep"></div>
       <button class="btn btn-orange" id="btn-settings-restore" onclick="restoreDefaults()"
-              title="Put the stored default settings back into force">RESTORE DEFAULTS</button>
-      <button class="btn" id="btn-settings-savedef" onclick="saveAsDefaults()"
-              title="Make the settings in force right now the defaults">SAVE AS DEFAULTS</button>
+              title="Put the standard settings that ship with the software back into force">RESTORE DEFAULTS</button>
       <div class="toolbar-sep"></div>
       <span id="settings-dirty-hint" style="font-family:'DM Mono',monospace;font-size:10px;color:var(--text-dim);letter-spacing:.06em">No pending changes</span>
-      <div class="header-spacer"></div>
-      <span id="settings-defaults-info" style="font-family:'DM Mono',monospace;font-size:10px;color:var(--text-dim);letter-spacing:.06em">—</span>
     </div>
     <div class="settings-layout">
       <div class="settings-nav">
@@ -476,7 +472,14 @@ footer { height: 24px; background: var(--surface); border-top: 1px solid var(--b
           <div class="settings-group">
             <div class="settings-row"><div><div class="settings-row-label">Phase Noise Limit</div><div class="settings-row-desc">Maximum phase-error standard deviation ("lock quality", shown live on the Monitor tab) to count as locked. Replaces the old amplitude threshold — phase noise rises when the signal weakens, without needing a level that changes with temperature and film loading. Watch the live value on a good lock, then set this comfortably above it</div></div><div></div><div style="display:flex;align-items:center;gap:6px"><input class="settings-input" type="number" id="s-lock-std" value="0.05" step="0.005" min="0"><span class="settings-unit">rad</span></div></div>
             <div class="settings-row"><div><div class="settings-row-label">Phase Tolerance</div><div class="settings-row-desc">Maximum deviation of the mean phase error from the lock point (∓π/2 depending on feedback inversion) to count as locked</div></div><div></div><div style="display:flex;align-items:center;gap:6px"><input class="settings-input" type="number" id="s-lock-phase" value="0.05" step="0.01" min="0"><span class="settings-unit">rad</span></div></div>
+          </div>
+
+          <div class="settings-section-title">LOCK RECOVERY</div>
+          <div class="settings-group">
             <div class="settings-row"><div><div class="settings-row-label">Auto Re-lock</div><div class="settings-row-desc">Re-acquire automatically if lock is lost during a measurement</div></div><div></div><div style="display:flex;align-items:center;gap:6px"><select class="settings-input" id="s-auto-relock" style="width:150px;text-align:left"><option value="1">Enabled</option><option value="0">Disabled</option></select></div></div>
+            <div class="settings-row"><div><div class="settings-row-label">Hold Temperature On Lock Loss</div><div class="settings-row-desc">Hold the last calculated temperature while the temp mode is unlocked, rather than solving it from an off-resonance Ft. Only the thermal correction freezes — the compensated thickness keeps following the film. Held samples show as <b>HELD</b> on the Monitor tab</div></div><div></div><div style="display:flex;align-items:center;gap:6px"><select class="settings-input" id="s-temp-hold" style="width:150px;text-align:left"><option value="1">Enabled</option><option value="0">Disabled</option></select></div></div>
+            <div class="settings-row"><div><div class="settings-row-label">Track Lock Frequencies</div><div class="settings-row-desc">While both modes are locked, keep the start frequencies on the frequencies the PLLs are actually holding, so a re-lock aims at where the resonances are now instead of where they were hours ago. Does not change the crystal profile on disk</div></div><div></div><div style="display:flex;align-items:center;gap:6px"><select class="settings-input" id="s-freq-track" style="width:150px;text-align:left"><option value="1">Enabled</option><option value="0">Disabled</option></select></div></div>
+            <div class="settings-row"><div><div class="settings-row-label">Tracking Interval</div><div class="settings-row-desc">How often the start frequencies are updated</div></div><div></div><div style="display:flex;align-items:center;gap:6px"><input class="settings-input" type="number" id="s-freq-track-interval" value="10" step="1" min="1"><span class="settings-unit">s</span></div></div>
           </div>
 
           <div class="settings-section-title">OUTPUT</div>
@@ -1385,6 +1388,18 @@ function setLockQuality(mode, sigma) {
                                        : 'var(--red)';
 }
 
+// A held temperature is a real number from a real earlier sample, so it is
+// shown rather than blanked — but it is not a measurement of right now, and the
+// operator has to be able to see that at a glance on both stat bars.
+function setTempHeld(held) {
+  for (const id of ['val-T', 'val-T-a']) {
+    const val  = document.getElementById(id);
+    const unit = document.getElementById(id + '-unit');
+    if (val)  val.style.color = held ? 'var(--red)' : 'var(--orange)';
+    if (unit) unit.textContent = held ? '°C HELD' : '°C';
+  }
+}
+
 // Everything that comes straight off the hardware. Shared by MeasurementEvent
 // and TelemetryEvent so the monitor behaves identically whether or not a run is
 // in progress — the only difference is that the compensated values are absent
@@ -1439,6 +1454,7 @@ function onMeasurement(e) {
 
   setText('val-comp',    fmt(e.calculated_thickness, 4));
   setText('val-T',       fmt(e.calculated_temp, 3));
+  setTempHeld(!!e.temp_held);
   setText('val-uncomp',  fmt(e.uncompensated_thickness, 4));
   setText('val-comp-fM', fmt(e.compensated_freq, 2));
   setText('val-comp-a',  fmt(e.calculated_thickness, 4));
@@ -2042,6 +2058,11 @@ async function loadInitialSettings() {
       if (s.lock_detect.phase_std != null)       document.getElementById('s-lock-std').value   = s.lock_detect.phase_std;
     }
     if (s.auto_relock != null) document.getElementById('s-auto-relock').value = s.auto_relock ? '1' : '0';
+    if (s.temp_hold != null)   document.getElementById('s-temp-hold').value   = s.temp_hold ? '1' : '0';
+    if (s.freq_tracking) {
+      document.getElementById('s-freq-track').value = s.freq_tracking.enabled ? '1' : '0';
+      if (s.freq_tracking.interval != null) document.getElementById('s-freq-track-interval').value = s.freq_tracking.interval;
+    }
   } catch(e) { /* backend not yet reachable */ }
 
   let crystalLoaded = false;
@@ -2087,7 +2108,6 @@ async function loadInitialSettings() {
     document.getElementById('target-pill').style.display = _targetReached ? 'flex' : 'none';
   } catch(e) { /* older backend without the target endpoint */ }
   updateTargetStatus();
-  await loadDefaultsInfo();
   snapshotBaseline();   // everything just loaded is the clean baseline
 }
 loadInitialSettings();
@@ -2206,6 +2226,10 @@ function onStateChange(state) {
   const wasRunning = _isRunning;
   _isRunning = state === 'RUNNING';
 
+  // Nothing is being compensated outside a run, so a hold marker left over from
+  // the last sample of the previous run would be claiming something untrue.
+  if (!_isRunning) setTempHeld(false);
+
   // Sweep button: ABORT while sweeping, disabled while running, RUN SWEEP otherwise
   const sweepBtn = document.getElementById('btn-sweep-toggle');
   if (sweepBtn) {
@@ -2285,8 +2309,28 @@ function onLockStatus(ev) {
 }
 
 function onStartFreqAutoUpdated(ev) {
-  document.getElementById('s-crystal-freq-mass').value = ev.freq_mass;
-  document.getElementById('s-crystal-freq-temp').value = ev.freq_temp;
+  const mass = document.getElementById('s-crystal-freq-mass');
+  const temp = document.getElementById('s-crystal-freq-temp');
+  if (ev.source === 'tracking') {
+    // The periodic follow lands throughout a run, so it stays silent and does
+    // not count as an edit: it moves the baseline with the fields, leaving APPLY
+    // disabled and the profile on disk alone. Pending edits win outright — an
+    // operator part-way through typing a frequency must not be overwritten.
+    if (isDirty(CRYSTAL_SETTING_IDS)) return;
+    mass.value = ev.freq_mass;
+    temp.value = ev.freq_temp;
+    _baseline['s-crystal-freq-mass'] = mass.value;
+    _baseline['s-crystal-freq-temp'] = temp.value;
+    updateDirtyState();
+    return;
+  }
+  // End of a run: the operator is meant to notice and decide whether to save
+  // these into the crystal profile, so this one does announce itself — and
+  // counts as a pending change, or APPLY would stay greyed out and the update it
+  // just announced could not be saved without poking an unrelated field first.
+  mass.value = ev.freq_mass;
+  temp.value = ev.freq_temp;
+  updateDirtyState();
   showToast(`Start freqs updated: ${(ev.freq_mass/1e6).toFixed(3)} / ${(ev.freq_temp/1e6).toFixed(3)} MHz`);
 }
 
@@ -2452,12 +2496,18 @@ async function applyOutputMode() {
   await postOrThrow(`${API_URL}/settings/output_mode?mode=${mode}`);
 }
 
-async function applyLockDetect() {
+async function applyLockSettings() {
   const phase = parseFloat(document.getElementById('s-lock-phase').value);
   const std   = parseFloat(document.getElementById('s-lock-std').value);
   await postOrThrow(`${API_URL}/settings/lock_detect?phase_tolerance=${phase}&phase_std=${std}`);
   const relock = document.getElementById('s-auto-relock').value === '1';
   await postOrThrow(`${API_URL}/settings/auto_relock?enabled=${relock}`);
+  const hold = document.getElementById('s-temp-hold').value === '1';
+  await postOrThrow(`${API_URL}/settings/temp_hold?enabled=${hold}`);
+  const track    = document.getElementById('s-freq-track').value === '1';
+  const interval = parseFloat(document.getElementById('s-freq-track-interval').value);
+  if (isNaN(interval) || interval < 1) throw new Error('Tracking interval must be at least 1 s');
+  await postOrThrow(`${API_URL}/settings/freq_tracking?enabled=${track}&interval=${interval}`);
 }
 
 async function applyMeasurementParams() {
@@ -2476,7 +2526,7 @@ async function applyAllSettings() {
   await applyOscSettings(2);
   await applyMeasurementParams();
   await applyOutputMode();
-  await applyLockDetect();
+  await applyLockSettings();
   // Only when the crystal form itself changed. APPLY used to push it every time,
   // so editing an unrelated field re-saved the profile from whatever happened to
   // be in the form — and re-activated it — quietly overwriting a stored
@@ -2499,7 +2549,8 @@ const SETTING_IDS = [
   's-mat-dens', 's-mat-zratio', 's-amb-temp', 's-target-thickness',
   's-osc1-int', 's-osc1-lpf', 's-osc1-inv',
   's-osc2-int', 's-osc2-lpf', 's-osc2-inv',
-  's-lock-phase', 's-lock-std', 's-auto-relock', 's-output-mode',
+  's-lock-phase', 's-lock-std', 's-auto-relock', 's-temp-hold',
+  's-freq-track', 's-freq-track-interval', 's-output-mode',
   ...CRYSTAL_SETTING_IDS,
 ];
 let _baseline = {};            // last applied / loaded values
@@ -2535,61 +2586,27 @@ function updateDirtyState() {
 }
 
 // ---- Defaults ----
-// RESTORE DEFAULTS returns to the configuration captured with SAVE AS DEFAULTS.
-// The backend seeds that from whatever the instrument was already running the
-// first time it started with this feature, so "default" means a setup that has
-// actually produced depositions — not values compiled in long ago.
-let _defaultsCaptured = null;
-
-function setDefaultsInfo(captured) {
-  _defaultsCaptured = captured || null;
-  const el = document.getElementById('settings-defaults-info');
-  if (!el) return;
-  el.textContent = _defaultsCaptured
-    ? `Defaults captured ${new Date(_defaultsCaptured).toLocaleString()}`
-    : 'No defaults stored';
-}
-
-async function loadDefaultsInfo() {
-  try {
-    const d = await fetch(`${API_URL}/settings/defaults`).then(r => r.json());
-    setDefaultsInfo(d.captured);
-  } catch(e) { /* backend without the defaults endpoint */ }
-}
-
+// The defaults are the standard settings shipped with the software (see
+// DEFAULT_SETTINGS in src/api/server.py) — identical on every instrument, and
+// changed by a commit rather than from this panel, so a restore always lands
+// somewhere known.
 async function restoreDefaults() {
-  const when = _defaultsCaptured ? ` captured ${new Date(_defaultsCaptured).toLocaleString()}` : '';
   const running = _isRunning
     ? '\n\nA MEASUREMENT IS RUNNING — the loop gains and lock limits change under it.'
     : '';
   if (!confirm(
-      `Restore the default settings${when}?\n\n`
+      'Restore the standard settings?\n\n'
     + 'Oscillator gains, LPF cutoffs, feedback inversion, output mode, lock detection, '
-    + 'auto re-lock, the film parameters, the target thickness and the active crystal all '
-    + 'go back to their defaults, immediately. Unapplied edits in this panel are discarded.\n\n'
-    + 'The OPC connection and the stored crystal calibrations are not touched.'
+    + 'auto re-lock, the film parameters and the target thickness go back to the values '
+    + 'that ship with the software, immediately. Unapplied edits in this panel are discarded.\n\n'
+    + 'The active crystal and the OPC connection describe this instrument, so they are '
+    + 'left as they are.'
     + running)) return;
   try {
-    const d = await (await postOrThrow(`${API_URL}/settings/restore_defaults`)).json();
-    setDefaultsInfo(d.captured);
+    await postOrThrow(`${API_URL}/settings/restore_defaults`);
     await loadInitialSettings();   // re-read everything, baseline included
-    showToast('Defaults restored');
+    showToast('Standard settings restored');
   } catch(e) { showToast(`Restore failed — ${e.message || e}`, true); }
-}
-
-async function saveAsDefaults() {
-  if (isDirty(SETTING_IDS) && !confirm(
-      'This panel has changes that have not been applied.\n\n'
-    + 'Only the settings actually in force are captured — APPLY first if the edits '
-    + 'should become part of the defaults. Continue anyway?')) return;
-  if (!confirm(
-      'Make the settings in force right now the defaults?\n\n'
-    + 'RESTORE DEFAULTS will return here from now on. The previous defaults are replaced.')) return;
-  try {
-    const d = await (await postOrThrow(`${API_URL}/settings/defaults`)).json();
-    setDefaultsInfo(d.captured);
-    showToast('Current settings saved as the defaults');
-  } catch(e) { showToast(`Could not save defaults — ${e.message || e}`, true); }
 }
 
 async function commitSettings() {

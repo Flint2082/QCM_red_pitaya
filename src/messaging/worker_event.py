@@ -60,6 +60,11 @@ class CapAdjustEvent(Event):
 class StartFreqAutoUpdatedEvent(Event):
     freq_mass: float
     freq_temp: float
+    # Where the update came from. "run_stop" is the one-off at the end of a run,
+    # which the operator is expected to notice and save into the crystal profile;
+    # "tracking" is the periodic follow, which happens all through a run and must
+    # therefore stay quiet.
+    source: str = "run_stop"
 
 @dataclass
 class RunLogStartedEvent(Event):

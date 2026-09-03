@@ -190,6 +190,39 @@ for ev in qcm.stream(types=("TargetReachedEvent",), limit=1):
 qcm.stop_measurement()
 ```
 
+### Surviving a lost lock
+Two defences run during a measurement, both on by default and both in the
+settings panel under **LOCK RECOVERY**.
+
+`set_temp_hold()` covers the temp mode. An unlocked temp PLL reports an fT that
+is not a resonance, and solving the compensation from it throws the calculated
+temperature — and with it the compensated thickness the deposition is
+controlled on — even though the mass mode is still being measured perfectly
+well. With the hold on, the last solved temperature is carried forward, so only
+the thermal *correction* freezes and the compensated thickness keeps following
+the film. The correction then goes stale at the rate the crystal's temperature
+actually drifts, which over a few seconds is far smaller than the error a
+garbage fT injects. Held samples carry `temp_held: true` on the WebSocket, show
+as **HELD** on the Monitor tab, and are the rows with `lock_temp = 0` in the run
+CSV; the run log also marks the edges with `TEMP_HOLD` / `TEMP_HOLD_END` events.
+
+`set_freq_tracking()` improves the odds of getting the lock back. Film loading
+pulls the mass mode down by kHz over a deposition and temperature moves both
+modes, so by the middle of a long run the crystal profile's stored start
+frequencies can sit outside the PLL capture range of where the resonance now
+is — and a re-lock aimed there fails however healthy the crystal is. While both
+modes are locked the start frequencies are re-pointed every `interval` seconds
+at the frequencies the PLLs are actually holding (rounded to 100 Hz), so a
+re-lock starts from the last place the lock was known to be good. This is
+in-memory only: `GET /settings/lock_frequencies`, `get_lock()` and the
+OPC-triggered lock all pick it up, but the crystal profile on disk is untouched
+until you save it yourself.
+
+```python
+qcm.set_temp_hold(True)
+qcm.set_freq_tracking(True, interval=10.0)
+```
+
 ### Oscillator / lock settings
 | method | endpoint |
 |--------|----------|
@@ -200,10 +233,31 @@ qcm.stop_measurement()
 | `set_output_mode(mode)` | `POST /settings/output_mode` (DAC debug tap, int 0–11) |
 | `set_lock_detect(phase_tolerance, phase_std)` | `POST /settings/lock_detect` (both rad: max mean phase error, max phase-error σ) |
 | `set_auto_relock(enabled)` | `POST /settings/auto_relock` (auto re-acquire on lost lock, default on) |
+| `set_temp_hold(enabled)` | `POST /settings/temp_hold` (hold the last temperature while temp lock is lost, default on) |
+| `set_freq_tracking(enabled, interval=10.0)` | `POST /settings/freq_tracking` (follow the locked frequencies, default on every 10 s) |
 | `set_lock_frequencies(mass, temp)` | `POST /settings/lock_frequencies` (transient, feeds `get_lock`) |
 | `get_lock_frequencies()` | `GET /settings/lock_frequencies` |
 | `set_coefficients(fM_0..fM_3, fT_0..fT_3)` | `POST /settings/coefficients` (compensation polynomial) |
 | `settings()` | `GET /settings` (everything at once) |
+| `get_coefficients()` | `GET /settings/coefficients` (from the active crystal) |
+| `set_measurement_params(ambient_temp, mat_dens, z_ratio, target_thickness=None)` | `POST /settings/measurement_params` (persist run parameters without starting a run) |
+
+### Defaults
+The standard settings ship with the software, as `DEFAULT_SETTINGS` in
+[`src/api/server.py`](../src/api/server.py). They are the same on every
+instrument and can only be changed by a commit, so a restore always lands
+somewhere known and reviewable.
+
+| method | endpoint |
+|--------|----------|
+| `defaults()` | `GET /settings/defaults` → `{"settings": {...}}` |
+| `restore_defaults()` | `POST /settings/restore_defaults` (put them back into force now) |
+
+A restore covers the oscillator and lock settings, the output mode, the film
+parameters and the target thickness, and takes effect immediately. The active
+crystal and the OPC connection describe one particular box rather than the
+software, so they are left exactly as they are — the fitted crystal keeps its
+calibration.
 
 ### Crystal profiles
 A crystal profile stores its lock frequencies, compensation coefficients and
@@ -218,12 +272,14 @@ sensor parameters. Activating one applies all of them.
 | `activate_crystal(name)` | `POST /crystals/{name}/activate` |
 | `save_current_to_crystal(name)` | `POST /crystals/{name}/save_current` |
 | `delete_crystal(name)` | `DELETE /crystals/{name}` |
+| `upload_crystal(path)` | `POST /crystals/upload` (filename becomes the name; does not activate) |
+| `download_crystal(name, dest_path)` | `GET /crystals/{name}/download` |
 
 ### Frequency sweep (characterise resonances)
 | method | endpoint |
 |--------|----------|
 | `start_sweep(oscillator_idx, start_freq, stop_freq, step_size, settle_time)` | `POST /sweep/start` |
-| `sweep_mode(oscillator_idx, settle_time=0.05)` | 500 kHz window at 1 kHz around the crystal's lock frequency |
+| `sweep_mode(oscillator_idx, settle_time=0.05)` | 50 kHz window at 100 Hz around the crystal's lock frequency |
 | `abort_sweep()` | `POST /sweep/abort` |
 | `sweeps()` | `GET /sweeps` — sweep CSVs on the Pitaya, newest first |
 | `download_sweep(name, dest_path)` / `download_latest_sweep(dest_path)` | `GET /sweeps/{name}/download` |
@@ -235,11 +291,13 @@ recorded to (`None` if recording failed).
 
 Every sweep is written to `data/sweeps/` on the Pitaya as it is taken, so it
 survives a dropped WebSocket. `sweep_mode()` is the scripted form of the
-**SWEEP fM** / **SWEEP fT** buttons in the UI: it centres a 500 kHz window,
-stepped at 1 kHz, on the active crystal's mass or temp lock frequency. That is
-a coarse locator — wide enough to find a resonance that has moved well away
-from the stored frequency, but too coarse to resolve the peak's shape. Narrow
-the range and re-run once you know roughly where it sits.
+**SWEEP fM** / **SWEEP fT** buttons in the UI: it centres a 50 kHz window,
+stepped at 100 Hz, on the active crystal's mass or temp lock frequency — 501
+points, the same as the buttons. That is fine enough to resolve the shape of a
+peak that has drifted a few kHz under film loading. If a resonance has moved
+further than 25 kHz from the stored frequency it falls outside the window
+entirely: use `start_sweep()` with a wider span and a coarser step to find it
+first, then come back to `sweep_mode()`.
 
 ```python
 qcm.sweep_mode(1)                                  # sweep around fM
@@ -272,20 +330,24 @@ The worker writes a CSV for every measurement run on the Pitaya itself.
 | method | notes |
 |--------|-------|
 | `runs()` | list saved runs, newest first |
+| `runs_info()` | the full payload: runs, the one recording now, free/total bytes |
 | `download_run(name, dest_path)` | save a specific run locally |
 | `download_latest_run(dest_path)` | save the most recent run locally |
+| `delete_run(name)` | delete one run CSV — the only copy; 409 for the run recording now |
+| `retry_run_log()` | re-open the log for a run going unrecorded, after freeing space |
 
 ### OPC-UA / PLC bridge
 | method | endpoint |
 |--------|----------|
 | `opc_settings()` | `GET /opc/settings` |
-| `opc_connect(url, user="", password="", base_node=None)` | `POST /opc/connect` |
+| `opc_connect(url, user="", password=None, base_node=None)` | `POST /opc/connect` — `password=None` keeps the stored one |
 | `opc_nodes()` | `GET /opc/nodes` (the node tree to mirror on the PLC) |
 
 ### System
 | method | endpoint | notes |
 |--------|----------|-------|
 | `reboot(force=False)` | `POST /system/reboot` | reboots the Pitaya; 409 during a run unless `force=True` |
+| `health()` | `GET /health` | liveness check |
 
 A reboot reloads the FPGA bitstream and brings the PLLs up unlocked, so it is
 the way out of a wedged instrument — but it ends any run in progress, keeping

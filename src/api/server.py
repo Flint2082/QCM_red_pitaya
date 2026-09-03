@@ -18,7 +18,6 @@ import sys
 import threading
 import time
 from contextlib import asynccontextmanager
-from datetime import datetime, timezone
 
 import app
 import uvicorn
@@ -130,7 +129,8 @@ class _LoggingForwarder(logging.Handler):
 # makes it impossible to tell, while debugging, whether a value is in use).
 _SETTING_KEYS = frozenset({
     "osc_settings", "output_mode", "lock_phase_tolerance", "lock_phase_std",
-    "auto_relock", "active_crystal", "ambient_temp", "mat_dens", "z_ratio",
+    "auto_relock", "temp_hold", "freq_tracking", "freq_track_interval",
+    "active_crystal", "ambient_temp", "mat_dens", "z_ratio",
     "target_thickness",
     "opc_url", "opc_user", "opc_password", "opc_base_node",
 })
@@ -139,10 +139,37 @@ _SETTING_KEYS = frozenset({
 # bridge is disabled (see _save_settings).
 _OPC_SETTING_KEYS = ("opc_url", "opc_user", "opc_password", "opc_base_node")
 
-# What "restore defaults" covers: the instrument's own configuration. The OPC
-# connection is site wiring rather than a setting — resetting the PLC address
-# would cut the link to the coater, which is never what a restore is asking for.
-_DEFAULTABLE_KEYS = _SETTING_KEYS - set(_OPC_SETTING_KEYS)
+# The settings every instrument starts from and that RESTORE DEFAULTS returns
+# to. They ship with the software rather than being captured per box, so every
+# QCM behaves the same out of the box and a restore is reproducible: if these
+# values need to change, they change here, in review, for everyone.
+#
+# This is also the single definition of each default — __init__ initialises the
+# server state from it, so there is no second copy to drift.
+#
+# Two persisted settings are deliberately absent, which is what keeps these
+# universal: the OPC connection is site wiring (resetting the PLC address would
+# cut the link to the coater), and the active crystal is the consumable this
+# particular box has fitted — no repo-wide default can name the right one, and
+# clearing it would take the calibration with it. Both survive a restore.
+DEFAULT_SETTINGS = {
+    # Post-lock loop settings, matching QCMInterface's own defaults.
+    "osc_settings": {
+        "1": {"int_gain": 1e-7, "lpf_freq": 200.0, "inverted": True},
+        "2": {"int_gain": 1e-7, "lpf_freq": 200.0, "inverted": True},
+    },
+    "output_mode": 0,               # OutputMode.DELTA — the error signal
+    "lock_phase_tolerance": 0.1,    # rad, max |mean phase error|
+    "lock_phase_std": 0.1,          # rad, max phase-error sigma ("lock quality")
+    "auto_relock": True,            # re-acquire automatically on a lost lock
+    "temp_hold": True,              # hold the last temperature while temp lock is lost
+    "freq_tracking": True,          # follow the locked frequencies for re-lock
+    "freq_track_interval": 10.0,    # s between lock-frequency updates
+    "ambient_temp": 23.0,           # degC, room temperature
+    "mat_dens": 19320.0,            # kg/m3, gold
+    "z_ratio": 1.0,                 # 1.0 = plain Sauerbrey, no Z-match
+    "target_thickness": 0.0,        # nm, 0 = no target
+}
 
 
 # ==================================================
@@ -198,26 +225,15 @@ class RestServer:
         # The values here are only a fallback until a crystal is applied.
         self._lock_freq_mass: float = 5983000.0
         self._lock_freq_temp: float = 6570000.0
-        # Oscillator settings cache — defaults match QCMInterface post-lock state
-        self._osc_settings: dict = {
-            1: {"int_gain": 0.00001, "lpf_freq": 200.0, "inverted": True},
-            2: {"int_gain": 0.00001, "lpf_freq": 200.0, "inverted": True},
-        }
-        self._output_mode: int = 0
-        # Lock-detect conditions (defaults match QCMInterface)
-        self._lock_phase_tolerance: float = 0.05
-        self._lock_phase_std: float = 0.05
-        # Automatic re-lock when lock is lost mid-measurement (default on)
-        self._auto_relock: bool = True
-        # Per-run measurement params — last values from a REST start, reused for
-        # OPC-triggered starts (so OPC needs no settings of its own).
-        self._ambient_temp: float = 23.0
-        self._mat_dens: float = 19320.0
-        self._z_ratio: float = 1.0
-        # Target thickness in nm (0 = no target). The worker owns the comparison;
-        # these two mirror it so REST clients and the PLC can read the flag at
-        # any time rather than having to catch the event.
-        self._target_thickness: float = 0.0
+        # Oscillator settings, output mode, lock-detect conditions, auto re-lock
+        # and the per-run measurement parameters all start at DEFAULT_SETTINGS;
+        # _load_settings then overrides whatever this box has saved. The
+        # measurement parameters double as the values OPC-triggered starts use,
+        # so OPC needs no settings of its own.
+        self._apply_settings(DEFAULT_SETTINGS)
+        # Target-thickness flag. The worker owns the comparison; these mirror it
+        # so REST clients and the PLC can read the flag at any time rather than
+        # having to catch the event.
         self._target_reached: bool = False
         self._target_reached_at: float | None = None
         self._target_thickness_at: float | None = None  # thickness when it tripped
@@ -236,12 +252,7 @@ class RestServer:
         # OPC parameters as read from the file. Only used when the bridge is
         # disabled (--no-opcua), where there is no client to read them back off.
         self._opc_settings: dict = {}
-        # Settings RESTORE DEFAULTS returns to, and when they were captured.
-        self._defaults_file = os.path.join(os.path.dirname(__file__), "..", "..", "data", "defaults.json")
-        self._defaults: dict = {}
-        self._defaults_captured: str | None = None
-        self._load_settings()   # override defaults with last saved values
-        self._load_defaults()   # after the settings: first run seeds from them
+        self._load_settings()   # override the defaults with this box's saved values
         self._enqueue_settings("boot")  # push settings to the hardware on startup
         self.app = self._build_app()
         
@@ -261,6 +272,9 @@ class RestServer:
             "lock_phase_tolerance": self._lock_phase_tolerance,
             "lock_phase_std":       self._lock_phase_std,
             "auto_relock":    self._auto_relock,
+            "temp_hold":      self._temp_hold,
+            "freq_tracking":  self._freq_tracking,
+            "freq_track_interval": self._freq_track_interval,
             "active_crystal": self._active_crystal,
             "ambient_temp":   self._ambient_temp,
             "mat_dens":       self._mat_dens,
@@ -286,6 +300,12 @@ class RestServer:
             self._lock_phase_std = float(d["lock_phase_std"])
         if "auto_relock" in d:
             self._auto_relock = bool(d["auto_relock"])
+        if "temp_hold" in d:
+            self._temp_hold = bool(d["temp_hold"])
+        if "freq_tracking" in d:
+            self._freq_tracking = bool(d["freq_tracking"])
+        if "freq_track_interval" in d:
+            self._freq_track_interval = max(1.0, float(d["freq_track_interval"]))
         if "active_crystal" in d:
             self._active_crystal = d["active_crystal"]
         if "ambient_temp" in d:
@@ -376,52 +396,17 @@ class RestServer:
     # Defaults
     # --------------------------------------------------
 
-    def _load_defaults(self):
-        """Load the saved defaults, or seed them from the settings in force right
-        now.
-
-        Seeding on first run is what makes RESTORE DEFAULTS mean "back to the
-        setup this instrument was actually working with" rather than back to
-        values compiled in long ago that no deposition has ever been run with.
-        Re-capture at any time with POST /settings/defaults.
-        """
-        try:
-            with open(self._defaults_file) as f:
-                stored = json.load(f)
-            saved = stored.get("settings") or {}
-            if saved:
-                self._defaults = {k: v for k, v in saved.items() if k in _DEFAULTABLE_KEYS}
-                self._defaults_captured = stored.get("captured")
-                print(f"[Defaults] Loaded defaults captured {self._defaults_captured}")
-                return
-            print("[Defaults] defaults.json has no settings — re-seeding from current settings")
-        except FileNotFoundError:
-            print("[Defaults] No defaults yet — seeding from the current settings")
-        except Exception as e:
-            print(f"[Defaults] Load failed ({e}) — re-seeding from current settings")
-        self._capture_defaults()
-
-    def _capture_defaults(self) -> tuple[dict, bool]:
-        """Make the configuration in force right now the one RESTORE DEFAULTS
-        returns to. Returns the captured settings and whether they reached disk —
-        they hold for this session either way, but a failed write means the old
-        defaults come back at the next boot, which the operator has to be told."""
-        self._defaults = self._instrument_settings()
-        self._defaults_captured = datetime.now(timezone.utc).isoformat()
-        ok = self._write_json(self._defaults_file,
-                              {"captured": self._defaults_captured, "settings": self._defaults},
-                              "Defaults")
-        print(f"[Defaults] Captured the current settings as defaults ({self._defaults_captured})")
-        return self._defaults, ok
-
     def _restore_defaults(self) -> dict:
-        """Put the defaults back into force — state, hardware and settings file.
-        Takes effect immediately, exactly as if each value had been set by hand;
-        the material parameters, as always, apply to the next run."""
-        self._apply_settings(self._defaults)
+        """Put DEFAULT_SETTINGS back into force — state, hardware and settings
+        file. Takes effect immediately, exactly as if each value had been set by
+        hand; the material parameters, as always, apply to the next run.
+
+        The active crystal is left alone: it is what this box has fitted, and a
+        restore that dropped it would take the calibration with it."""
+        self._apply_settings(DEFAULT_SETTINGS)
         self._enqueue_settings("restore defaults")
         self._save_settings()
-        return self._defaults
+        return dict(DEFAULT_SETTINGS)
 
     # --------------------------------------------------
     # Control parameters (consumed by the OPC bridge for triggered actions)
@@ -485,6 +470,8 @@ class RestServer:
 
         self.command_queue.put(SetLockDetectCommand(self._lock_phase_tolerance, self._lock_phase_std))
         self.command_queue.put(SetAutoRelockCommand(self._auto_relock))
+        self.command_queue.put(SetTempHoldCommand(self._temp_hold))
+        self.command_queue.put(SetFreqTrackingCommand(self._freq_tracking, self._freq_track_interval))
         self.command_queue.put(SetTargetThicknessCommand(self._target_thickness))
 
         # Apply the active crystal's coefficients + lock frequencies, if any.
@@ -623,6 +610,15 @@ class RestServer:
                     self._target_reached = bool(msg.get("reached"))
                     self._target_reached_at = time.time() if self._target_reached else None
                     self._target_thickness_at = msg.get("thickness") if self._target_reached else None
+
+                elif msg.get("type") == "StartFreqAutoUpdatedEvent":
+                    # Whether it came from the periodic tracking or the end of a
+                    # run, this is now the best guess at where the resonances are.
+                    # GET LOCK and the OPC-triggered lock both read these, so
+                    # they get the tracked values rather than the ones the crystal
+                    # profile was written with. The profile on disk is untouched.
+                    self._lock_freq_mass = msg.get("freq_mass", self._lock_freq_mass)
+                    self._lock_freq_temp = msg.get("freq_temp", self._lock_freq_temp)
 
                 elif msg.get("type") == "SweepCompleteEvent":
                     # None when the sweep could not be recorded — keep it None so
@@ -810,6 +806,31 @@ class RestServer:
             self._save_settings()
             return {"status": "ok"}
 
+        @app.post("/settings/temp_hold")
+        def set_temp_hold(enabled: bool):
+            """Hold the last calculated temperature while the temp-mode lock is
+            lost, instead of solving the compensation from an fT that is no
+            longer sitting on a resonance. The mass mode keeps being measured, so
+            only the thermal correction freezes."""
+            self._temp_hold = enabled
+            self.command_queue.put(SetTempHoldCommand(enabled))
+            self._save_settings()
+            return {"status": "ok"}
+
+        @app.post("/settings/freq_tracking")
+        def set_freq_tracking(enabled: bool, interval: float = 10.0):
+            """Follow the locked frequencies: while both modes are locked, the
+            re-lock start frequencies are re-pointed at what the PLLs are
+            actually holding every `interval` seconds, so a lost lock is
+            re-acquired from where the resonances are now."""
+            if interval < 1.0:
+                raise HTTPException(400, "interval must be at least 1 s")
+            self._freq_tracking = enabled
+            self._freq_track_interval = interval
+            self.command_queue.put(SetFreqTrackingCommand(enabled, interval))
+            self._save_settings()
+            return {"status": "ok"}
+
         @app.post("/settings/measurement_params")
         def set_measurement_params(ambient_temp: float, mat_dens: float, z_ratio: float,
                                    target_thickness: float | None = None):
@@ -846,28 +867,18 @@ class RestServer:
 
         @app.get("/settings/defaults")
         def get_defaults():
-            """The settings RESTORE DEFAULTS returns to, and when they were
-            captured. Seeded from whatever the instrument was configured with the
-            first time this server ran, so the defaults are a setup that works."""
-            return {"captured": self._defaults_captured, "settings": self._defaults}
-
-        @app.post("/settings/defaults")
-        def capture_defaults():
-            """Make the settings in force right now the defaults."""
-            settings, written = self._capture_defaults()
-            if not written:
-                raise HTTPException(500, "Defaults captured for this session but could not be "
-                                         "written to disk — check free space")
-            return {"status": "ok", "captured": self._defaults_captured, "settings": settings}
+            """The settings RESTORE DEFAULTS returns to. They ship with the
+            software and are the same on every instrument — there is no endpoint
+            to change them, only a commit."""
+            return {"settings": DEFAULT_SETTINGS}
 
         @app.post("/settings/restore_defaults")
         def restore_defaults():
             """Put the default settings back into force immediately. Covers
-            everything in the settings panel except the OPC connection; the
-            crystal calibration itself is untouched — only which profile is
-            active is restored."""
+            everything in the settings panel except the OPC connection and the
+            active crystal, both of which describe this particular box."""
             settings = self._restore_defaults()
-            return {"status": "ok", "captured": self._defaults_captured, "settings": settings}
+            return {"status": "ok", "settings": settings}
 
         def _finite(v):
             return v if isinstance(v, float) and math.isfinite(v) else (None if isinstance(v, float) else v)
@@ -893,6 +904,11 @@ class RestServer:
                     "phase_std":       self._lock_phase_std,
                 },
                 "auto_relock": self._auto_relock,
+                "temp_hold":   self._temp_hold,
+                "freq_tracking": {
+                    "enabled":  self._freq_tracking,
+                    "interval": self._freq_track_interval,
+                },
                 "lock_frequencies": {
                     "mass": _finite(self._lock_freq_mass),
                     "temp": _finite(self._lock_freq_temp),

@@ -93,6 +93,20 @@ class SetAutoRelockCommand(ApiCommand):
     enabled: bool  # re-acquire automatically when lock is lost mid-measurement
 
 @dataclass
+class SetTempHoldCommand(ApiCommand):
+    """Hold the last calculated temperature while the temp-mode lock is lost,
+    instead of solving the compensation from an untrustworthy fT."""
+    enabled: bool
+
+@dataclass
+class SetFreqTrackingCommand(ApiCommand):
+    """Periodically re-point the lock start frequencies at the frequencies the
+    PLLs are actually holding, so a re-lock starts from where the resonances
+    are now rather than where they were when the crystal was activated."""
+    enabled: bool
+    interval: float  # seconds between updates
+
+@dataclass
 class SetSensorParamsCommand(ApiCommand):
     mass_sensitivity: float
     sens_area: float

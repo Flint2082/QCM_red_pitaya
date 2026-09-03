@@ -495,10 +495,14 @@ class QCMInterface:
             quality_temp=self.getLockQuality(2),
         )
 
-    def getMeasurement(self) -> MeasurementData:
+    def getMeasurement(self, hold_temp: bool = False) -> MeasurementData:
+        """One compensated sample. hold_temp carries the last solved temperature
+        forward instead of solving it from fT — see TempCompAlgorithm.FreqToTemp.
+        The caller decides when to use it (the worker does, on a lost temp-mode
+        lock), so the policy lives with the automation rather than in here."""
         t = self.getTelemetry()
         T_calc, uncompensated_thickness_nm, compensated_thickness_nm, compensated_m_freq = \
-            self.temp_comp.FreqToTemp(t.freq_temp_mode, t.freq_mass_mode)
+            self.temp_comp.FreqToTemp(t.freq_temp_mode, t.freq_mass_mode, hold_temp=hold_temp)
         if np.isfinite(compensated_m_freq):
             self.setMockSigFreq(compensated_m_freq)
         return MeasurementData(
@@ -507,11 +511,19 @@ class QCMInterface:
             calculated_thickness=compensated_thickness_nm,
             calculated_temp=T_calc,
             compensated_freq=compensated_m_freq,
+            temp_held=bool(hold_temp),
         )
     
-    def moveWindow(self, fM, fT):
-        self.setFreq(1, fM - (self.WINDOW_SIZE/2))
-        self.setFreq(2, fT - (self.WINDOW_SIZE/2))
+    def moveWindow(self, fM=None, fT=None):
+        """Re-centre each PLL's capture window on the frequency it is holding.
+        None leaves that channel's window where it is, which is what an unlocked
+        channel wants: its frequency readout is not a resonance, and following it
+        walks the window away from where the resonance actually is — exactly the
+        wrong place for a re-lock to have to start from."""
+        if fM is not None:
+            self.setFreq(1, fM - (self.WINDOW_SIZE/2))
+        if fT is not None:
+            self.setFreq(2, fT - (self.WINDOW_SIZE/2))
 
 
     def startCalibration(self, cal_file_name):

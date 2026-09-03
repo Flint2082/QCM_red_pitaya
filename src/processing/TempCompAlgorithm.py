@@ -60,38 +60,58 @@ class TempCompAlgorithm:
         
         
          
-    def FreqToTemp(self, fT, fM):
+    def FreqToTemp(self, fT, fM, hold_temp=False):
+        """Solve for the temperature from the two mode frequencies and convert the
+        mass mode to thickness.
+
+        hold_temp keeps the last solved temperature instead of solving for a new
+        one. It exists for a lost temp-mode lock: fT is then not a resonance, so
+        solving would put a meaningless temperature into the compensation and
+        corrupt the compensated thickness — the one number the deposition is
+        controlled on. The mass mode is still measured normally, so freezing the
+        temperature freezes only the thermal *correction* term; the compensated
+        thickness keeps tracking the film. The correction goes stale at whatever
+        rate the crystal's temperature actually drifts, which for a lost lock of
+        a few seconds is far smaller than the error a garbage fT would inject.
+        """
         try:
         
-            # Calculate the differences from the starting values 
-            fT_dif = fT - self.fT_start
+            # Difference from the starting value. The mass mode is measured
+            # either way — only the temperature solve below depends on fT.
             fM_dif = fM - self.fM_start
 
-            # Calculate the 'd' components for the temperature and mass modes
-            fT_d = self.fT_start - self.fT_3 * self.T_start**3 - self.fT_2 * self.T_start**2 - self.fT_1 * self.T_start 
-            fM_d = self.fM_start - self.fM_3 * self.T_start**3 - self.fM_2 * self.T_start**2 - self.fM_1 * self.T_start
-            
-            # d coefficient for the cubic equation a*T_dif^3 + b*T_dif^2 + c*T_dif + d = 0
-            d = self.fM_0*(fT_dif-fT_d) - self.fT_0*(fM_dif - fM_d)
-            
-            # calculate the roots of the cubic equation
-            roots = np.roots([self.a, self.b, self.c, d])
-            real_roots = roots[np.isclose(roots.imag, 0)].real  # physical temperatures are real
-
-            # The cubic can have up to three real roots but only one is physical.
-            # np.roots returns them in no meaningful order, so pick the root closest
-            # to the last known temperature (T_start on the first sample). This keeps
-            # the solve on the correct, continuous branch instead of latching onto a
-            # spurious root, which would corrupt the temperature and the compensated
-            # thickness while leaving the uncompensated value untouched.
-            if real_roots.size == 0:
-                # No real solution — frequencies inconsistent with the calibration.
-                # Hold the previous temperature rather than crash the running loop.
-                print("FreqToTemp: no real root; holding last temperature")
+            if hold_temp:
+                # fT is untrustworthy; hold the temperature (and leave _last_T
+                # alone, so a long hold does not drift on its own).
                 T = self._last_T
             else:
-                T = float(real_roots[np.argmin(np.abs(real_roots - self._last_T))])
-            self._last_T = T
+                fT_dif = fT - self.fT_start
+
+                # Calculate the 'd' components for the temperature and mass modes
+                fT_d = self.fT_start - self.fT_3 * self.T_start**3 - self.fT_2 * self.T_start**2 - self.fT_1 * self.T_start
+                fM_d = self.fM_start - self.fM_3 * self.T_start**3 - self.fM_2 * self.T_start**2 - self.fM_1 * self.T_start
+
+                # d coefficient for the cubic equation a*T_dif^3 + b*T_dif^2 + c*T_dif + d = 0
+                d = self.fM_0*(fT_dif-fT_d) - self.fT_0*(fM_dif - fM_d)
+
+                # calculate the roots of the cubic equation
+                roots = np.roots([self.a, self.b, self.c, d])
+                real_roots = roots[np.isclose(roots.imag, 0)].real  # physical temperatures are real
+
+                # The cubic can have up to three real roots but only one is physical.
+                # np.roots returns them in no meaningful order, so pick the root closest
+                # to the last known temperature (T_start on the first sample). This keeps
+                # the solve on the correct, continuous branch instead of latching onto a
+                # spurious root, which would corrupt the temperature and the compensated
+                # thickness while leaving the uncompensated value untouched.
+                if real_roots.size == 0:
+                    # No real solution — frequencies inconsistent with the calibration.
+                    # Hold the previous temperature rather than crash the running loop.
+                    print("FreqToTemp: no real root; holding last temperature")
+                    T = self._last_T
+                else:
+                    T = float(real_roots[np.argmin(np.abs(real_roots - self._last_T))])
+                self._last_T = T
 
             # Calculate the compensated mass change using the found temperature
             M_dif = -(-fM_dif + (self.fM_3 * T**3 + self.fM_2 * T**2 + self.fM_1 * T) - (self.fM_3 * self.T_start**3 + self.fM_2 * self.T_start**2 + self.fM_1 * self.T_start)) / self.fM_0

@@ -145,6 +145,10 @@ class Application(threading.Thread):
             self.worker_command_queue.put(wc.SetLockDetectCommand(command.phase_tolerance, command.phase_std))
         elif isinstance(command, ac.SetAutoRelockCommand):
             self.worker_command_queue.put(wc.SetAutoRelockCommand(command.enabled))
+        elif isinstance(command, ac.SetTempHoldCommand):
+            self.worker_command_queue.put(wc.SetTempHoldCommand(command.enabled))
+        elif isinstance(command, ac.SetFreqTrackingCommand):
+            self.worker_command_queue.put(wc.SetFreqTrackingCommand(command.enabled, command.interval))
         elif isinstance(command, ac.SetTargetThicknessCommand):
             self.worker_command_queue.put(wc.SetTargetThicknessCommand(command.target))
         elif isinstance(command, ac.SetSensorParamsCommand):
@@ -213,8 +217,10 @@ class Application(threading.Thread):
             self._emit(ae.CapAdjustEvent(amp_mass=event.amp_mass, amp_temp=event.amp_temp))
 
         elif isinstance(event, we.StartFreqAutoUpdatedEvent):
-            print(f"[Application] Auto-updated start freqs: mass={event.freq_mass:.0f} Hz, temp={event.freq_temp:.0f} Hz")
-            self._emit(ae.StartFreqAutoUpdatedEvent(freq_mass=event.freq_mass, freq_temp=event.freq_temp))
+            print(f"[Application] Auto-updated start freqs ({event.source}): "
+                  f"mass={event.freq_mass:.0f} Hz, temp={event.freq_temp:.0f} Hz")
+            self._emit(ae.StartFreqAutoUpdatedEvent(
+                freq_mass=event.freq_mass, freq_temp=event.freq_temp, source=event.source))
 
         elif isinstance(event, we.RunLogStartedEvent):
             self._emit(ae.RunLogStartedEvent(name=event.name))

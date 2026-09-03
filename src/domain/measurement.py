@@ -31,3 +31,7 @@ class MeasurementData(TelemetryData):
     calculated_thickness: float
     calculated_temp: float
     compensated_freq: float
+    # True when calculated_temp was held over rather than solved, because the
+    # temp-mode lock was lost (see QCMInterface.getMeasurement). The row is still
+    # a real measurement of the mass mode — only the thermal correction is frozen.
+    temp_held: bool = False

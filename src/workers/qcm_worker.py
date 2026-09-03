@@ -55,8 +55,9 @@ class QCMWorker(threading.Thread):
         self.LOCK_STATUS_HEARTBEAT = 1.0  # seconds
         self._last_lock_status: tuple | None = None
         self._last_lock_emit = 0.0
-        # Automatic re-lock: if both modes stay unlocked this long during a
-        # measurement, re-acquire around the last lock frequencies.
+        # Automatic re-lock: if the lock stays lost this long during a
+        # measurement, re-acquire around the last lock frequencies. A temp-only
+        # loss that the temperature hold covers does not count — see update().
         self.AUTO_RELOCK_AFTER = 1.0  # seconds
         self.auto_relock = True  # configurable; when off a lost lock is left alone
         self._lock_freqs: tuple | None = None  # (mass, temp) from the last GET LOCK
@@ -366,8 +367,12 @@ class QCMWorker(threading.Thread):
         T = data.calculated_temp
         held = f"{T:.4f}" if isinstance(T, (int, float)) and math.isfinite(T) else "?"
         if holding:
-            print(f"[QCM] Temp-mode lock lost — holding T = {held} degC")
-            self.logger.write_event("TEMP_HOLD", f"temp-mode lock lost; holding T={held} C")
+            print(f"[QCM] Temp-mode lock lost — holding T = {held} degC; "
+                  f"thickness output continues from the mass mode")
+            self.logger.write_event(
+                "TEMP_HOLD",
+                f"temp-mode lock lost; holding T={held} C, compensated thickness "
+                f"still tracking the mass mode; no re-lock attempted")
         else:
             self.logger.write_event("TEMP_HOLD_END", "temp-mode lock back; solving T from fT again")
 
@@ -420,10 +425,31 @@ class QCMWorker(threading.Thread):
 
         # Perform measurement acquisition if in measuring state
         if self.state == WorkerState.MEASURING:
-            # Automatic re-lock: if both modes stay unlocked past the threshold,
-            # re-acquire around the last lock frequencies (blocks until done).
+            # Automatic re-lock. What a lost lock is worth doing about depends
+            # on which mode lost it:
+            #
+            #   mass mode  the thickness itself is being measured wrong, and
+            #              nothing in software can retrieve it — re-acquire.
+            #   temp mode, with the hold on
+            #              the mass mode is still measuring the film perfectly
+            #              well and the hold keeps the compensation sane, so the
+            #              run carries on. Re-acquiring would cost more than it
+            #              buys: there is one global reset register, so startupPLL
+            #              re-parks *both* NCOs at pre-lock gain and blocks for up
+            #              to ten attempts — seconds with no output at all, and
+            #              the mass loop dragged through a re-acquisition it did
+            #              not need. The temp loop is still running with its
+            #              capture window held where the lock was last good (see
+            #              moveWindow), which is the best position for it to come
+            #              back on its own.
+            #   temp mode, hold off
+            #              the compensation is being solved from an fT that is
+            #              not a resonance, so the output is wrong either way —
+            #              re-acquire, as before.
             if lock_mass and lock_temp:
                 self._lock_lost_since = None
+            elif lock_mass and self.temp_hold:
+                self._lock_lost_since = None  # covered by the hold; keep measuring
             elif self.auto_relock and self._lock_freqs is not None:
                 if self._lock_lost_since is None:
                     self._lock_lost_since = now

@@ -209,12 +209,32 @@ is not a resonance, and solving the compensation from it throws the calculated
 temperature — and with it the compensated thickness the deposition is
 controlled on — even though the mass mode is still being measured perfectly
 well. With the hold on, the last solved temperature is carried forward, so only
-the thermal *correction* freezes and the compensated thickness keeps following
-the film. The correction then goes stale at the rate the crystal's temperature
-actually drifts, which over a few seconds is far smaller than the error a
-garbage fT injects. Held samples carry `temp_held: true` on the WebSocket, show
-as **HELD** on the Monitor tab, and are the rows with `lock_temp = 0` in the run
-CSV; the run log also marks the edges with `TEMP_HOLD` / `TEMP_HOLD_END` events.
+the thermal *correction* pauses. **The measurement does not:** the mass mode is
+still read every cycle and the compensated thickness keeps coming out, following
+the film sample for sample. While the temperature is frozen the correction is a
+constant, so the compensated reading moves by exactly the same amount as the
+uncompensated one; what it loses is only the *tracking* of a temperature that is
+still drifting, which over seconds is far smaller than the error a garbage fT
+injects.
+
+A temp-only loss therefore does **not** trigger the automatic re-lock. There is
+one global reset register on this FPGA, so re-acquiring means re-parking both
+NCOs at pre-lock gain and blocking for up to ten attempts — seconds with no
+output at all, and the mass loop dragged through a re-acquisition it did not
+need. Instead the run carries straight on: the temp loop keeps running with its
+capture window held where the lock was last good, which is the best place for it
+to re-acquire from, and in practice it usually does so on its own with the run
+never interrupted. A lost *mass* lock still re-locks immediately — the thickness
+is being measured wrong there and nothing in software can retrieve it — and so
+does a temp-only loss with the hold switched off, since the compensation is then
+wrong either way.
+
+Held samples carry `temp_held: true` on the WebSocket, show as **HELD** on the
+Monitor tab, and are the rows with `lock_temp = 0` in the run CSV; the run log
+also marks the edges with `TEMP_HOLD` / `TEMP_HOLD_END` events. Nothing gives up
+on its own, so if the temp mode stays unlocked the run keeps going on a
+progressively staler correction — watch for **HELD** and press GET LOCK when it
+suits the deposition.
 
 `set_freq_tracking()` improves the odds of getting the lock back. Film loading
 pulls the mass mode down by kHz over a deposition and temperature moves both

@@ -275,20 +275,28 @@ qcm.set_freq_tracking(True, interval=10.0)
 
 ### Drive gain and AGC
 Each oscillator's excitation sinewave is scaled in the FPGA by `output_gain_1` /
-`output_gain_2` (Fixed 32.32 — all fraction, so the gain runs from 0 to 1.0,
-where 1.0 is the undivided drive). Automatic gain control servos that scale so
+`output_gain_2` (Fixed 32.32 — all fraction, capped at half scale, so the gain
+runs from 0 to **0.5**: half the 1.0 the hardware put out before the register
+existed). Automatic gain control servos that scale so
 the demodulated amplitude coming back off the
 crystal holds at a target: the loop's signal-to-noise stays put — and with it
 the phase noise the lock detection judges on — while the crystal's own response
 falls off with temperature and film loading.
 
 It ships **off**, at a manual gain of **0.25** and a target amplitude of
-**1024**. Note that 1.0 — not the default — is the undivided drive the hardware
-put out before the register existed, so an instrument coming from an older build
-is driven a quarter as hard and the amplitudes it reports fall with it. Anything
-chosen against the old drive, the target amplitude above all, wants re-reading at
-the new one. 1024 is a typical demodulated amplitude at a healthy lock, there to
-put the servo in the right decade rather than to be used as it stands.
+**1024**. An instrument coming from a build without the register was driven at
+1.0, so it ran four times as hard as this default — twice as hard as the register
+can now be asked for at all — and the amplitudes it reported fall with it.
+Anything chosen against the old drive, the target amplitude above all, wants
+re-reading at the new one. 1024 is a typical demodulated amplitude at a healthy
+lock, there to put the servo in the right decade rather than to be used as it
+stands.
+
+The default is also halfway up the 0–0.5 range, which matters once the AGC is
+on: it starts an unlocked channel at the manual gain and can only double the
+drive from there before railing. That covers the ~2x the b-mode amplitude loses
+over 20 K and not much more, so if a run also needs the drive raised for film
+loading, start from a lower manual gain.
 
 The gain is only ever adjusted **while that channel is locked**. Off resonance
 the amplitude coming back says nothing about the drive a resonance would need,

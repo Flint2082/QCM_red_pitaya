@@ -17,22 +17,25 @@ from domain.measurement import MeasurementData, TelemetryData
 WINDOW_SIZE = 2**12
 
 # Drive gain, written to output_gain_1/2 in Fixed 32.32: the FPGA multiplies the
-# excitation sinewave by it, so 1.0 is the undivided drive — what the hardware
-# put out before the register existed. It is not the default; see
-# DEFAULT_SETTINGS in the REST layer for the drive an instrument actually boots
-# at, and for what that means for amplitudes measured before this register.
+# excitation sinewave by it. 1.0 is the undivided drive — what the hardware put
+# out before the register existed, and so the drive every amplitude measured
+# before it was taken at — but nothing can ask for that now; see the ceiling
+# below, and DEFAULT_SETTINGS in the REST layer for the drive a box boots at.
 #
-# 32.32 is all fraction, and the FPGA reads the word unsigned: the register holds
-# 0 up to 1 - 2**-32, so the gain only ever attenuates and the whole range is
-# usable. The ceiling is written as exactly 1.0 rather than the largest
-# representable value because the difference is one LSB — 2.3e-10 of full drive,
-# orders below anything the output resolves — and a request for the undivided
-# sinewave should not be a range error. setOutputGain rounds 1.0 down onto that
-# top word. Gains above unity are not a setting this format can express at all;
-# the amplifier ahead of the crystal sets the absolute drive.
+# 32.32 is all fraction, so the gain only ever attenuates: a gain above unity is
+# not a setting this format can express, and the amplifier ahead of the crystal
+# sets the absolute drive.
+#
+# The ceiling is half scale. 0x7FFFFFFF, the word 0.5 rounds down onto, is the
+# largest one that stays positive whichever way the bitstream reads the register:
+# a sign convention decided in the FPGA cannot then turn a large gain into a
+# negative one, which would invert the excitation rather than merely being too
+# loud. Rounding down costs one LSB — 2.3e-10 of full scale, orders below
+# anything the output resolves — so the safety is free, and writing the ceiling
+# as the round 0.5 keeps a request for it from being a range error.
 OUTPUT_GAIN_FRAC_BITS = 32
-OUTPUT_GAIN_MAX = 1.0                  # full (undivided) drive
-OUTPUT_GAIN_RAW_MAX = 2 ** OUTPUT_GAIN_FRAC_BITS - 1  # largest word the register holds
+OUTPUT_GAIN_MAX = 0.5                  # half scale — see above
+OUTPUT_GAIN_RAW_MAX = 2 ** 31 - 1      # largest word that is positive read either way
 
 
 class QCMInterface:

@@ -98,9 +98,10 @@ class QCMClient:
         nothing about the drive a resonance needs. Sweeps, acquisition and the
         capacitor adjustment therefore always run at the manual drive.
 
-        `manual_gain` runs 0 to 1.0 — the register being all fraction, 1.0 is
-        both the undivided drive the hardware put out before it existed and the
-        ceiling; the default is a quarter of that. `target_amp` is in the
+        `manual_gain` runs 0 to 0.5: the register is all fraction and capped at
+        half scale, so the drive tops out at half the 1.0 the hardware put out
+        before the register existed. The default of 0.25 sits halfway up that
+        range, leaving the AGC a factor of two above it. `target_amp` is in the
         same units as `amp_mass`/`amp_temp` in the telemetry — take one from a
         good lock rather than guessing, or the gain just runs to its limit."""
         return self._post("/settings/agc", oscillator_idx=oscillator_idx,

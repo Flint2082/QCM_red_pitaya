@@ -164,6 +164,12 @@ DEFAULT_SETTINGS = {
     # Monitor tab drop with it, and any figure chosen against the old drive —
     # the target amplitude below above all — wants re-reading at the new one.
     #
+    # It also sits halfway up the range, the gain register being capped at 0.5
+    # (see OUTPUT_GAIN_MAX): the AGC starts every unlocked channel here and can
+    # only double the drive from it before it rails. That is enough for the ~2x
+    # the b-mode loses over 20 K and not much more, so a crystal that also needs
+    # the drive raised for film loading wants a lower manual gain to start from.
+    #
     # Switching the AGC on needs a target amplitude: 1024 is a typical
     # demodulated amplitude at a healthy lock, so it puts the servo in the right
     # decade to start from, but the figure that belongs here is whatever *this*
@@ -553,7 +559,7 @@ class RestServer:
             # with no mode, would be half a configuration.
             if {"agc_enabled", "manual_gain", "target_amp"} <= s.keys():
                 # A gain saved by a build whose register was Fixed 32.24 can be
-                # anything up to 128; 32.32 stops at 1.0. Clamp the stored value,
+                # anything up to 128; 32.32 stops at 0.5. Clamp the stored value,
                 # not just the word written to hardware, so /settings and the UI
                 # report the drive actually in force rather than one the next POST
                 # would be rejected for.
@@ -869,10 +875,12 @@ class RestServer:
             nothing about the drive a resonance needs, so there is nothing there
             worth servoing on.
 
-            `manual_gain` runs from 0 to 1.0. The register is all fraction
-            (Fixed 32.32), so 1.0 — the undivided drive the hardware had before
-            it existed — is also the most that can be asked for; the default is a
-            quarter of it. `target_amp` is in the same units as the amplitude
+            `manual_gain` runs from 0 to 0.5. The register is all fraction
+            (Fixed 32.32) and capped at half scale, so the drive tops out at half
+            of the 1.0 the hardware put out before the register existed; the
+            default, 0.25, is halfway up that range — worth knowing when the AGC
+            is on, since it can only double the drive before it rails.
+            `target_amp` is in the same units as the amplitude
             on the Monitor tab — read one off a good lock rather than guessing,
             or the gain simply runs to its limit."""
             if not 0.0 <= manual_gain <= OUTPUT_GAIN_MAX:

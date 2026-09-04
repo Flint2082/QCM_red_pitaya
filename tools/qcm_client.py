@@ -86,9 +86,9 @@ class QCMClient:
         return self._post("/settings/inverted", oscillator_idx=oscillator_idx, inverted=bool(inverted))
 
     def set_agc(self, oscillator_idx: int, enabled: bool,
-                manual_gain: float = 1.0, target_amp: float = 2048.0):
+                manual_gain: float = 0.25, target_amp: float = 1024.0):
         """Drive gain for one oscillator (FPGA register output_gain_N, Fixed
-        32.24). With `enabled` the gain is servoed while that channel is locked
+        32.32). With `enabled` the gain is servoed while that channel is locked
         so the demodulated amplitude holds at `target_amp`, which keeps the
         loop's SNR — and the phase noise the lock detect judges on — steady as
         the crystal's response falls off with temperature and film loading.
@@ -98,10 +98,11 @@ class QCMClient:
         nothing about the drive a resonance needs. Sweeps, acquisition and the
         capacitor adjustment therefore always run at the manual drive.
 
-        `manual_gain` 1.0 is the unscaled drive (default, and what the hardware
-        did before the register existed). `target_amp` is in the same units as
-        `amp_mass`/`amp_temp` in the telemetry — take one from a good lock
-        rather than guessing, or the gain just runs to its limit."""
+        `manual_gain` runs 0 to 1.0 — the register being all fraction, 1.0 is
+        both the undivided drive the hardware put out before it existed and the
+        ceiling; the default is a quarter of that. `target_amp` is in the
+        same units as `amp_mass`/`amp_temp` in the telemetry — take one from a
+        good lock rather than guessing, or the gain just runs to its limit."""
         return self._post("/settings/agc", oscillator_idx=oscillator_idx,
                           enabled=bool(enabled), manual_gain=manual_gain, target_amp=target_amp)
 

@@ -260,7 +260,7 @@ qcm.set_freq_tracking(True, interval=10.0)
 | `set_integrator_gain(oscillator_idx, gain)` | `POST /settings/integrator_gain` |
 | `set_lpf_freq(oscillator_idx, freq)` | `POST /settings/lpf_freq` (demod low-pass cutoff) |
 | `set_inverted(oscillator_idx, inverted)` | `POST /settings/inverted` |
-| `set_agc(oscillator_idx, enabled, manual_gain=1.0, target_amp=2048.0)` | `POST /settings/agc` (drive gain: servo the amplitude while locked, or a fixed manual gain — default off at gain 1.0) |
+| `set_agc(oscillator_idx, enabled, manual_gain=0.25, target_amp=1024.0)` | `POST /settings/agc` (drive gain: servo the amplitude while locked, or a fixed manual gain — default off at gain 0.25) |
 | `set_output_mode(mode)` | `POST /settings/output_mode` (DAC debug tap, int 0–11) |
 | `set_lock_detect(phase_tolerance, phase_std)` | `POST /settings/lock_detect` (both rad: max mean phase error, max phase-error σ) |
 | `set_auto_relock(enabled)` | `POST /settings/auto_relock` (auto re-acquire on lost lock, default on) |
@@ -275,16 +275,20 @@ qcm.set_freq_tracking(True, interval=10.0)
 
 ### Drive gain and AGC
 Each oscillator's excitation sinewave is scaled in the FPGA by `output_gain_1` /
-`output_gain_2` (Fixed 32.24, so 1.0 is the unscaled drive). Automatic gain
-control servos that scale so the demodulated amplitude coming back off the
+`output_gain_2` (Fixed 32.32 — all fraction, so the gain runs from 0 to 1.0,
+where 1.0 is the undivided drive). Automatic gain control servos that scale so
+the demodulated amplitude coming back off the
 crystal holds at a target: the loop's signal-to-noise stays put — and with it
 the phase noise the lock detection judges on — while the crystal's own response
 falls off with temperature and film loading.
 
-It ships **off**, with a manual gain of 1.0, which is exactly what the hardware
-did before the register existed, and a target amplitude of 2048 — a typical
-demodulated amplitude at a healthy lock, there to put the servo in the right
-decade rather than to be used as it stands.
+It ships **off**, at a manual gain of **0.25** and a target amplitude of
+**1024**. Note that 1.0 — not the default — is the undivided drive the hardware
+put out before the register existed, so an instrument coming from an older build
+is driven a quarter as hard and the amplitudes it reports fall with it. Anything
+chosen against the old drive, the target amplitude above all, wants re-reading at
+the new one. 1024 is a typical demodulated amplitude at a healthy lock, there to
+put the servo in the right decade rather than to be used as it stands.
 
 The gain is only ever adjusted **while that channel is locked**. Off resonance
 the amplitude coming back says nothing about the drive a resonance would need,
@@ -297,7 +301,7 @@ Picking a target is a measurement, not a guess. Lock the crystal, read
 and ask for the level you want held:
 
 ```python
-qcm.set_agc(1, enabled=True, manual_gain=1.0, target_amp=2048)
+qcm.set_agc(1, enabled=True, manual_gain=0.25, target_amp=1024)
 ```
 
 A target this crystal cannot return just parks the gain at its limit; that is
@@ -305,11 +309,15 @@ reported once as an `AGC_RAIL` event in the run log (and `AGC_RAIL_END` when it
 comes back into range). The servo is deliberately slow — a few seconds to cover
 a factor of ten — because drive level pulls the quartz resonance slightly, and a
 gain chasing every amplitude wobble would write that wobble into the frequency
-being measured.
+being measured. It does correct on every cycle, with no deadband, so the
+amplitude settles *on* the target rather than anywhere near it; the cost is that
+the drive follows about a third of the channel's amplitude noise, which is what
+the slow loop gain is there to keep small.
 
 Bitstreams older than the gain registers are detected at startup: the drive stays
-whatever the FPGA hard-codes and every gain write becomes a no-op, which is the
-same thing a gain of 1.0 asks for.
+whatever the FPGA hard-codes and every gain write becomes a no-op. That is the
+undivided drive, so such a box runs harder than the default asks for and its
+amplitudes are not comparable with one that has the registers.
 
 ### Defaults
 The standard settings ship with the software, as `DEFAULT_SETTINGS` in

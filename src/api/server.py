@@ -157,19 +157,23 @@ _OPC_SETTING_KEYS = ("opc_url", "opc_user", "opc_password", "opc_base_node")
 DEFAULT_SETTINGS = {
     # Post-lock loop settings, matching QCMInterface's own defaults.
     #
-    # The AGC ships off, with a manual drive gain of 1.0 — which is exactly the
-    # drive the hardware had before output_gain_N existed, so the defaults are
-    # the behaviour every crystal was characterised at. Switching it on needs a
-    # target amplitude: 2048 is a typical demodulated amplitude at a healthy
-    # lock, so it puts the servo in the right decade to start from, but the
-    # figure that belongs here is whatever *this* crystal returns — read one off
-    # a good lock rather than trusting the default, or the gain can simply run to
-    # a rail on the first lock.
+    # The AGC ships off, at a manual drive gain of 0.25 — a quarter of the
+    # undivided sinewave, which is what the hardware put out before output_gain_N
+    # existed. That difference is worth knowing about: an instrument coming from
+    # an older build is driven more gently than it was, so the amplitudes on the
+    # Monitor tab drop with it, and any figure chosen against the old drive —
+    # the target amplitude below above all — wants re-reading at the new one.
+    #
+    # Switching the AGC on needs a target amplitude: 1024 is a typical
+    # demodulated amplitude at a healthy lock, so it puts the servo in the right
+    # decade to start from, but the figure that belongs here is whatever *this*
+    # crystal returns — read one off a good lock rather than trusting the
+    # default, or the gain can simply run to a rail on the first lock.
     "osc_settings": {
         "1": {"int_gain": 1e-7, "lpf_freq": 200.0, "inverted": True,
-              "agc_enabled": False, "manual_gain": 1.0, "target_amp": 2048.0},
+              "agc_enabled": False, "manual_gain": 0.25, "target_amp": 1024.0},
         "2": {"int_gain": 1e-7, "lpf_freq": 200.0, "inverted": True,
-              "agc_enabled": False, "manual_gain": 1.0, "target_amp": 2048.0},
+              "agc_enabled": False, "manual_gain": 0.25, "target_amp": 1024.0},
     },
     "output_mode": 0,               # OutputMode.DELTA — the error signal
     "lock_phase_tolerance": 0.1,    # rad, max |mean phase error|
@@ -548,8 +552,18 @@ class RestServer:
             # together: a mode with no manual gain to fall back on, or a target
             # with no mode, would be half a configuration.
             if {"agc_enabled", "manual_gain", "target_amp"} <= s.keys():
+                # A gain saved by a build whose register was Fixed 32.24 can be
+                # anything up to 128; 32.32 stops at 1.0. Clamp the stored value,
+                # not just the word written to hardware, so /settings and the UI
+                # report the drive actually in force rather than one the next POST
+                # would be rejected for.
+                gain = min(max(float(s["manual_gain"]), 0.0), OUTPUT_GAIN_MAX)
+                if gain != s["manual_gain"]:
+                    print(f"[Settings] osc {osc} manual_gain {s['manual_gain']} is out of "
+                          f"range for the 32.32 gain register — clamped to {gain:g} ({reason})")
+                    s["manual_gain"] = gain
                 self.command_queue.put(SetAGCCommand(
-                    osc, bool(s["agc_enabled"]), float(s["manual_gain"]), float(s["target_amp"])))
+                    osc, bool(s["agc_enabled"]), gain, float(s["target_amp"])))
 
         try:
             self.command_queue.put(SetOutputModeCommand(OutputMode(self._output_mode)))
@@ -842,8 +856,8 @@ class RestServer:
             return {"status": "ok"}
 
         @app.post("/settings/agc")
-        def set_agc(oscillator_idx: int, enabled: bool, manual_gain: float = 1.0,
-                    target_amp: float = 2048.0):
+        def set_agc(oscillator_idx: int, enabled: bool, manual_gain: float = 0.25,
+                    target_amp: float = 1024.0):
             """Drive gain for one oscillator (FPGA register output_gain_N).
 
             With `enabled`, the gain is servoed while that channel is locked so
@@ -855,12 +869,14 @@ class RestServer:
             nothing about the drive a resonance needs, so there is nothing there
             worth servoing on.
 
-            `manual_gain` 1.0 is the unscaled drive the hardware had before the
-            register existed. `target_amp` is in the same units as the amplitude
+            `manual_gain` runs from 0 to 1.0. The register is all fraction
+            (Fixed 32.32), so 1.0 — the undivided drive the hardware had before
+            it existed — is also the most that can be asked for; the default is a
+            quarter of it. `target_amp` is in the same units as the amplitude
             on the Monitor tab — read one off a good lock rather than guessing,
             or the gain simply runs to its limit."""
             if not 0.0 <= manual_gain <= OUTPUT_GAIN_MAX:
-                raise HTTPException(400, f"manual_gain must be between 0 and {OUTPUT_GAIN_MAX:.3f}")
+                raise HTTPException(400, f"manual_gain must be between 0 and {OUTPUT_GAIN_MAX:g}")
             if target_amp <= 0:
                 raise HTTPException(400, "target_amp must be greater than 0")
             s = self._osc_settings.setdefault(oscillator_idx, {})

@@ -85,7 +85,7 @@ class SetAGCCommand(ApiCommand):
     also what an unlocked channel gets either way."""
     oscillator_idx: int
     enabled: bool
-    manual_gain: float  # output_gain_N while not servoing; 1.0 = unscaled
+    manual_gain: float  # output_gain_N while not servoing; 0..1.0, 1.0 = undivided
     target_amp: float   # demodulated amplitude the AGC holds
 
 @dataclass

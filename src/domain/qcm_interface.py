@@ -16,18 +16,23 @@ from domain.measurement import MeasurementData, TelemetryData
 # capture range without needing a QCMInterface instance.
 WINDOW_SIZE = 2**12
 
-# Drive gain, written to output_gain_1/2 in Fixed 32.24: the FPGA multiplies the
-# excitation sinewave by it, so 1.0 is the drive the hardware had before the
-# register existed and stays the value everything falls back to.
+# Drive gain, written to output_gain_1/2 in Fixed 32.32: the FPGA multiplies the
+# excitation sinewave by it, so 1.0 is the undivided drive — what the hardware
+# put out before the register existed. It is not the default; see
+# DEFAULT_SETTINGS in the REST layer for the drive an instrument actually boots
+# at, and for what that means for amplitudes measured before this register.
 #
-# The word is capped at what 32.24 holds whether the FPGA reads it as signed or
-# unsigned (Fix_32_24 stops at 2**31-1). Giving up the top half of an unsigned
-# range costs nothing real — a drive gain anywhere near 128x is a fault, not a
-# setting — and it means a sign convention decided later in the FPGA cannot turn
-# a large gain into a negative one, which would invert the feedback and break the
-# lock rather than merely being too loud.
-OUTPUT_GAIN_FRAC_BITS = 24
-OUTPUT_GAIN_MAX = (2 ** 31 - 1) / 2 ** OUTPUT_GAIN_FRAC_BITS  # ~128.0
+# 32.32 is all fraction, and the FPGA reads the word unsigned: the register holds
+# 0 up to 1 - 2**-32, so the gain only ever attenuates and the whole range is
+# usable. The ceiling is written as exactly 1.0 rather than the largest
+# representable value because the difference is one LSB — 2.3e-10 of full drive,
+# orders below anything the output resolves — and a request for the undivided
+# sinewave should not be a range error. setOutputGain rounds 1.0 down onto that
+# top word. Gains above unity are not a setting this format can express at all;
+# the amplifier ahead of the crystal sets the absolute drive.
+OUTPUT_GAIN_FRAC_BITS = 32
+OUTPUT_GAIN_MAX = 1.0                  # full (undivided) drive
+OUTPUT_GAIN_RAW_MAX = 2 ** OUTPUT_GAIN_FRAC_BITS - 1  # largest word the register holds
 
 
 class QCMInterface:
@@ -108,8 +113,8 @@ class QCMInterface:
         # acquire; unlocked, the channel gets the manual value instead — which is
         # also what a sweep and a capacitor adjustment want, a fixed known drive.
         self._agc_enabled = {1: False, 2: False}     # False = manual override
-        self._manual_gain = {1: 1.0, 2: 1.0}         # drive whenever the AGC is not adjusting
-        self._target_amp  = {1: 2048.0, 2: 2048.0}   # demodulated amplitude the AGC aims for
+        self._manual_gain = {1: 0.25, 2: 0.25}       # drive whenever the AGC is not adjusting
+        self._target_amp  = {1: 1024.0, 2: 1024.0}   # demodulated amplitude the AGC aims for
         self._output_gain_raw = {1: None, 2: None}   # last value written (None = never written)
         self._agc_railed  = {1: False, 2: False}     # out of gain range and still off target
         # Servo tuning. Amplitude is roughly proportional to drive, so
@@ -120,9 +125,26 @@ class QCMInterface:
         # into the frequency being measured. At ~10 Hz these let the drive cover
         # a factor of ten in a few seconds, far faster than a deposition changes
         # the crystal and far slower than the measurement it must not disturb.
+        #
+        # There is no deadband. One used to hold the servo still inside a few
+        # percent of target, on the reasoning that it stopped the drive being
+        # rewritten on amplitude noise alone; what it actually did was leave the
+        # amplitude parked anywhere inside that band — a standing offset from
+        # target that stepped as a drifting crystal crossed an edge — because a
+        # servo cannot correct what it has been told to ignore. Correcting every
+        # cycle instead, however small the error, settles the amplitude on target
+        # exactly.
+        #
+        # The price is that the drive now follows the amplitude noise rather than
+        # ignoring the small stuff. This is an integrator, so noise arrives at
+        # g/sqrt(1-(1-g)**2) of its input size for g = AGC_LOOP_GAIN — a third at
+        # 0.2, i.e. a channel whose amplitude is 3% rms noisy leaves the drive
+        # dithering by ~1% rms, and the register is rewritten most cycles. Both
+        # are cheap at ~10 Hz, but drive does pull the resonance a little: if
+        # that dither ever shows up in the measured frequency, AGC_LOOP_GAIN is
+        # the knob, and lowering it slows acquisition in the same proportion.
         self.AGC_LOOP_GAIN = 0.2     # fraction of the ideal correction per cycle
         self.AGC_MAX_STEP = 1.1      # largest gain ratio in one cycle
-        self.AGC_DEADBAND = 0.02     # relative amplitude error left alone
         self.AGC_MIN_GAIN = 2 ** -8  # floor — a multiplicative servo cannot climb out of 0
 
         # Rolling phase-error history per oscillator, fed one sample per
@@ -144,8 +166,10 @@ class QCMInterface:
         # The gain registers are newer than some bitstreams still in use, and the
         # software is deployed separately from the .fpg. Decide once whether the
         # feature exists rather than raising on every write: without the
-        # registers the drive is whatever the FPGA hard-codes, which is the same
-        # thing the default gain of 1.0 asks for, so everything else still works.
+        # registers the drive is whatever the FPGA hard-codes, so everything else
+        # still works — but that is the undivided drive, several times the
+        # default gain, so an amplitude read on such a bitstream does not carry
+        # over to one that has the registers.
         self._has_output_gain = all(self.fpga.has_register(f'output_gain_{i}') for i in (1, 2))
         if self._has_output_gain:
             for i in (1, 2):
@@ -176,7 +200,7 @@ class QCMInterface:
         self.fpga.write_register(register_name='lpf_gain_'+str(osc_index),value=int(gain*2**32)) # multiplication to account for fixed-point (32F32) representation in FPGA
 
     def setOutputGain(self, osc_index, gain):
-        """Write one oscillator's drive gain (Fixed 32.24) and return the value
+        """Write one oscillator's drive gain (Fixed 32.32) and return the value
         actually applied — None when this bitstream has no gain register.
 
         A repeat of the value already in the register is skipped: the gain is
@@ -185,7 +209,7 @@ class QCMInterface:
         if not self._has_output_gain:
             return None
         gain = min(max(float(gain), 0.0), OUTPUT_GAIN_MAX)
-        raw = int(round(gain * 2 ** OUTPUT_GAIN_FRAC_BITS))
+        raw = min(int(round(gain * 2 ** OUTPUT_GAIN_FRAC_BITS)), OUTPUT_GAIN_RAW_MAX)
         if raw != self._output_gain_raw[osc_index]:
             self.fpga.write_register(register_name='output_gain_' + str(osc_index), value=raw)
             self._output_gain_raw[osc_index] = raw
@@ -426,13 +450,6 @@ class QCMInterface:
             return gain  # no target set — nothing to servo towards
 
         amp = abs(float(amplitude))
-        if abs(amp / target - 1.0) < self.AGC_DEADBAND:
-            # Close enough. The deadband is what stops the servo rewriting the
-            # register on measurement noise alone, which would modulate the drive
-            # — and through it the resonance — at the acquisition rate.
-            self._agc_railed[osc_index] = False
-            return gain
-
         if amp <= 0:
             correction = self.AGC_MAX_STEP  # nothing coming back at all: climb
         else:
@@ -619,7 +636,7 @@ class QCMInterface:
                 "available":  self._has_output_gain,
                 "loop_gain":  self.AGC_LOOP_GAIN,
                 "max_step":   self.AGC_MAX_STEP,
-                "deadband":   self.AGC_DEADBAND,
+                "min_gain":   self.AGC_MIN_GAIN,
             },
         }
 

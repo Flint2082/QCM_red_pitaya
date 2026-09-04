@@ -102,6 +102,13 @@ class FPGAInterface:
         for reg_name, reg_addr in self.register_map.items():
             print(f"{reg_name}: {hex(reg_addr)}")        
         
+    def has_register(self, register_name):
+        """Whether the loaded bitstream exposes this register. Lets a caller skip
+        a feature the running .fpg predates instead of raising on every write —
+        the software is deployed independently of the bitstream, so a Pitaya can
+        legitimately be running an older FPGA build than the code driving it."""
+        return register_name in getattr(self, "register_map", {})
+
     def write_register(self, register_name, value):
         if register_name not in self.register_map:
             raise ValueError(f"Register {register_name} not found in register map")

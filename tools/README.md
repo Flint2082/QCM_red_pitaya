@@ -209,12 +209,32 @@ is not a resonance, and solving the compensation from it throws the calculated
 temperature — and with it the compensated thickness the deposition is
 controlled on — even though the mass mode is still being measured perfectly
 well. With the hold on, the last solved temperature is carried forward, so only
-the thermal *correction* freezes and the compensated thickness keeps following
-the film. The correction then goes stale at the rate the crystal's temperature
-actually drifts, which over a few seconds is far smaller than the error a
-garbage fT injects. Held samples carry `temp_held: true` on the WebSocket, show
-as **HELD** on the Monitor tab, and are the rows with `lock_temp = 0` in the run
-CSV; the run log also marks the edges with `TEMP_HOLD` / `TEMP_HOLD_END` events.
+the thermal *correction* pauses. **The measurement does not:** the mass mode is
+still read every cycle and the compensated thickness keeps coming out, following
+the film sample for sample. While the temperature is frozen the correction is a
+constant, so the compensated reading moves by exactly the same amount as the
+uncompensated one; what it loses is only the *tracking* of a temperature that is
+still drifting, which over seconds is far smaller than the error a garbage fT
+injects.
+
+A temp-only loss therefore does **not** trigger the automatic re-lock. There is
+one global reset register on this FPGA, so re-acquiring means re-parking both
+NCOs at pre-lock gain and blocking for up to ten attempts — seconds with no
+output at all, and the mass loop dragged through a re-acquisition it did not
+need. Instead the run carries straight on: the temp loop keeps running with its
+capture window held where the lock was last good, which is the best place for it
+to re-acquire from, and in practice it usually does so on its own with the run
+never interrupted. A lost *mass* lock still re-locks immediately — the thickness
+is being measured wrong there and nothing in software can retrieve it — and so
+does a temp-only loss with the hold switched off, since the compensation is then
+wrong either way.
+
+Held samples carry `temp_held: true` on the WebSocket, show as **HELD** on the
+Monitor tab, and are the rows with `lock_temp = 0` in the run CSV; the run log
+also marks the edges with `TEMP_HOLD` / `TEMP_HOLD_END` events. Nothing gives up
+on its own, so if the temp mode stays unlocked the run keeps going on a
+progressively staler correction — watch for **HELD** and press GET LOCK when it
+suits the deposition.
 
 `set_freq_tracking()` improves the odds of getting the lock back. Film loading
 pulls the mass mode down by kHz over a deposition and temperature moves both
@@ -240,6 +260,7 @@ qcm.set_freq_tracking(True, interval=10.0)
 | `set_integrator_gain(oscillator_idx, gain)` | `POST /settings/integrator_gain` |
 | `set_lpf_freq(oscillator_idx, freq)` | `POST /settings/lpf_freq` (demod low-pass cutoff) |
 | `set_inverted(oscillator_idx, inverted)` | `POST /settings/inverted` |
+| `set_agc(oscillator_idx, enabled, manual_gain=1.0, target_amp=2048.0)` | `POST /settings/agc` (drive gain: servo the amplitude while locked, or a fixed manual gain — default off at gain 1.0) |
 | `set_output_mode(mode)` | `POST /settings/output_mode` (DAC debug tap, int 0–11) |
 | `set_lock_detect(phase_tolerance, phase_std)` | `POST /settings/lock_detect` (both rad: max mean phase error, max phase-error σ) |
 | `set_auto_relock(enabled)` | `POST /settings/auto_relock` (auto re-acquire on lost lock, default on) |
@@ -251,6 +272,44 @@ qcm.set_freq_tracking(True, interval=10.0)
 | `settings()` | `GET /settings` (everything at once) |
 | `get_coefficients()` | `GET /settings/coefficients` (from the active crystal) |
 | `set_measurement_params(ambient_temp, mat_dens, z_ratio, target_thickness=None)` | `POST /settings/measurement_params` (persist run parameters without starting a run) |
+
+### Drive gain and AGC
+Each oscillator's excitation sinewave is scaled in the FPGA by `output_gain_1` /
+`output_gain_2` (Fixed 32.24, so 1.0 is the unscaled drive). Automatic gain
+control servos that scale so the demodulated amplitude coming back off the
+crystal holds at a target: the loop's signal-to-noise stays put — and with it
+the phase noise the lock detection judges on — while the crystal's own response
+falls off with temperature and film loading.
+
+It ships **off**, with a manual gain of 1.0, which is exactly what the hardware
+did before the register existed, and a target amplitude of 2048 — a typical
+demodulated amplitude at a healthy lock, there to put the servo in the right
+decade rather than to be used as it stands.
+
+The gain is only ever adjusted **while that channel is locked**. Off resonance
+the amplitude coming back says nothing about the drive a resonance would need,
+so an unlocked channel — and a sweep, an acquisition attempt or a capacitor
+adjustment — runs at the manual gain instead, which is also the fixed, known
+drive those procedures want.
+
+Picking a target is a measurement, not a guess. Lock the crystal, read
+`amp_mass` / `amp_temp` off the telemetry (or the Monitor tab) at a good lock,
+and ask for the level you want held:
+
+```python
+qcm.set_agc(1, enabled=True, manual_gain=1.0, target_amp=2048)
+```
+
+A target this crystal cannot return just parks the gain at its limit; that is
+reported once as an `AGC_RAIL` event in the run log (and `AGC_RAIL_END` when it
+comes back into range). The servo is deliberately slow — a few seconds to cover
+a factor of ten — because drive level pulls the quartz resonance slightly, and a
+gain chasing every amplitude wobble would write that wobble into the frequency
+being measured.
+
+Bitstreams older than the gain registers are detected at startup: the drive stays
+whatever the FPGA hard-codes and every gain write becomes a no-op, which is the
+same thing a gain of 1.0 asks for.
 
 ### Defaults
 The standard settings ship with the software, as `DEFAULT_SETTINGS` in

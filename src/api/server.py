@@ -27,7 +27,7 @@ from fastapi.responses import FileResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 
 from domain.crystal import CrystalManager, CrystalProfile, sanitize_name
-from domain.qcm_interface import WINDOW_SIZE
+from domain.qcm_interface import OUTPUT_GAIN_MAX, WINDOW_SIZE
 from domain.run_logger import MIN_FREE_BYTES, RUNS_DIR, part_number, run_base
 from domain.sweep_logger import SWEEPS_DIR
 from plc.opc_worker import _READ_KEYS as OPC_READ_KEYS, _CTRL_KEYS as OPC_CTRL_KEYS
@@ -156,9 +156,20 @@ _OPC_SETTING_KEYS = ("opc_url", "opc_user", "opc_password", "opc_base_node")
 # clearing it would take the calibration with it. Both survive a restore.
 DEFAULT_SETTINGS = {
     # Post-lock loop settings, matching QCMInterface's own defaults.
+    #
+    # The AGC ships off, with a manual drive gain of 1.0 — which is exactly the
+    # drive the hardware had before output_gain_N existed, so the defaults are
+    # the behaviour every crystal was characterised at. Switching it on needs a
+    # target amplitude: 2048 is a typical demodulated amplitude at a healthy
+    # lock, so it puts the servo in the right decade to start from, but the
+    # figure that belongs here is whatever *this* crystal returns — read one off
+    # a good lock rather than trusting the default, or the gain can simply run to
+    # a rail on the first lock.
     "osc_settings": {
-        "1": {"int_gain": 1e-7, "lpf_freq": 200.0, "inverted": True},
-        "2": {"int_gain": 1e-7, "lpf_freq": 200.0, "inverted": True},
+        "1": {"int_gain": 1e-7, "lpf_freq": 200.0, "inverted": True,
+              "agc_enabled": False, "manual_gain": 1.0, "target_amp": 2048.0},
+        "2": {"int_gain": 1e-7, "lpf_freq": 200.0, "inverted": True,
+              "agc_enabled": False, "manual_gain": 1.0, "target_amp": 2048.0},
     },
     "output_mode": 0,               # OutputMode.DELTA — the error signal
     "lock_phase_tolerance": 0.1,    # rad, max |mean phase error|
@@ -347,7 +358,18 @@ class RestServer:
         settings.json from before lock detect went amplitude-free; unknown keys
         are ignored here and dropped on the next save."""
         if "osc_settings" in d:
-            self._osc_settings = {int(k): dict(v) for k, v in d["osc_settings"].items()}
+            # Merged over the defaults rather than replacing them: a settings.json
+            # written by an older build has no entry for a setting added since
+            # (the AGC keys, most recently), and taking the file verbatim would
+            # leave those oscillators with no value at all — the hardware push
+            # would skip them and the settings panel would show blanks. Anything
+            # the file does carry still wins.
+            defaults = DEFAULT_SETTINGS["osc_settings"]
+            self._osc_settings = {}
+            for k, v in d["osc_settings"].items():
+                merged = dict(defaults.get(str(k), {}))
+                merged.update(v)
+                self._osc_settings[int(k)] = merged
         if "output_mode" in d:
             self._output_mode = int(d["output_mode"])
         if "lock_phase_tolerance" in d:
@@ -522,6 +544,12 @@ class RestServer:
                 self.command_queue.put(SetLPFFreqCommand(osc, s["lpf_freq"]))
             if "inverted" in s:
                 self.command_queue.put(SetInvertedCommand(osc, bool(s["inverted"])))
+            # One command, because the three AGC values only mean anything
+            # together: a mode with no manual gain to fall back on, or a target
+            # with no mode, would be half a configuration.
+            if {"agc_enabled", "manual_gain", "target_amp"} <= s.keys():
+                self.command_queue.put(SetAGCCommand(
+                    osc, bool(s["agc_enabled"]), float(s["manual_gain"]), float(s["target_amp"])))
 
         try:
             self.command_queue.put(SetOutputModeCommand(OutputMode(self._output_mode)))
@@ -810,6 +838,34 @@ class RestServer:
         def set_inverted(oscillator_idx: int, inverted: bool):
             self._osc_settings.setdefault(oscillator_idx, {})["inverted"] = inverted
             self.command_queue.put(SetInvertedCommand(oscillator_idx, inverted))
+            self._save_settings()
+            return {"status": "ok"}
+
+        @app.post("/settings/agc")
+        def set_agc(oscillator_idx: int, enabled: bool, manual_gain: float = 1.0,
+                    target_amp: float = 2048.0):
+            """Drive gain for one oscillator (FPGA register output_gain_N).
+
+            With `enabled`, the gain is servoed while that channel is locked so
+            the demodulated amplitude holds at `target_amp` — which keeps the
+            loop's SNR, and the phase noise the lock detect judges on, steady as
+            the crystal's response falls off with temperature and film loading.
+            Unlocked, and in the manual override (`enabled` false), the drive is
+            `manual_gain` instead: off resonance the returned amplitude says
+            nothing about the drive a resonance needs, so there is nothing there
+            worth servoing on.
+
+            `manual_gain` 1.0 is the unscaled drive the hardware had before the
+            register existed. `target_amp` is in the same units as the amplitude
+            on the Monitor tab — read one off a good lock rather than guessing,
+            or the gain simply runs to its limit."""
+            if not 0.0 <= manual_gain <= OUTPUT_GAIN_MAX:
+                raise HTTPException(400, f"manual_gain must be between 0 and {OUTPUT_GAIN_MAX:.3f}")
+            if target_amp <= 0:
+                raise HTTPException(400, "target_amp must be greater than 0")
+            s = self._osc_settings.setdefault(oscillator_idx, {})
+            s["agc_enabled"], s["manual_gain"], s["target_amp"] = enabled, manual_gain, target_amp
+            self.command_queue.put(SetAGCCommand(oscillator_idx, enabled, manual_gain, target_amp))
             self._save_settings()
             return {"status": "ok"}
 

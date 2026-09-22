@@ -5,7 +5,7 @@ class TempCompAlgorithm:
     def __init__(self, coefficients, T_start, fT_start, fM_start,
                  mat_dens=19320,            # kg/m^3 = Material density (e.g. gold)
                  sens_area=5.25e-5,         # m^2 = Sensor area (e.g. 5.25e-5 m^2 for 8.2 mm dia apature)
-                 mass_sensitivity=-13.3e-8, # kg/m^2/Hz = Mass sensitivity, negative: added mass lowers the frequency (-13.3 ng/(cm2*Hz) for ~6 MHz AT-cut)
+                 mass_sensitivity=-13.3e-8, # kg/m^2/Hz = Mass sensitivity, negative: added mass lowers the frequency (-13.3 ng/(cm2*Hz) for ~6 MHz SC-cut, per Inficon)
                  z_ratio=1.0,               # acoustic impedance ratio quartz/film (gold 0.381); 1.0 ~ plain Sauerbrey
                  freq_virgin=None,          # Hz = pristine (uncoated) crystal frequency; None/0 = use fM_start
                  tooling_ratio=1.0          # proportional scaling of the reported thickness (sensor/substrate geometry); 1.0 = no scaling

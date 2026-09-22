@@ -83,7 +83,7 @@ qcm = QCMClient("192.168.1.50")
 
 # 1. Pick the crystal whose calibration you want to use (lock frequencies +
 #    polynomial coefficients come from this profile).
-qcm.activate_crystal("AT_cut_6MHz")
+qcm.activate_crystal("SC_cut_6MHz")
 
 # 2. Lock the two PLLs onto the crystal's resonances.
 qcm.get_lock()

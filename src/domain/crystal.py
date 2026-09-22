@@ -23,7 +23,7 @@ class CrystalProfile:
     freq_temp: float = 6570000.0
     # Pristine (uncoated) crystal frequency — Z-match reference; default 6 MHz, 0 = use run start
     freq_virgin: float = 6000000.0
-    # Calibration coefficients (default: reference AT-cut calibration)
+    # Calibration coefficients (default: reference SC-cut calibration)
     fM_0: float = 5982438.448062406
     fM_1: float = 9.159340464734298
     fM_2: float = -0.10904938259265566

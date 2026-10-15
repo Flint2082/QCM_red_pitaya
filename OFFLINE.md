@@ -38,7 +38,7 @@ Two separate sets, so an offline PC installs only what it needs:
 | you want to | install | size |
 |---|---|---|
 | drive the instrument from a script | [`requirements-client.txt`](requirements-client.txt) | 768 kB |
-| plot run and sweep CSVs | [`requirements-plot.txt`](requirements-plot.txt) | 41 MB |
+| plot run and sweep CSVs | [`requirements-plot.txt`](requirements-plot.txt) | 75 MB |
 
 ```bash
 python -m venv .venv
@@ -55,10 +55,11 @@ Do not pass `--upgrade-deps`; that one does need the network.
 ### The control set installs anywhere; the plotting set does not
 
 The control wheels are pure Python, so they fit any OS and any Python 3. The
-plotting wheels (numpy, pandas, matplotlib) are compiled, and the committed ones
-are **Windows x64, Python 3.13**. On any other OS or Python minor version pip
-reports `No matching distribution found` even though the file is right there —
-that is the wheel not matching the interpreter, not a missing download.
+plotting wheels (numpy, pandas, matplotlib, scipy) are compiled, and the
+committed ones are **Windows x64, Python 3.13**. On any other OS or Python minor
+version pip reports `No matching distribution found` even though the file is
+right there — that is the wheel not matching the interpreter, not a missing
+download.
 
 To add a target, on a machine with internet:
 
@@ -72,10 +73,10 @@ offline PC. More detail in [`vendor/wheels/README.md`](vendor/wheels/README.md).
 
 ### If the plotters cannot open a file dialog
 
-`csv_plotter.py` and `sweep_plotter.py` offer a file dialog through tkinter,
-which is part of the Python installation and cannot be pip-installed. If it is
-missing they fall back to searching for the newest `qcm_*.csv`; you can always
-pass the path outright:
+`csv_plotter.py`, `sweep_plotter.py` and `admittance_plotter.py` offer a file
+dialog through tkinter, which is part of the Python installation and cannot be
+pip-installed. If it is missing they fall back to searching for the newest
+`qcm_*.csv`; you can always pass the path outright:
 
 ```bash
 python tools/csv_plotter.py path/to/qcm_run_2026-09-03_141530.csv

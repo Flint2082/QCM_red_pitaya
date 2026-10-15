@@ -49,9 +49,10 @@ repo — no download needed at the bench:
 pip install --no-index --find-links vendor/wheels -r requirements-client.txt
 ```
 
-The plotters further down this page need numpy, pandas and matplotlib
-([requirements-plot.txt](../requirements-plot.txt)), which are vendored the same
-way. See [OFFLINE.md](../OFFLINE.md).
+The plotters further down this page need numpy, pandas and matplotlib, and the
+admittance plotter scipy as well. All four are pinned in
+[requirements-plot.txt](../requirements-plot.txt) and vendored the same way.
+See [OFFLINE.md](../OFFLINE.md).
 
 ## 3. Connect
 
@@ -401,6 +402,50 @@ It draws amplitude and phase against frequency and marks the two strongest
 well-separated peaks — the same "peak / 2nd peak" the ANALYSIS tab reports. With
 no argument it opens a file dialog or picks the newest `qcm_sweep_*.csv` from
 the current directory, `./data/sweeps`, or your Downloads folder.
+
+#### Admittance circles
+
+The same CSV holds more than a peak position. The front end is a
+capacitance-compensated bridge, so amplitude · e^(j·phase) is the crystal's
+admittance times an unknown, slowly varying complex gain.
+[`admittance_plotter.py`](admittance_plotter.py) fits each resonance with a
+Lorentzian on a linear background (plus a term for any spur in the window). It
+then rotates data and fit by the fitted phase and subtracts nothing, so the plot
+shows what the background does. The result is the admittance circle in the G–B
+plane, in arbitrary units, starting from the background rather than the origin.
+A spur shows as its own smaller circle, nested inside the mode's:
+
+```bash
+python admittance_plotter.py sweep.csv                        # strongest resonance
+python admittance_plotter.py sweep.csv --peaks 2              # the two strongest
+python admittance_plotter.py sweep.csv --mode-freq 5984500    # the one near this frequency
+python admittance_plotter.py sweep.csv --save circle.png      # also write a PNG
+```
+
+For each mode it prints fs, Q, FWHM, 1/R1 (arb., the circle's diameter), the
+instrument phase (the rotation) and the background at fs. Every mode should
+need the same instrument phase, about −1.36 rad on this front end, and with more
+than one mode the tool prints the spread. A mode that disagrees has been badly
+fitted. It also lists every resonance it found, so in a wide sweep you can pick
+one by `--mode-freq`.
+
+The window has three panels per mode:
+
+- **G–B plane:** the measured points and the full fit (background plus every
+  resonance). fs and fs ± FWHM/2 are marked on the fit, each spur is labelled
+  with its fs, and the fitted background at fs is a black diamond.
+- **Zoom to ±120 counts around the origin:** the arrow from the origin to the
+  diamond is the background. The same fit without it is drawn dashed for
+  comparison.
+- **Raw |signal| against detuning, log scale:** the full fit, the background
+  level (dotted) and the fit without the background (dashed).
+
+The modes are only 40–55 Hz wide. `sweep_mode()`'s 100 Hz steps give about
+half a point per FWHM, and a wide 500 Hz sweep a tenth. With that few points the
+circle is drawn from the fit, not measured, and Q tends to come out low (by up
+to ~12 % at 500 Hz steps). The tool warns whenever the step is more
+than about FWHM/3, and prints the sweep to take instead: ±10 kHz at 10 Hz steps,
+e.g. `qcm.start_sweep(2, 6561200, 6581200, 10, 0.05)`.
 
 ### Capacitor adjust (null the parasitic capacitance)
 | method | endpoint |

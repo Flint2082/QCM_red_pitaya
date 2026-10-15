@@ -16,7 +16,7 @@ on every package before falling back to these files.
 | set | from | wheels | fits |
 |-----|------|--------|------|
 | control | [`requirements-client.txt`](../../requirements-client.txt) | requests, websocket-client + deps | **any** OS, **any** Python 3 |
-| plotting | [`requirements-plot.txt`](../../requirements-plot.txt) | numpy, pandas, matplotlib + deps | Windows x64, Python 3.13 |
+| plotting | [`requirements-plot.txt`](../../requirements-plot.txt) | numpy, pandas, matplotlib, scipy + deps | Windows x64, Python 3.13 |
 
 The control set is pure Python (`-py3-none-any.whl`), so it installs anywhere.
 The plotting set is compiled: `numpy-2.4.2-cp313-cp313-win_amd64.whl` fits

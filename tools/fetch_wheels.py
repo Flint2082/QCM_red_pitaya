@@ -7,9 +7,9 @@ offline PC installs straight out of the repo:
 
 The control set (requests, websocket-client) is pure Python, so what is
 committed already works on any OS and any Python 3. The plotting set (numpy,
-pandas, matplotlib) is compiled: those wheels only fit the OS and Python minor
-version they were fetched for, which is why this script exists — point it at
-another target and it adds that one alongside.
+pandas, matplotlib, scipy) is compiled: those wheels only fit the OS and Python
+minor version they were fetched for, which is why this script exists — point it
+at another target and it adds that one alongside.
 
     python tools/fetch_wheels.py                          # this machine's own target
     python tools/fetch_wheels.py --platform win_amd64 --python-version 313

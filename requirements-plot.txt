@@ -1,6 +1,6 @@
 # The PC-side analysis tools: tools/csv_plotter.py, tools/sweep_plotter.py,
-# tools/test_comp_alogrithm.py. Not needed to control the instrument, and not
-# needed on the Pitaya.
+# tools/admittance_plotter.py, tools/test_comp_alogrithm.py. Not needed to
+# control the instrument, and not needed on the Pitaya.
 #
 # Pinned to the versions these tools are known to work with — the same ones the
 # vendored wheels hold:
@@ -9,6 +9,10 @@
 # Unlike requirements-client.txt these are compiled wheels, so the vendored set
 # is specific to one OS and one Python minor version (see vendor/wheels/README.md
 # for which, and tools/fetch_wheels.py to add another).
+#
+# scipy is only for tools/admittance_plotter.py, and at ~35 MB it is half the
+# set. It is pinned here all the same so one install covers every plotter.
 numpy==2.4.2
 pandas==3.0.1
 matplotlib==3.10.8
+scipy==1.18.1

@@ -19,7 +19,7 @@ channels span different units (°C, Hz, nm), tick "Normalize" to scale each
 selected series to its own 0-1 range so any combination is comparable.
 
 Usage:
-    python tools/test_comp_alogrithm.py [measurement.csv] [crystal] [start_temp]
+    python tools/test_comp_algorithm.py [measurement.csv] [crystal] [start_temp]
 
 All three arguments are optional: with no CSV a file dialog opens, and the
 starting temperature is prompted for (defaulting to the first temp value found

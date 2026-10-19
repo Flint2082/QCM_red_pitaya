@@ -1,5 +1,5 @@
 # The PC-side analysis tools: tools/csv_plotter.py, tools/sweep_plotter.py,
-# tools/admittance_plotter.py, tools/test_comp_alogrithm.py. Not needed to
+# tools/admittance_plotter.py, tools/test_comp_algorithm.py. Not needed to
 # control the instrument, and not needed on the Pitaya.
 #
 # Pinned to the versions these tools are known to work with — the same ones the

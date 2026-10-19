@@ -79,6 +79,10 @@ cd "$PROJECT_DIR" || die "Project directory not found: $PROJECT_DIR"
 git rev-parse --is-inside-work-tree >/dev/null 2>&1 || die "$PROJECT_DIR is not a git repository"
 
 log "📝 Staging bitstream and .fpg ..."
+# Keep exactly one .fpg tracked: the server loads the newest .fpg in outputs/ as
+# its register map, so stale builds only make that choice ambiguous. Untrack the
+# previous one (the file stays on disk here; history keeps every build).
+git rm --cached --quiet --ignore-unmatch -- "$FPG_SEARCH_DIR/*.fpg"
 # Both artifacts typically live under .gitignore'd build/output dirs, so force-add.
 git add -f -- "$OUTPUT_BIN" "$FPG_FILE"
 

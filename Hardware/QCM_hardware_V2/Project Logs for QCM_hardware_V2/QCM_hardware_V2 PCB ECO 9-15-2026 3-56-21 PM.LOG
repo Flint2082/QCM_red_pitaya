@@ -1,0 +1,70 @@
+Change Component Designator: OldDesignator=D? NewDesignator=D2
+Change Component Designator: OldDesignator=D? NewDesignator=D3
+Change Component Designator: OldDesignator=D? NewDesignator=D4
+Change Component Designator: OldDesignator=D? NewDesignator=D5
+Change Component Designator: OldDesignator=D? NewDesignator=D6
+Change Component Designator: OldDesignator=J? NewDesignator=J10
+Change Component Designator: OldDesignator=J? NewDesignator=J11
+Change Component Designator: OldDesignator=Q? NewDesignator=Q1
+Change Component Designator: OldDesignator=Q? NewDesignator=Q2
+Change Component Designator: OldDesignator=Q? NewDesignator=Q3
+Change Component Designator: OldDesignator=Q? NewDesignator=Q4
+Change Component Designator: OldDesignator=R? NewDesignator=R12
+Change Component Designator: OldDesignator=R? NewDesignator=R13
+Change Component Designator: OldDesignator=R? NewDesignator=R14
+Change Component Designator: OldDesignator=R? NewDesignator=R15
+Change Component Designator: OldDesignator=R? NewDesignator=R16
+Change Component Designator: OldDesignator=R? NewDesignator=R17
+Change Component Designator: OldDesignator=R? NewDesignator=R18
+Change Component Designator: OldDesignator=R? NewDesignator=R19
+Change Component Designator: OldDesignator=R? NewDesignator=R20
+Change Component Designator: OldDesignator=U? NewDesignator=U4
+Change Net Name : Old Net Name=NetD?_C New Net Name=NetD2_C
+Change Net Name : Old Net Name=NetQ?_1 New Net Name=NetQ2_1
+Change Net Name : Old Net Name=NetQ?_3 New Net Name=NetQ2_3
+Added Pin To Net: NetName=NetD3_C Pin=D3-C
+Added Pin To Net: NetName=NetD3_C Pin=R13-1
+Added Net: Name=NetD3_C
+Added Pin To Net: NetName=NetD4_C Pin=D4-C
+Added Pin To Net: NetName=NetD4_C Pin=R14-1
+Added Net: Name=NetD4_C
+Added Pin To Net: NetName=NetD5_C Pin=D5-C
+Added Pin To Net: NetName=NetD5_C Pin=R15-1
+Added Net: Name=NetD5_C
+Added Pin To Net: NetName=NetD6_C Pin=D6-C
+Added Pin To Net: NetName=NetD6_C Pin=R16-1
+Added Net: Name=NetD6_C
+Added Pin To Net: NetName=NetQ1_1 Pin=Q1-1
+Added Pin To Net: NetName=NetQ1_1 Pin=R17-2
+Added Net: Name=NetQ1_1
+Added Pin To Net: NetName=NetQ1_3 Pin=Q1-3
+Added Pin To Net: NetName=NetQ1_3 Pin=R13-2
+Added Net: Name=NetQ1_3
+Added Pin To Net: NetName=NetQ3_1 Pin=Q3-1
+Added Pin To Net: NetName=NetQ3_1 Pin=R19-2
+Added Net: Name=NetQ3_1
+Added Pin To Net: NetName=NetQ3_3 Pin=Q3-3
+Added Pin To Net: NetName=NetQ3_3 Pin=R15-2
+Added Net: Name=NetQ3_3
+Added Pin To Net: NetName=NetQ4_1 Pin=Q4-1
+Added Pin To Net: NetName=NetQ4_1 Pin=R20-2
+Added Net: Name=NetQ4_1
+Added Pin To Net: NetName=NetQ4_3 Pin=Q4-3
+Added Pin To Net: NetName=NetQ4_3 Pin=R16-2
+Added Net: Name=NetQ4_3
+Added Member To Class: ClassName=QCM_hardware_V2 Member=Component D2 LED_BLUE
+Added Member To Class: ClassName=QCM_hardware_V2 Member=Component D3 LED_BLUE
+Added Member To Class: ClassName=QCM_hardware_V2 Member=Component D4 LED_BLUE
+Added Member To Class: ClassName=QCM_hardware_V2 Member=Component D5 LED_BLUE
+Added Member To Class: ClassName=QCM_hardware_V2 Member=Component J11 FAN
+Added Member To Class: ClassName=QCM_hardware_V2 Member=Component Q1 MGSF1N03LT1G
+Added Member To Class: ClassName=QCM_hardware_V2 Member=Component Q2 MGSF1N03LT1G
+Added Member To Class: ClassName=QCM_hardware_V2 Member=Component Q3 MGSF1N03LT1G
+Added Member To Class: ClassName=QCM_hardware_V2 Member=Component R12 220
+Added Member To Class: ClassName=QCM_hardware_V2 Member=Component R13 220
+Added Member To Class: ClassName=QCM_hardware_V2 Member=Component R14 220
+Added Member To Class: ClassName=QCM_hardware_V2 Member=Component R15 220
+Added Member To Class: ClassName=QCM_hardware_V2 Member=Component R16 220
+Added Member To Class: ClassName=QCM_hardware_V2 Member=Component R17 1k
+Added Member To Class: ClassName=QCM_hardware_V2 Member=Component R19 1k
+Added Member To Class: ClassName=QCM_hardware_V2 Member=Component R20 1k

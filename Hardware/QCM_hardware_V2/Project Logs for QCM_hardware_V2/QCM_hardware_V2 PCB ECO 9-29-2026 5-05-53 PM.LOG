@@ -1,0 +1,305 @@
+Removed Pin From Net: NetName=+5 Pin=J9-1
+Removed Pin From Net: NetName=GND Pin=J9-2
+Change Component Designator: OldDesignator=J10 NewDesignator=J9
+Added Component: Designator=C7(C_0805)
+Added Component: Designator=C8(C_0805)
+Added Component: Designator=C10(C_0805)
+Added Component: Designator=C11(C_0805)
+Added Component: Designator=C12(C_0805)
+Added Component: Designator=C13(C_0805)
+Added Component: Designator=C14(C_0805)
+Added Component: Designator=C20(C_0805)
+Added Component: Designator=C21(C_0805)
+Added Component: Designator=C22(C_0805)
+Added Component: Designator=C23(C_0805)
+Added Component: Designator=C24(C_0805)
+Added Component: Designator=C25(C_0805)
+Added Component: Designator=C26(C_0805)
+Added Component: Designator=C27(C_0805)
+Added Component: Designator=C28(C_0805)
+Added Component: Designator=C29(C_0805)
+Added Component: Designator=CN1(HDR4)
+Add component: Footprint Not Found TERMINAL_BLOCK4
+Added Component: Designator=CN3(HDR3)
+Added Component: Designator=CN4(TERMINAL_BLOCK2)
+Added Component: Designator=CN5(HDR2)
+Added Component: Designator=CN6(HDR2)
+Added Component: Designator=CN7(HDR6)
+Added Component: Designator=CN8(HDR6)
+Added Component: Designator=R21(R_AXIAL_9.0x3.2mm_p12.7mm)
+Add component (AddParameter): Name = "Filename"; Value = ""; VariantName = "[No Variations]"
+Added Component: Designator=R22(R_0805)
+Add component (AddParameter): Name = "Filename"; Value = ""; VariantName = "[No Variations]"
+Added Component: Designator=R23(R_0805)
+Add component (AddParameter): Name = "Filename"; Value = ""; VariantName = "[No Variations]"
+Added Component: Designator=U3(FP-LX-48-05-08-1760-MFG)
+Add component (AddParameter): Name = "Case/Package"; Value = "LQFP"; VariantName = "[No Variations]"
+Add component (AddParameter): Name = "Max Supply Voltage"; Value = "5.25V"; VariantName = "[No Variations]"
+Add component (AddParameter): Name = "Min Operating Temperature"; Value = "-40°C"; VariantName = "[No Variations]"
+Add component (AddParameter): Name = "Min Supply Voltage"; Value = "2.85V"; VariantName = "[No Variations]"
+Add component (AddParameter): Name = "Number of Pins"; Value = "48"; VariantName = "[No Variations]"
+Add component (AddParameter): Name = "REACH SVHC"; Value = "No SVHC"; VariantName = "[No Variations]"
+Add component (AddParameter): Name = "RoHS Compliant"; Value = "Yes"; VariantName = "[No Variations]"
+Add component (AddParameter): Name = "Supplier 1"; Value = "Farnell"; VariantName = "[No Variations]"
+Add component (AddParameter): Name = "Supplier Part Number 1"; Value = "TSIC 501F TO92"; VariantName = "[No Variations]"
+Added Component: Designator=U4(TO220V)
+Add component (AddParameter): Name = "Accuracy"; Value = "2%"; VariantName = "[No Variations]"
+Add component (AddParameter): Name = "Case/Package"; Value = "TO"; VariantName = "[No Variations]"
+Add component (AddParameter): Name = "ComponentLink1Description"; Value = "http://www.jameco.com/Jameco/Products/ProdDS/902071.pdf"; VariantName = "[No Variations]"
+Add component (AddParameter): Name = "ComponentLink1URL"; Value = "http://www.jameco.com/Jameco/Products/ProdDS/902071.pdf"; VariantName = "[No Variations]"
+Add component (AddParameter): Name = "ComponentLink2Description"; Value = "http://www.ti.com/lit/ds/symlink/lm7805c.pdf"; VariantName = "[No Variations]"
+Add component (AddParameter): Name = "ComponentLink2URL"; Value = "http://www.ti.com/lit/ds/symlink/lm7805c.pdf"; VariantName = "[No Variations]"
+Add component (AddParameter): Name = "ComponentLink3Description"; Value = "http://www.ti.com/general/docs/lit/getliterature.tsp?genericPartNumber=LM7815C&&fileType=pdf"; VariantName = "[No Variations]"
+Add component (AddParameter): Name = "ComponentLink3URL"; Value = "http://www.ti.com/general/docs/lit/getliterature.tsp?genericPartNumber=LM7815C&&fileType=pdf"; VariantName = "[No Variations]"
+Add component (AddParameter): Name = "ComponentLink4Description"; Value = "https://datasheet.ciiva.com/27055/1991694-27055797.pdf?src-supplier=Jameco"; VariantName = "[No Variations]"
+Add component (AddParameter): Name = "ComponentLink4URL"; Value = "https://datasheet.ciiva.com/27055/1991694-27055797.pdf?src-supplier=Jameco"; VariantName = "[No Variations]"
+Add component (AddParameter): Name = "ComponentLink5Description"; Value = "https://datasheet.ciiva.com/26331/179191-da-01-en-spannungsregler-l7809cv-to-220-stm-26331022.pdf?src-supplier=Conrad"; VariantName = "[No Variations]"
+Add component (AddParameter): Name = "ComponentLink5URL"; Value = "https://datasheet.ciiva.com/26331/179191-da-01-en-spannungsregler-l7809cv-to-220-stm-26331022.pdf?src-supplier=Conrad"; VariantName = "[No Variations]"
+Add component (AddParameter): Name = "ComponentLink6Description"; Value = "https://datasheet.ciiva.com/1511/1805459-1511921.pdf?src-supplier=Element14"; VariantName = "[No Variations]"
+Add component (AddParameter): Name = "ComponentLink6URL"; Value = "https://datasheet.ciiva.com/1511/1805459-1511921.pdf?src-supplier=Element14"; VariantName = "[No Variations]"
+Add component (AddParameter): Name = "ComponentLink7Description"; Value = "https://datasheet.ciiva.com/2044/cd00000444-2044161.pdf?src-supplier=Digi-Key"; VariantName = "[No Variations]"
+Add component (AddParameter): Name = "ComponentLink7URL"; Value = "https://datasheet.ciiva.com/2044/cd00000444-2044161.pdf?src-supplier=Digi-Key"; VariantName = "[No Variations]"
+Add component (AddParameter): Name = "ComponentLink8Description"; Value = "https://datasheet.ciiva.com/16393/cd00000444-16393733.pdf?src-supplier=Future+Electronics"; VariantName = "[No Variations]"
+Add component (AddParameter): Name = "ComponentLink8URL"; Value = "https://datasheet.ciiva.com/16393/cd00000444-16393733.pdf?src-supplier=Future+Electronics"; VariantName = "[No Variations]"
+Add component (AddParameter): Name = "ComponentLink9Description"; Value = "https://datasheet.ciiva.com/3224/cd00000444-3224953.pdf?src-supplier=Avnet"; VariantName = "[No Variations]"
+Add component (AddParameter): Name = "ComponentLink9URL"; Value = "https://datasheet.ciiva.com/3224/cd00000444-3224953.pdf?src-supplier=Avnet"; VariantName = "[No Variations]"
+Add component (AddParameter): Name = "ComponentLink10Description"; Value = "https://datasheet.ciiva.com/18404/70013895-18404043.pdf?src-supplier=Allied+Electronics"; VariantName = "[No Variations]"
+Add component (AddParameter): Name = "ComponentLink10URL"; Value = "https://datasheet.ciiva.com/18404/70013895-18404043.pdf?src-supplier=Allied+Electronics"; VariantName = "[No Variations]"
+Add component (AddParameter): Name = "Description 1"; Value = "STMICROELECTRONICS - L7809CV - IC, V REG +9.0V, 7809, TO-220-3"; VariantName = "[No Variations]"
+Add component (AddParameter): Name = "Dropout Voltage"; Value = "2V"; VariantName = "[No Variations]"
+Add component (AddParameter): Name = "Height"; Value = "14.9mm"; VariantName = "[No Variations]"
+Add component (AddParameter): Name = "Lead Free"; Value = "Lead Free"; VariantName = "[No Variations]"
+Add component (AddParameter): Name = "Length"; Value = "10.4mm"; VariantName = "[No Variations]"
+Add component (AddParameter): Name = "Manufacturer 1"; Value = "STMicroelectronics"; VariantName = "[No Variations]"
+Add component (AddParameter): Name = "Manufacturer Part Number 1"; Value = "L7809CV"; VariantName = "[No Variations]"
+Add component (AddParameter): Name = "Max Input Voltage"; Value = "35V"; VariantName = "[No Variations]"
+Add component (AddParameter): Name = "Max Operating Temperature"; Value = "125°C"; VariantName = "[No Variations]"
+Add component (AddParameter): Name = "Max Output Current"; Value = "1.5A"; VariantName = "[No Variations]"
+Add component (AddParameter): Name = "Min Input Voltage"; Value = "11V"; VariantName = "[No Variations]"
+Add component (AddParameter): Name = "Min Operating Temperature"; Value = "0°C"; VariantName = "[No Variations]"
+Add component (AddParameter): Name = "Min Output Voltage"; Value = "9V"; VariantName = "[No Variations]"
+Add component (AddParameter): Name = "Mount"; Value = "Through Hole"; VariantName = "[No Variations]"
+Add component (AddParameter): Name = "Nominal Output Voltage"; Value = "9V"; VariantName = "[No Variations]"
+Add component (AddParameter): Name = "Number of Outputs"; Value = "1"; VariantName = "[No Variations]"
+Add component (AddParameter): Name = "Number of Pins"; Value = "3"; VariantName = "[No Variations]"
+Add component (AddParameter): Name = "Number of Regulators"; Value = "1"; VariantName = "[No Variations]"
+Add component (AddParameter): Name = "Output Configuration"; Value = "Positive"; VariantName = "[No Variations]"
+Add component (AddParameter): Name = "Output Current"; Value = "1.5A"; VariantName = "[No Variations]"
+Add component (AddParameter): Name = "Output Type"; Value = "Fixed,Adjustable"; VariantName = "[No Variations]"
+Add component (AddParameter): Name = "Output Voltage"; Value = "9V"; VariantName = "[No Variations]"
+Add component (AddParameter): Name = "Package Quantity"; Value = "50"; VariantName = "[No Variations]"
+Add component (AddParameter): Name = "Packaging"; Value = "Rail/Tube"; VariantName = "[No Variations]"
+Add component (AddParameter): Name = "Polarity"; Value = "Positive"; VariantName = "[No Variations]"
+Add component (AddParameter): Name = "Power Supply Rejection Ratio (PSRR)"; Value = "55dB"; VariantName = "[No Variations]"
+Add component (AddParameter): Name = "Pricing"; Value = "1=0.45, 10=0.374, 50=0.374, 100=0.228, 1000=0.176, 2000=0.15, 10000=0.14, 25000=0.133, 50000=0.13, 100000=0.125 (USD)"; VariantName = "[No Variations]"
+Add component (AddParameter): Name = "Quiescent Current"; Value = "8mA"; VariantName = "[No Variations]"
+Add component (AddParameter): Name = "Radiation Hardening"; Value = "No"; VariantName = "[No Variations]"
+Add component (AddParameter): Name = "REACH SVHC"; Value = "No SVHC"; VariantName = "[No Variations]"
+Add component (AddParameter): Name = "RoHS"; Value = "Yes"; VariantName = "[No Variations]"
+Add component (AddParameter): Name = "Stock 1"; Value = "8768"; VariantName = "[No Variations]"
+Add component (AddParameter): Name = "Supplier 1"; Value = "Mouser"; VariantName = "[No Variations]"
+Add component (AddParameter): Name = "Supplier Part Number 1"; Value = "511-L7809CV"; VariantName = "[No Variations]"
+Add component (AddParameter): Name = "Tolerance"; Value = "5%"; VariantName = "[No Variations]"
+Add component (AddParameter): Name = "Weight"; Value = "0.01lb"; VariantName = "[No Variations]"
+Add component (AddParameter): Name = "Width"; Value = "4.6mm"; VariantName = "[No Variations]"
+Added Pin To Net: NetName=+5 Pin=C7-1
+Added Pin To Net: NetName=GND Pin=C7-2
+Added Pin To Net: NetName=+5 Pin=C8-1
+Added Pin To Net: NetName=GND Pin=C8-2
+Added Pin To Net: NetName=NetC10_1 Pin=C10-1
+Added Pin To Net: NetName=GND Pin=C10-2
+Added Pin To Net: NetName=GND Pin=C11-1
+Added Pin To Net: NetName=NetC12_1 Pin=C12-1
+Added Pin To Net: NetName=NetC12_2 Pin=C12-2
+Added Pin To Net: NetName=GND Pin=C13-1
+Added Pin To Net: NetName=NetC14_1 Pin=C14-1
+Added Pin To Net: NetName=GND Pin=C14-2
+Added Pin To Net: NetName=NetC20_1 Pin=C20-1
+Added Pin To Net: NetName=GND Pin=C20-2
+Added Pin To Net: NetName=NetC21_1 Pin=C21-1
+Added Pin To Net: NetName=GND Pin=C21-2
+Added Pin To Net: NetName=NetC22_1 Pin=C22-1
+Added Pin To Net: NetName=GND Pin=C22-2
+Added Pin To Net: NetName=NetC23_1 Pin=C23-1
+Added Pin To Net: NetName=GND Pin=C23-2
+Added Pin To Net: NetName=NetC24_1 Pin=C24-1
+Added Pin To Net: NetName=GND Pin=C24-2
+Added Pin To Net: NetName=NetC25_1 Pin=C25-1
+Added Pin To Net: NetName=GND Pin=C25-2
+Added Pin To Net: NetName=NetC26_1 Pin=C26-1
+Added Pin To Net: NetName=GND Pin=C26-2
+Added Pin To Net: NetName=NetC27_1 Pin=C27-1
+Added Pin To Net: NetName=GND Pin=C27-2
+Added Pin To Net: NetName=NetC28_1 Pin=C28-1
+Added Pin To Net: NetName=GND Pin=C28-2
+Added Pin To Net: NetName=NetC29_1 Pin=C29-1
+Added Pin To Net: NetName=GND Pin=C29-2
+Added Pin To Net: NetName=SCK Pin=CN1-1
+Added Pin To Net: NetName=CS Pin=CN1-4
+Add Pin To Net: Unknown Pin: Pin CN2-1
+Add Pin To Net: Unknown Pin: Pin CN2-2
+Add Pin To Net: Unknown Pin: Pin CN2-3
+Add Pin To Net: Unknown Pin: Pin CN2-4
+Added Pin To Net: NetName=GND Pin=CN3-1
+Added Pin To Net: NetName=NetC22_1 Pin=CN3-2
+Added Pin To Net: NetName=+5 Pin=CN3-3
+Added Pin To Net: NetName=NetC26_1 Pin=CN4-1
+Added Pin To Net: NetName=NetC21_1 Pin=CN4-2
+Added Pin To Net: NetName=NetC20_1 Pin=CN5-1
+Added Pin To Net: NetName=NetC25_1 Pin=CN5-2
+Added Pin To Net: NetName=GND Pin=CN6-1
+Added Pin To Net: NetName=SCK Pin=J8-21
+Added Pin To Net: NetName=CS Pin=J8-22
+Added Pin To Net: NetName=NetC24_1 Pin=R21-1
+Added Pin To Net: NetName=NetC29_1 Pin=R21-2
+Added Pin To Net: NetName=+5 Pin=R22-1
+Added Pin To Net: NetName=+5 Pin=R23-2
+Added Pin To Net: NetName=GND Pin=U3-1
+Added Pin To Net: NetName=+5 Pin=U3-2
+Added Pin To Net: NetName=GND Pin=U3-3
+Added Pin To Net: NetName=+5 Pin=U3-4
+Added Pin To Net: NetName=GND Pin=U3-5
+Added Pin To Net: NetName=+5 Pin=U3-6
+Added Pin To Net: NetName=GND Pin=U3-7
+Added Pin To Net: NetName=+5 Pin=U3-8
+Added Pin To Net: NetName=GND Pin=U3-9
+Added Pin To Net: NetName=GND Pin=U3-12
+Added Pin To Net: NetName=NetU3_13 Pin=U3-13
+Added Pin To Net: NetName=NetU3_13 Pin=U3-14
+Added Pin To Net: NetName=GND Pin=U3-15
+Added Pin To Net: NetName=NetC29_1 Pin=U3-16
+Added Pin To Net: NetName=NetC24_1 Pin=U3-17
+Added Pin To Net: NetName=NetC28_1 Pin=U3-18
+Added Pin To Net: NetName=NetC23_1 Pin=U3-19
+Added Pin To Net: NetName=NetC27_1 Pin=U3-20
+Added Pin To Net: NetName=NetC22_1 Pin=U3-21
+Added Pin To Net: NetName=NetC26_1 Pin=U3-22
+Added Pin To Net: NetName=NetC21_1 Pin=U3-23
+Added Pin To Net: NetName=NetC25_1 Pin=U3-24
+Added Pin To Net: NetName=NetC20_1 Pin=U3-25
+Added Pin To Net: NetName=GND Pin=U3-26
+Added Pin To Net: NetName=GND Pin=U3-27
+Added Pin To Net: NetName=GND Pin=U3-28
+Added Pin To Net: NetName=GND Pin=U3-29
+Added Pin To Net: NetName=GND Pin=U3-30
+Added Pin To Net: NetName=GND Pin=U3-31
+Added Pin To Net: NetName=GND Pin=U3-32
+Added Pin To Net: NetName=GND Pin=U3-33
+Added Pin To Net: NetName=GND Pin=U3-34
+Added Pin To Net: NetName=GND Pin=U3-35
+Added Pin To Net: NetName=GND Pin=U3-36
+Added Pin To Net: NetName=SCK Pin=U3-38
+Added Pin To Net: NetName=CS Pin=U3-41
+Added Pin To Net: NetName=NetC10_1 Pin=U3-43
+Added Pin To Net: NetName=GND Pin=U3-44
+Added Pin To Net: NetName=+5 Pin=U3-45
+Added Pin To Net: NetName=NetC14_1 Pin=U3-46
+Added Pin To Net: NetName=NetC12_2 Pin=U3-47
+Added Pin To Net: NetName=NetC12_1 Pin=U3-48
+Added Pin To Net: NetName=+12 Pin=U4-1
+Added Pin To Net: NetName=GND Pin=U4-2
+Added Pin To Net: NetName=+5 Pin=U4-3
+Added Pin To Net: NetName=MISO Pin=CN1-3
+Added Pin To Net: NetName=MISO Pin=J8-24
+Added Pin To Net: NetName=MISO Pin=U3-39
+Added Net: Name=MISO
+Added Pin To Net: NetName=MOSI Pin=CN1-2
+Added Pin To Net: NetName=MOSI Pin=J8-23
+Added Pin To Net: NetName=MOSI Pin=U3-40
+Added Net: Name=MOSI
+Added Pin To Net: NetName=NetC11_2 Pin=C11-2
+Added Pin To Net: NetName=NetC11_2 Pin=U3-11
+Added Net: Name=NetC11_2
+Added Pin To Net: NetName=NetC13_2 Pin=C13-2
+Added Pin To Net: NetName=NetC13_2 Pin=U3-37
+Added Net: Name=NetC13_2
+Added Pin To Net: NetName=NetCN6_2 Pin=CN6-2
+Added Pin To Net: NetName=NetCN6_2 Pin=R23-1
+Added Net: Name=NetCN6_2
+Added Pin To Net: NetName=NetCN7_1 Pin=CN7-1
+Added Pin To Net: NetName=NetCN7_1 Pin=J7-14
+Added Net: Name=NetCN7_1
+Added Pin To Net: NetName=NetCN7_2 Pin=CN7-2
+Added Pin To Net: NetName=NetCN7_2 Pin=J7-16
+Added Net: Name=NetCN7_2
+Added Pin To Net: NetName=NetCN7_3 Pin=CN7-3
+Added Pin To Net: NetName=NetCN7_3 Pin=J7-18
+Added Net: Name=NetCN7_3
+Added Pin To Net: NetName=NetCN7_4 Pin=CN7-4
+Added Pin To Net: NetName=NetCN7_4 Pin=J7-20
+Added Net: Name=NetCN7_4
+Added Pin To Net: NetName=NetCN7_5 Pin=CN7-5
+Added Pin To Net: NetName=NetCN7_5 Pin=J7-22
+Added Net: Name=NetCN7_5
+Added Pin To Net: NetName=NetCN7_6 Pin=CN7-6
+Added Pin To Net: NetName=NetCN7_6 Pin=J7-24
+Added Net: Name=NetCN7_6
+Added Pin To Net: NetName=NetCN8_1 Pin=CN8-1
+Added Pin To Net: NetName=NetCN8_1 Pin=J7-13
+Added Net: Name=NetCN8_1
+Added Pin To Net: NetName=NetCN8_2 Pin=CN8-2
+Added Pin To Net: NetName=NetCN8_2 Pin=J7-15
+Added Net: Name=NetCN8_2
+Added Pin To Net: NetName=NetCN8_3 Pin=CN8-3
+Added Pin To Net: NetName=NetCN8_3 Pin=J7-17
+Added Net: Name=NetCN8_3
+Added Pin To Net: NetName=NetCN8_4 Pin=CN8-4
+Added Pin To Net: NetName=NetCN8_4 Pin=J7-19
+Added Net: Name=NetCN8_4
+Added Pin To Net: NetName=NetCN8_5 Pin=CN8-5
+Added Pin To Net: NetName=NetCN8_5 Pin=J7-21
+Added Net: Name=NetCN8_5
+Added Pin To Net: NetName=NetCN8_6 Pin=CN8-6
+Added Pin To Net: NetName=NetCN8_6 Pin=J7-23
+Added Net: Name=NetCN8_6
+Added Pin To Net: NetName=NetR22_2 Pin=R22-2
+Added Pin To Net: NetName=NetR22_2 Pin=U3-42
+Added Net: Name=NetR22_2
+Added Member To Class: ClassName=QCM_hardware_V2 Member=Component C3 330p
+Added Member To Class: ClassName=QCM_hardware_V2 Member=Component C7 10uF
+Added Member To Class: ClassName=QCM_hardware_V2 Member=Component C8 0.1uF
+Added Member To Class: ClassName=QCM_hardware_V2 Member=Component C9 330p
+Added Member To Class: ClassName=QCM_hardware_V2 Member=Component C10 10uF
+Added Member To Class: ClassName=QCM_hardware_V2 Member=Component C11 10uF
+Added Member To Class: ClassName=QCM_hardware_V2 Member=Component C12 10uF
+Added Member To Class: ClassName=QCM_hardware_V2 Member=Component C13 10uF
+Added Member To Class: ClassName=QCM_hardware_V2 Member=Component C14 10uF
+Added Member To Class: ClassName=QCM_hardware_V2 Member=Component C15 180pF
+Added Member To Class: ClassName=QCM_hardware_V2 Member=Component C16 100pf
+Added Member To Class: ClassName=QCM_hardware_V2 Member=Component C20 0.1uF
+Added Member To Class: ClassName=QCM_hardware_V2 Member=Component C21 0.1uF
+Added Member To Class: ClassName=QCM_hardware_V2 Member=Component C22 0.1uF
+Added Member To Class: ClassName=QCM_hardware_V2 Member=Component C23 0.1uF
+Added Member To Class: ClassName=QCM_hardware_V2 Member=Component C24 0.1uF
+Added Member To Class: ClassName=QCM_hardware_V2 Member=Component C25 0.1uF
+Added Member To Class: ClassName=QCM_hardware_V2 Member=Component C26 0.1uF
+Added Member To Class: ClassName=QCM_hardware_V2 Member=Component C27 0.1uF
+Added Member To Class: ClassName=QCM_hardware_V2 Member=Component C28 0.1uF
+Added Member To Class: ClassName=QCM_hardware_V2 Member=Component C29 0.1uF
+Added Member To Class: ClassName=QCM_hardware_V2 Member=Component CN1 SPI
+Add Class Member: Failed to add class member : Component CN2 4W_RTD
+Added Member To Class: ClassName=QCM_hardware_V2 Member=Component CN3 TSic 501F
+Added Member To Class: ClassName=QCM_hardware_V2 Member=Component CN4 THERMOCOUPLE
+Added Member To Class: ClassName=QCM_hardware_V2 Member=Component CN5 SPARE
+Added Member To Class: ClassName=QCM_hardware_V2 Member=Component CN6 FAN
+Added Member To Class: ClassName=QCM_hardware_V2 Member=Component CN7 HDR6
+Added Member To Class: ClassName=QCM_hardware_V2 Member=Component CN8 HDR6
+Added Member To Class: ClassName=QCM_hardware_V2 Member=Component D3 LED_BLUE
+Added Member To Class: ClassName=QCM_hardware_V2 Member=Component D6 DIODE_TVS
+Added Member To Class: ClassName=QCM_hardware_V2 Member=Component J3 UFL_JACK_SM
+Added Member To Class: ClassName=QCM_hardware_V2 Member=Component J7 SFH11-PBPC-D13-ST-BK
+Added Member To Class: ClassName=QCM_hardware_V2 Member=Component J9 KLDX-0202-B
+Added Member To Class: ClassName=QCM_hardware_V2 Member=Component R6 220
+Added Member To Class: ClassName=QCM_hardware_V2 Member=Component R10 1k
+Added Member To Class: ClassName=QCM_hardware_V2 Member=Component R12 1k
+Added Member To Class: ClassName=QCM_hardware_V2 Member=Component R13 1k
+Added Member To Class: ClassName=QCM_hardware_V2 Member=Component R14 10k
+Added Member To Class: ClassName=QCM_hardware_V2 Member=Component R16 CRCW080550R0FKTA
+Added Member To Class: ClassName=QCM_hardware_V2 Member=Component R17 10
+Added Member To Class: ClassName=QCM_hardware_V2 Member=Component R18 50
+Added Member To Class: ClassName=QCM_hardware_V2 Member=Component R20 390k
+Added Member To Class: ClassName=QCM_hardware_V2 Member=Component R21 R_SENSE
+Added Member To Class: ClassName=QCM_hardware_V2 Member=Component R22 0
+Added Member To Class: ClassName=QCM_hardware_V2 Member=Component R23 0
+Added Member To Class: ClassName=QCM_hardware_V2 Member=Component U3 LTC2986ILX-1#PBF
+Added Member To Class: ClassName=QCM_hardware_V2 Member=Component U4 Recom R-78K5.0-2.0L

@@ -1,0 +1,11 @@
+Removed Pin From Net: NetName=NetC24_1 Pin=U3-17
+Added Component: Designator=CN2(TERMINAL_BLOCK2)
+Added Component: Designator=CN9(TERMINAL_BLOCK2)
+Added Pin To Net: NetName=NetC24_1 Pin=CN2-1
+Added Pin To Net: NetName=NetC28_1 Pin=CN2-2
+Added Pin To Net: NetName=NetC23_1 Pin=CN9-1
+Added Pin To Net: NetName=NetC27_1 Pin=CN9-2
+Added Pin To Net: NetName=+5 Pin=J8-25
+Added Member To Class: ClassName=QCM_hardware_V2 Member=Component CN2 RTD-
+Added Member To Class: ClassName=QCM_hardware_V2 Member=Component CN9 RTD+
+Added Member To Class: ClassName=QCM_hardware_V2 Member=Component J9 KLDX-0202-B

@@ -1,8 +1,8 @@
 # Vendored wheels
 
 Python packages committed to the repo so a PC with no internet can install
-them. See [OFFLINE.md](../../OFFLINE.md) for the whole offline story; this file
-is just about what is in this directory.
+them. [tools/README.md](../../tools/README.md#2-install-the-client-dependencies-on-your-pc)
+covers installing them; this file is about what is in this directory.
 
 ```bash
 pip install --no-index --find-links vendor/wheels -r requirements-client.txt
@@ -55,5 +55,6 @@ was built, and all of them are here.
 
 These are for control PCs. The board is `linux_armv7l`, and several of its
 dependencies have no wheel for that platform on PyPI at all — `pip download`
-cannot produce them from another machine. [OFFLINE.md](../../OFFLINE.md) covers
-what to do instead.
+cannot produce them from another machine.
+[src/README.md](../../src/README.md#reinstalling-without-internet) covers what
+to do instead.

@@ -1458,7 +1458,7 @@ class RestServer:
         # (starlette then sends text/plain). Browsers tolerate that today only
         # because these responses carry no nosniff header. Nail the two types the
         # vendored offline assets depend on, so the UI does not rest on the MIME
-        # database of whichever box happens to be serving it. See OFFLINE.md.
+        # database of whichever box happens to be serving it.
         mimetypes.add_type("text/javascript", ".js")
         mimetypes.add_type("font/woff2", ".woff2")
 

@@ -46,13 +46,31 @@ pip install -r requirements-client.txt
 repo — no download needed at the bench:
 
 ```bash
-pip install --no-index --find-links vendor/wheels -r requirements-client.txt
+python -m venv .venv
+.venv/Scripts/pip install --no-index --find-links vendor/wheels -r requirements-client.txt
 ```
 
-The plotters further down this page need numpy, pandas and matplotlib, and the
+On Linux/macOS use `.venv/bin/pip`. **Always pass `--no-index`**: without it
+pip tries PyPI first and sits timing out on every package before falling back
+to the local files. `python -m venv` itself works offline, but do not pass it
+`--upgrade-deps`, which does need the network.
+
+The plotters ([`csv_plotter.py`](csv_plotter.py), and the sweep and admittance
+plotters further down this page) need numpy, pandas and matplotlib, and the
 admittance plotter scipy as well. All four are pinned in
-[requirements-plot.txt](../requirements-plot.txt) and vendored the same way.
-See [OFFLINE.md](../OFFLINE.md).
+[requirements-plot.txt](../requirements-plot.txt) and vendored the same way,
+but unlike the client set those wheels are compiled, and the committed ones fit
+**Windows x64, Python 3.13** only. Anywhere else pip reports
+`No matching distribution found`; see
+[vendor/wheels/README.md](../vendor/wheels/README.md) to add another target.
+
+The plotters offer a file dialog through tkinter, which comes with the Python
+installation and cannot be pip-installed. Without it they fall back to the
+newest matching CSV, or take the path outright:
+
+```bash
+python csv_plotter.py path/to/qcm_run_2026-09-03_141530.csv
+```
 
 ## 3. Connect
 

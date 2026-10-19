@@ -138,7 +138,7 @@ def calculateCoeffecients(calibration_file, coeffecient_file):
     # instrument never invokes. At module level the import made matplotlib a
     # hard install dependency of the measurement service — a big one, with no
     # wheel for the Pitaya's armv7 platform, so an offline install would have to
-    # build it from source. See OFFLINE.md.
+    # build it from source.
     import matplotlib.pyplot as plt
 
     

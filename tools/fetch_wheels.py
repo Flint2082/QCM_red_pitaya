@@ -159,7 +159,7 @@ def main() -> int:
         # instead of leaving a half-filled wheelhouse looking complete.
         print(f"\nCould not fully fetch: {', '.join(failed)}")
         print("Some of those packages have no wheel for that target and would have to "
-              "be built from source. OFFLINE.md covers what to do about the Pitaya.")
+              "be built from source. src/README.md covers what to do about the Pitaya.")
         return 1
     return 0
 

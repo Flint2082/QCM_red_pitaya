@@ -4,7 +4,7 @@ Run the control software on the Red Pitaya first, then point this at it:
 
     python tools/qcm_demo.py 192.168.1.50
 
-Needs: pip install -r requirements-client.txt   (offline: see OFFLINE.md)
+Needs: pip install -r requirements-client.txt   (offline: see tools/README.md)
 """
 
 import sys

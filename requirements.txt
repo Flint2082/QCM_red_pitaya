@@ -1,6 +1,6 @@
 # Red Pitaya control software (src/, the measurement service itself).
-# Install on the Pitaya — see src/README.md. For a box with no internet, see
-# OFFLINE.md.
+# Install on the Pitaya — see src/README.md, which also covers a box
+# with no internet.
 opcua
 numpy
 uvicorn

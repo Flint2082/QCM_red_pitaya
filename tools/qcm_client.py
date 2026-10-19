@@ -14,7 +14,7 @@ to one HTTP endpoint of the running control software.
 
 Requires `requests`; live streaming additionally needs `websocket-client`
 (`pip install -r requirements-client.txt`, or `--no-index --find-links
-vendor/wheels` on a PC with no internet — see OFFLINE.md).
+vendor/wheels` on a PC with no internet — see tools/README.md).
 """
 
 import os

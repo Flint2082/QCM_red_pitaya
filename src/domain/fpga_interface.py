@@ -7,7 +7,12 @@ import struct
 BASE_ADDR = 0x40000000 # TODO: make this automatically determined based on the .fpg file
 PAGE_SIZE = mmap.PAGESIZE
 MAP_SIZE = PAGE_SIZE
-BITSTREAM_PATH = os.path.join("..", "bitstream", "top.bit.bin")
+# Resolved from this file rather than the working directory. It used to be the
+# relative "../bitstream/top.bit.bin", which only found the file when the
+# process happened to be started from src/ — so a deployment that ran it from
+# anywhere else silently loaded no bitstream at all.
+BITSTREAM_PATH = os.path.join(
+    os.path.dirname(os.path.abspath(__file__)), "..", "..", "bitstream", "top.bit.bin")
 
 class FPGAInterface:
     def __init__(self, base_addr=BASE_ADDR, map_size=MAP_SIZE, bitstream_path=BITSTREAM_PATH):

@@ -8,8 +8,9 @@ Wants=network-online.target
 Type=simple
 # Root is required: the program memory-maps /dev/mem and loads the FPGA bitstream via fpgautil.
 User=root
-# Must run from src/ — the bitstream is loaded via the relative path ../bitstream/top.bit.bin,
-# and src/ must be on sys.path for the package imports (domain, api, app, ...).
+# Must run from src/ so that src/ is on sys.path for the package imports
+# (domain, api, app, ...). The bitstream is found relative to the source file,
+# not the working directory, so only the imports depend on this.
 WorkingDirectory=/root/QCM_red_pitaya/src
 ExecStart=/root/QCM_red_pitaya/.venv/bin/python main.py
 # Add --no-opcua to the line above if this unit runs without a WAGO PLC.

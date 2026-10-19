@@ -23,8 +23,17 @@ def build_system(enable_opcua: bool = True):
     api_event_queue = queue.Queue()
 
     fpga = FPGAInterface()
-    if not fpga.load_bitstream():
-        print("Failed to load bitstream")
+    # load_bitstream reports every outcome as a dict, so the old `if not ...`
+    # was false even for {"status": "error"} — a non-empty dict is truthy. A
+    # failed load therefore started the server anyway, and the web interface
+    # came up against whatever logic happened to already be in the FPGA: the
+    # register map is read from the .fpg file rather than the hardware, so
+    # every write lands somewhere plausible-looking and nothing says why the
+    # instrument does not respond. Check the status the call actually returns.
+    result = fpga.load_bitstream()
+    if result.get("status") != "success":
+        reason = result.get("stderr") or result.get("message") or "unknown error"
+        print(f"FATAL: bitstream not loaded, refusing to start — {reason.strip()}")
         exit(1)
 
     qcm = QCMInterface(fpga)

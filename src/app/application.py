@@ -220,7 +220,9 @@ class Application(threading.Thread):
                 quality_mass=event.quality_mass, quality_temp=event.quality_temp))
 
         elif isinstance(event, we.CapAdjustEvent):
-            self._emit(ae.CapAdjustEvent(amp_mass=event.amp_mass, amp_temp=event.amp_temp))
+            self._emit(ae.CapAdjustEvent(
+                amp_mass=event.amp_mass, amp_temp=event.amp_temp,
+                gain_mass=event.gain_mass, gain_temp=event.gain_temp))
 
         elif isinstance(event, we.StartFreqAutoUpdatedEvent):
             print(f"[Application] Auto-updated start freqs ({event.source}): "

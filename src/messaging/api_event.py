@@ -58,6 +58,11 @@ class LockStatusEvent(ApiEvent):
 class CapAdjustEvent(ApiEvent):
     amp_mass: float
     amp_temp: float
+    # Drive gain each tone is emitted at, so the client can refer the amplitude
+    # to a common drive instead of colouring a number that moves with the gain.
+    # None when the bitstream has no gain register.
+    gain_mass: float | None = None
+    gain_temp: float | None = None
 
 @dataclass
 class StartFreqAutoUpdatedEvent(ApiEvent):

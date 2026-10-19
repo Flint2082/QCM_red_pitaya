@@ -465,52 +465,32 @@ class QCMWorker(threading.Thread):
         # lost lock is re-acquired from where the resonances are now.
         self._track_lock_freqs(lock_mass, lock_temp, now)
 
-        # Live amplitude feedback while adjusting the trim capacitor.
+        # Live amplitude feedback while adjusting the trim capacitor. The drive
+        # gain goes with it: the amplitude is proportional to it, so a bare
+        # reading cannot be judged against any fixed scale once the drive is a
+        # setting rather than a constant.
         if self.state == WorkerState.CAP_ADJUST:
-            self.event_queue.put(CapAdjustEvent(amp_mass=self.qcm.getMag(1), amp_temp=self.qcm.getMag(2)))
+            self.event_queue.put(CapAdjustEvent(
+                amp_mass=self.qcm.getMag(1), amp_temp=self.qcm.getMag(2),
+                gain_mass=self.qcm.getOutputGain(1), gain_temp=self.qcm.getOutputGain(2)))
             return
 
         # Perform measurement acquisition if in measuring state
         if self.state == WorkerState.MEASURING:
-            # Automatic re-lock. What a lost lock is worth doing about depends
-            # on which mode lost it:
+            # Measure first, decide about re-locking afterwards. A re-lock blocks
+            # for as long as ten acquisition attempts, so sampling before that
+            # decision is the difference between a run that keeps reporting
+            # through a bad patch and one that goes silent for the whole of it —
+            # and a cycle that ends in a re-lock still contributes its sample.
             #
-            #   mass mode  the thickness itself is being measured wrong, and
-            #              nothing in software can retrieve it — re-acquire.
-            #   temp mode, with the hold on
-            #              the mass mode is still measuring the film perfectly
-            #              well and the hold keeps the compensation sane, so the
-            #              run carries on. Re-acquiring would cost more than it
-            #              buys: there is one global reset register, so startupPLL
-            #              re-parks *both* NCOs at pre-lock gain and blocks for up
-            #              to ten attempts — seconds with no output at all, and
-            #              the mass loop dragged through a re-acquisition it did
-            #              not need. The temp loop is still running with its
-            #              capture window held where the lock was last good (see
-            #              moveWindow), which is the best position for it to come
-            #              back on its own.
-            #   temp mode, hold off
-            #              the compensation is being solved from an fT that is
-            #              not a resonance, so the output is wrong either way —
-            #              re-acquire, as before.
-            if lock_mass and lock_temp:
-                self._lock_lost_since = None
-            elif lock_mass and self.temp_hold:
-                self._lock_lost_since = None  # covered by the hold; keep measuring
-            elif self.auto_relock and self._lock_freqs is not None:
-                if self._lock_lost_since is None:
-                    self._lock_lost_since = now
-                elif now - self._lock_lost_since >= self.AUTO_RELOCK_AFTER:
-                    print("[QCM] Lock lost > 1 s — attempting automatic re-lock")
-                    self._acquire_lock(*self._lock_freqs)
-                    return  # state/timing changed during re-lock; resume next cycle
-
             # A lost temp-mode lock leaves fT pointing at nothing in particular.
-            # Solving the compensation from it would throw the temperature — and
-            # with it the compensated thickness the deposition is controlled on —
-            # while the mass mode is still being measured perfectly well. Holding
-            # the last solved temperature freezes only the thermal correction, so
-            # the output keeps following the film until the lock is back.
+            # With the hold on, the last solved temperature is carried forward so
+            # that only the thermal correction freezes and the compensated
+            # thickness keeps following the film. With the hold off the operator
+            # has asked for the live solve instead, and that is what they get:
+            # the temperature comes out of whatever fT currently reads, with the
+            # lock flag and the lock quality beside it to say how far to trust
+            # it. Either way a sample is produced every cycle.
             hold_temp = self.temp_hold and not lock_temp
             data = self.qcm.getMeasurement(hold_temp=hold_temp)
             self.logger.write_measurement(data)  # durable on-disk record (WS-independent)
@@ -528,6 +508,29 @@ class QCMWorker(threading.Thread):
                 data.freq_mass_mode if lock_mass else None,
                 data.freq_temp_mode if lock_temp else None,
             )
+
+            # Automatic re-lock, and only for a lost *mass* mode. That is the
+            # mode the thickness is measured from, and nothing in software can
+            # retrieve it once it is off resonance.
+            #
+            # A temp-only loss is left alone whichever way the hold is set. There
+            # is one global reset register, so startupPLL re-parks *both* NCOs at
+            # pre-lock gain and blocks for up to ten attempts: it drags the mass
+            # loop through a re-acquisition it did not need and stops the output
+            # for seconds at a time, and when lock detection is marginal rather
+            # than the lock genuinely being gone, it does that over and over
+            # while breaking the very loops it is trying to rescue. The temp loop
+            # left alone keeps running with its capture window where the lock was
+            # last good (see moveWindow), which is the best place for it to come
+            # back from on its own. GET LOCK re-acquires both on demand.
+            if lock_mass:
+                self._lock_lost_since = None
+            elif self.auto_relock and self._lock_freqs is not None:
+                if self._lock_lost_since is None:
+                    self._lock_lost_since = now
+                elif now - self._lock_lost_since >= self.AUTO_RELOCK_AFTER:
+                    print("[QCM] Mass-mode lock lost > 1 s — attempting automatic re-lock")
+                    self._acquire_lock(*self._lock_freqs)
             return
 
         # Not measuring: push the raw readings anyway. Frequencies, amplitudes,

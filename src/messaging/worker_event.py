@@ -55,6 +55,13 @@ class LockStatusEvent(Event):
 class CapAdjustEvent(Event):
     amp_mass: float
     amp_temp: float
+    # Drive gain each tone is being emitted at. The amplitude scales with it, so
+    # without it the readout means nothing on its own: the same capacitor
+    # setting reads differently at different drives, and neither reading is
+    # comparable with one taken before the gain register existed. None when the
+    # bitstream has no gain register (the drive is then fixed in hardware).
+    gain_mass: float | None = None
+    gain_temp: float | None = None
 
 @dataclass
 class StartFreqAutoUpdatedEvent(Event):

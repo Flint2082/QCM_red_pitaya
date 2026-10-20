@@ -526,10 +526,27 @@ other side of each seam.
 |--------|----------|-------|
 | `reboot(force=False)` | `POST /system/reboot` | reboots the Pitaya; 409 during a run unless `force=True` |
 | `health()` | `GET /health` | liveness check |
+| `version()` | `GET /version` | the software and bitstream the box is running |
 
 A reboot reloads the FPGA bitstream and brings the PLLs up unlocked, so it is
 the way out of a wedged instrument — but it ends any run in progress, keeping
 only what the CSV had recorded up to that moment.
+
+`version()` returns the software version as `git describe` names the commit the
+server started from (`v1.2.0`, `v1.2.0-3-g1a2b3c4`, `-dirty` for uncommitted
+changes), whether the checkout has moved on since (`restart_needed`), and the
+bitstream it loaded:
+
+```python
+>>> qcm.version()
+{'software': {'version': 'v1.0.0-1-g1a2b3c4', 'commit': '1a2b3c4…', 'commit_date': '2026-10-20T14:03:11+02:00',
+              'dirty': False, 'restart_needed': False},
+ 'fpga': {'fpg': 'qcm_rp_2026-09-04_1026.fpg', 'build_date': '2026-09-04T10:19:47',
+          'bitstream_sha256': '…', 'fabric_build_time': None}}
+```
+
+Every run records the same thing in its `SETTINGS` row. How the versions are
+numbered is described in [src/README.md](../src/README.md#versions).
 
 ---
 

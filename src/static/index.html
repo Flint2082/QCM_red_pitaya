@@ -50,6 +50,8 @@ header { height: var(--header-h); background: var(--surface); border-bottom: 1px
 .logo-icon svg { width: 12px; height: 12px; stroke: var(--blue); fill: none; }
 .logo-sep { width: 1px; height: 20px; background: var(--border); }
 .device-badge { font-family: 'DM Mono', monospace; font-size: 10px; color: var(--text-dim); letter-spacing: 0.06em; background: var(--surface-2); border: 1px solid var(--border); border-radius: 2px; padding: 2px 8px; }
+.version-value { font-family: 'DM Mono', monospace; font-size: 12px; color: var(--text-mid); }
+.version-warn { color: var(--orange); }
 .header-spacer { flex: 1; }
 .ws-indicator { display: flex; align-items: center; gap: 6px; font-family: 'DM Mono', monospace; font-size: 10px; color: var(--text-dim); letter-spacing: 0.06em; }
 .ws-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--border-2); transition: background 0.3s, box-shadow 0.3s; }
@@ -204,7 +206,7 @@ footer { height: 24px; background: var(--surface); border-top: 1px solid var(--b
     QCM MONITOR
   </div>
   <div class="logo-sep"></div>
-  <div class="device-badge">RED PITAYA · ZYNQ 7010</div>
+  <div class="device-badge" id="device-badge">RED PITAYA · ZYNQ 7010<span id="version-badge"></span></div>
   <button class="btn btn-green" id="btn-download-latest" onclick="downloadServerRun()" disabled title="Download the latest run (server copy) as CSV">
     <svg viewBox="0 0 12 12"><path d="M5.25 1h1.5v4h2L6 8 3.25 5h2z"/><path d="M2.5 9.5h7v1.2h-7z"/></svg>
     SAVE CSV
@@ -532,7 +534,17 @@ footer { height: 24px; background: var(--surface); border-top: 1px solid var(--b
             <div class="settings-row"><div><div class="settings-row-label">Osc 1 Amplitude</div><div class="settings-row-desc">at (Fm + Ft) / 2, at full drive</div></div><div></div><div class="settings-value-lg" id="cap-amp-1" style="font-family:'DM Mono',monospace;font-size:18px;font-weight:600;color:var(--text-dim)">—</div></div>
             <div class="settings-row"><div><div class="settings-row-label">Osc 2 Amplitude</div><div class="settings-row-desc">at Fm × 0.9, at full drive</div></div><div></div><div class="settings-value-lg" id="cap-amp-2" style="font-family:'DM Mono',monospace;font-size:18px;font-weight:600;color:var(--text-dim)">—</div></div>
           </div>
-          <button class="btn btn-blue" id="btn-cap-adjust" onclick="toggleCapAdjust()">START CAP ADJUST</button>
+          <button class="btn btn-blue" id="btn-cap-adjust" onclick="toggleCapAdjust()" style="margin-bottom:28px">START CAP ADJUST</button>
+
+          <div class="settings-section-title">VERSION</div>
+          <div class="settings-group">
+            <div class="settings-row"><div><div class="settings-row-label">Software</div><div class="settings-row-desc">The commit the server started from, as <b>git describe</b> names it: a tagged release reads <b>v1.2.0</b>, and <b>v1.2.0-3-g1a2b3c4</b> is three commits past that tag, at commit 1a2b3c4. <b>-dirty</b> means src/, bitstream/, the .fpg or deploy/ had uncommitted changes when the server started</div></div><div></div><span class="version-value" id="ver-software">—</span></div>
+            <div class="settings-row"><div><div class="settings-row-label">Commit Date</div><div class="settings-row-desc">When the running commit was made</div></div><div></div><span class="version-value" id="ver-commit-date">—</span></div>
+            <div class="settings-row"><div><div class="settings-row-label">Restart Needed</div><div class="settings-row-desc">The code and the bitstream are loaded when the service starts, so a <b>git pull</b> changes nothing until <b>systemctl restart qcm</b> or a reboot. YES means the checkout on disk has moved on from what is running</div></div><div></div><span class="version-value" id="ver-restart">—</span></div>
+            <div class="settings-row"><div><div class="settings-row-label">Bitstream</div><div class="settings-row-desc">The .fpg the register map was read from, and when it was built (the build machine's local time)</div></div><div></div><span class="version-value" id="ver-fpg">—</span></div>
+            <div class="settings-row"><div><div class="settings-row-label">Bitstream SHA-256</div><div class="settings-row-desc">Fingerprint of bitstream/top.bit.bin as loaded at startup (hover for all of it)</div></div><div></div><span class="version-value" id="ver-sha">—</span></div>
+            <div class="settings-row"><div><div class="settings-row-label">FPGA Build Time</div><div class="settings-row-desc">Read back from the FPGA's own build_time register, which only newer bitstreams have</div></div><div></div><span class="version-value" id="ver-fabric">—</span></div>
+          </div>
         </div>
 
         <div class="settings-panel" id="spanel-opc">
@@ -837,6 +849,7 @@ function switchSettings(name, el) {
   el.classList.add('active');
   document.querySelectorAll('.settings-panel').forEach(p => p.classList.toggle('active', p.id === 'spanel-' + name));
   if (name === 'crystals') initCoeffChartsIfNeeded();
+  if (name === 'system') refreshVersion();
 }
 
 // ---- Chart factory ----
@@ -1534,6 +1547,7 @@ function connect() {
   ws = new WebSocket(WS_URL);
   ws.onopen  = () => {
     setWsStatus('connected'); _prevWsConnected = true; _wsOpenedAt = Date.now();
+    refreshVersion();  // a restart or reboot can come back running different code
     // Reconnected: cancel the pending alert; if we already alerted, say it's back.
     if (_wsNotifyTimer) { clearTimeout(_wsNotifyTimer); _wsNotifyTimer = null; }
     if (_wsLostNotified) { showToast('Backend reconnected'); _wsLostNotified = false; }
@@ -1947,6 +1961,48 @@ function updateTargetStatus() {
     el.textContent = `ARMED — ${target} nm`;
     el.style.color = 'var(--orange)';
   }
+}
+
+// ---- Version ----
+// What the box is running (see src/domain/version.py). Fetched on every
+// WebSocket (re)connect, since a restart or reboot can come back with different
+// code, and whenever the System panel is opened, so a git pull without a
+// restart shows up there without reloading the page.
+async function refreshVersion() {
+  let v;
+  try {
+    const r = await fetch(`${API_URL}/version`, { cache: 'no-store' });
+    if (!r.ok) return;  // a server from before /version existed
+    v = await r.json();
+  } catch (e) { return; }
+  const sw = v.software || {}, fpga = v.fpga || {};
+  const fmtDate = s => s ? s.replace('T', ' ').slice(0, 16) : '—';
+  const name = sw.version || 'unknown';
+  const restart = sw.restart_needed === true;
+  const setVal = (id, text, warn = false, title = '') => {
+    const el = document.getElementById(id);
+    el.textContent = text;
+    el.classList.toggle('version-warn', warn);
+    el.title = title;
+  };
+  setVal('ver-software', name, !!sw.dirty, sw.commit || '');
+  setVal('ver-commit-date', fmtDate(sw.commit_date));
+  setVal('ver-restart', sw.restart_needed == null ? 'unknown' : (restart ? 'YES' : 'NO'), restart);
+  setVal('ver-fpg', fpga.fpg ? fpga.fpg + (fpga.build_date ? ` · built ${fmtDate(fpga.build_date)}` : '') : '—');
+  setVal('ver-sha', fpga.bitstream_sha256 ? fpga.bitstream_sha256.slice(0, 16) + '…' : '—', false, fpga.bitstream_sha256 || '');
+  setVal('ver-fabric', fpga.fabric_build_time ? fmtDate(fpga.fabric_build_time) + ' UTC' : 'not in this bitstream');
+
+  // The header carries the short form, in orange when the box is not running a
+  // clean commit or the checkout has moved on without a restart.
+  const fpgaDate = (fpga.fabric_build_time || fpga.build_date || '').slice(0, 10);
+  setVal('version-badge',
+         ` · SW ${name}` + (fpgaDate ? ` · FPGA ${fpgaDate}` : '') + (restart ? ' · RESTART NEEDED' : ''),
+         !!sw.dirty || restart);
+  document.getElementById('device-badge').title =
+    `Software ${name}` + (sw.commit_date ? `, committed ${fmtDate(sw.commit_date)}` : '') +
+    (restart ? '\nThe code on disk has changed since the server started: restart the qcm service to run it' : '') +
+    `\nBitstream ${fpga.fpg || 'unknown'}` + (fpga.build_date ? `, built ${fmtDate(fpga.build_date)}` : '') +
+    '\nDetails: Settings → System → Version';
 }
 
 // ---- Reboot ----

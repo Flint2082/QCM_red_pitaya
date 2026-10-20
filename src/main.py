@@ -6,6 +6,7 @@ import argparse
 
 from domain.fpga_interface import FPGAInterface
 from domain.qcm_interface import QCMInterface
+from domain.version import VersionInfo
 from workers.qcm_worker import QCMWorker
 from app.application import Application
 from api.server import RestServer
@@ -38,10 +39,17 @@ def build_system(enable_opcua: bool = True):
 
     qcm = QCMInterface(fpga)
 
+    # What this process is running: the commit it started from and the
+    # bitstream just loaded. Taken here, straight after the load, so the files it
+    # describes are the ones that went into the FPGA. See domain/version.py.
+    version = VersionInfo(fpga)
+    print(f"INFO: software {version.software.name()}, bitstream {version.fpga['fpg']}")
+
     qcm_worker = QCMWorker(
         qcm=qcm,
         command_queue=worker_command_queue,
-        event_queue=worker_event_queue
+        event_queue=worker_event_queue,
+        version=version,
     )
 
     # OPC-UA bridge (optional — system works without a PLC)
@@ -75,6 +83,7 @@ def build_system(enable_opcua: bool = True):
         api_command_queue=api_command_queue,
         api_event_queue=api_event_queue,
         wago_client=wago if enable_opcua else None,
+        version=version,
     )
     # OPC-triggered actions take their parameters from the REST settings.
     if opc_worker:
@@ -84,6 +93,7 @@ def build_system(enable_opcua: bool = True):
     system = dict(
         fpga=fpga,
         qcm=qcm,
+        version=version,
         qcm_worker=qcm_worker,
         application=application,
         rest_server=rest_server,

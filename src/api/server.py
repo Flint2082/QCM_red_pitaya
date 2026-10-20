@@ -274,10 +274,11 @@ class ConnectionManager:
 
 class RestServer:
     def __init__(self, api_command_queue: queue.Queue, api_event_queue: queue.Queue,
-                 wago_client=None):
+                 wago_client=None, version=None):
         self.command_queue = api_command_queue
         self.event_queue = api_event_queue
         self._wago_client = wago_client  # optional reference for live reconfiguration
+        self._version = version  # domain.version.VersionInfo, served by GET /version
         self.manager = ConnectionManager()
         self._thread: threading.Thread | None = None
         self._loop: asyncio.AbstractEventLoop | None = None
@@ -777,7 +778,8 @@ class RestServer:
             asyncio.get_event_loop().create_task(self._event_broadcaster())
             yield
 
-        app = FastAPI(title="QCM API", version="0.1.0", lifespan=lifespan)
+        app_version = self._version.software.name() if self._version else "unknown"
+        app = FastAPI(title="QCM API", version=app_version, lifespan=lifespan)
         
         # ---- WebSocket ----
 
@@ -1443,6 +1445,15 @@ class RestServer:
             print("[API] Reboot requested — going down now")
             threading.Thread(target=self._do_reboot, daemon=True, name="reboot").start()
             return {"status": "rebooting"}
+
+        @app.get("/version")
+        def version():
+            """What this box is running: the software commit the server started
+            from (named by git describe, with restart_needed when the checkout
+            has moved on since) and the bitstream it loaded. See domain/version.py."""
+            if self._version is None:
+                raise HTTPException(503, "Version information is not available")
+            return self._version.as_dict()
 
         # ---- Health ----
 

@@ -22,9 +22,11 @@ from messaging.worker_event import *
 from messaging.worker_command import *
 
 class QCMWorker(threading.Thread):
-    def __init__(self, qcm: QCMInterface, command_queue: queue.Queue, event_queue: queue.Queue):
+    def __init__(self, qcm: QCMInterface, command_queue: queue.Queue, event_queue: queue.Queue,
+                 version=None):
         super().__init__()
         self.qcm = qcm
+        self.version = version  # domain.version.VersionInfo, recorded with each run
         self.command_queue = command_queue
         self.event_queue = event_queue
         self.running = True
@@ -144,8 +146,8 @@ class QCMWorker(threading.Thread):
 
     def _settings_snapshot(self, command) -> dict:
         """Everything that affects how a run is acquired: the loop/lock config the
-        QCM owns, plus the worker's own automation flags and this run's material
-        parameters. Recorded once at run start."""
+        QCM owns, plus the worker's own automation flags, this run's material
+        parameters and the firmware version. Recorded once at run start."""
         snapshot = self.qcm.getSettingsSnapshot()
         snapshot["auto_relock"] = self.auto_relock
         snapshot["temp_hold"] = self.temp_hold
@@ -163,6 +165,9 @@ class QCMWorker(threading.Thread):
             "z_ratio":          command.z_ratio,
             "target_thickness": self.target_thickness,
         }
+        # Which software and bitstream took the run.
+        if self.version is not None:
+            snapshot["version"] = self.version.as_dict()
         return snapshot
 
     def _start_run_log(self, command) -> bool:

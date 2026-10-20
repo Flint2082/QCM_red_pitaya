@@ -60,6 +60,73 @@ unit accordingly. It runs as `root` (required for `/dev/mem` and the FPGA
 bitstream load), waits for the network, and restarts automatically if the
 process exits.
 
+## Versions
+
+The web UI shows what the box is running in the header badge, with details
+under Settings → System → VERSION. The same is served by `GET /version`
+(`qcm.version()` from Python) and recorded in the `SETTINGS` row of every run,
+so a run says which software and bitstream took it.
+
+### Software
+
+The software version is the git commit the server started from, as
+`git describe` names it:
+
+| the Pitaya is running | shown as |
+|---|---|
+| a commit, before any release is tagged | `c29cb07` |
+| a tagged release | `v1.0.0` |
+| 3 commits past that tag | `v1.0.0-3-g1a2b3c4` |
+| any of these with uncommitted changes | `…-dirty` |
+
+Day to day nothing changes: commit on the PC, push, and pull on the Pitaya. The
+UI then shows the same hash `git log` shows on the PC. When a commit has proved
+itself on the Pitaya, tag it as a release on the PC and push the tag:
+
+```bash
+git tag -a v1.1.0 -m "short description of the release"
+git push --follow-tags
+```
+
+The next `git pull` on the Pitaya brings the tag along, and the running commit
+is named by it straight away, without a restart. The numbers follow the commit
+messages: a `fix:` bumps the last digit, a `feat:` the middle one, and the first
+goes up for a change that breaks existing scripts or files (the REST API the
+Python client uses, the run CSV columns, the crystal profile format).
+
+`-dirty` only looks at the files that make up the firmware (`src/`,
+`bitstream/`, the `.fpg` and `deploy/`). The server writes into `data/` during
+normal operation, and two of the crystal profiles there are tracked, so a check
+over the whole tree would call every box dirty after its first run.
+
+### Updating the Pitaya
+
+The code and the bitstream are both loaded when the service starts, so a pull
+changes nothing until it restarts:
+
+```bash
+cd /root/QCM_red_pitaya && git pull && systemctl restart qcm
+```
+
+The UI shows **RESTART NEEDED** when the checkout on disk has moved on from what
+is running.
+
+### Bitstream
+
+The bitstream is identified by the `.fpg` the register map was read from (its
+name and build date) and a SHA-256 of `bitstream/top.bit.bin`, both taken when
+the service loads them. It has no number of its own: it is committed in the same
+repository, so a software tag pins a bitstream too.
+
+A bitstream can also report its build time from the FPGA itself, which is the
+one source that cannot disagree with what is actually loaded. Add a software
+register named `build_time` (To Processor, 32 bits unsigned) to the Simulink
+model, fed by a constant holding the build time in Unix seconds (UTC); setting
+that constant in the model's InitFcn, e.g.
+`qcm_build_time = floor(posixtime(datetime('now','TimeZone','UTC')));`, stamps
+every compile. The server reads the register when the bitstream has one; older
+bitstreams show "not in this bitstream".
+
 ## Without internet
 
 Once installed, the board runs on an isolated network with nothing further to

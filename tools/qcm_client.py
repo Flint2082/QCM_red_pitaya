@@ -329,6 +329,14 @@ class QCMClient:
         run where it stands."""
         return self._post("/system/reboot", force=force)
 
+    def version(self) -> dict:
+        """What the box is running. software.version is git describe of the
+        commit the server started from ("v1.2.0", "v1.2.0-3-g1a2b3c4", with
+        "-dirty" for uncommitted changes); software.restart_needed is True once
+        the checkout has moved on (a git pull without a restart). fpga names the
+        .fpg and bitstream hash loaded at startup."""
+        return self._get("/version")
+
     def health(self) -> dict:
         """Liveness check — {"status": "ok"} while the server is up."""
         return self._get("/health")

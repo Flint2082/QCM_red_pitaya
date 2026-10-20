@@ -2,6 +2,7 @@ import subprocess
 import os
 import mmap
 import struct
+from datetime import datetime
 
 # Base address (must be page-aligned!)
 BASE_ADDR = 0x40000000 # TODO: make this automatically determined based on the .fpg file
@@ -83,6 +84,7 @@ class FPGAInterface:
             clk = self.get_clock_freq(register_map_dir)
             if clk:
                 self.sample_rate = clk
+            self.register_map_path = register_map_dir  # reported by GET /version
             return True
         except Exception as e:
             print(f"Error loading register map: {e}")
@@ -102,7 +104,25 @@ class FPGAInterface:
         except Exception as e:
             print(f"Error getting clock frequency: {e}")
             return None
-            
+
+    # Parse the .fpg file for the date the toolflow built it, as an ISO string in
+    # the build machine's local time (the toolflow records no time zone):
+    # ?meta	77777	77777	builddate	04-Sep-2026\_10:19:47
+    def get_build_date(self, register_map_dir):
+        try:
+            with open(register_map_dir, "r", errors = "ignore") as f:
+                for line in f:
+                    data = line.rstrip("\r\n").split("\t")
+                    if line.startswith("?meta") and len(data) > 4 and data[3] == "builddate":
+                        stamp = data[4].replace("\\_", " ").replace("_", " ").strip()
+                        try:
+                            return datetime.strptime(stamp, "%d-%b-%Y %H:%M:%S").isoformat()
+                        except ValueError:
+                            return stamp  # an unexpected format is still worth showing
+        except Exception as e:
+            print(f"Error getting build date: {e}")
+        return None
+
     def show_register_map(self):
         for reg_name, reg_addr in self.register_map.items():
             print(f"{reg_name}: {hex(reg_addr)}")        

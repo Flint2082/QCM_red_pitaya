@@ -5,7 +5,8 @@
 # Convert the Vivado/Model Composer implementation bitstream (top.bit) into the
 # Zynq boot binary (top.bit.bin) with Bootgen, store it in the bitstream/ folder,
 # then git-commit the bitstream together with the most recently built .fpg file
-# and push to the remote.
+# and the tracked Simulink models (.slx) it was built from, and push to the
+# remote.
 #
 # Usage:
 #   ./generate_and_push.sh "<commit message>"
@@ -28,6 +29,7 @@ PROJECT_DIR="${PROJECT_DIR:-$HOME/work/CASPER_repos/qcm_red_pitaya}"
 TARGET_DIR="${TARGET_DIR:-$PROJECT_DIR/model_composer/qcm_rp/myproj/myproj.runs/impl_1}"
 BITSTREAM_DIR="${BITSTREAM_DIR:-$PROJECT_DIR/bitstream}"
 FPG_SEARCH_DIR="${FPG_SEARCH_DIR:-$PROJECT_DIR/model_composer/qcm_rp/outputs}"
+MODEL_DIR="${MODEL_DIR:-$PROJECT_DIR/model_composer}"
 
 BITFILE="top.bit"
 BIFFILE="top.bif"
@@ -78,7 +80,7 @@ log "   Found: $FPG_FILE"
 cd "$PROJECT_DIR" || die "Project directory not found: $PROJECT_DIR"
 git rev-parse --is-inside-work-tree >/dev/null 2>&1 || die "$PROJECT_DIR is not a git repository"
 
-log "📝 Staging bitstream and .fpg ..."
+log "📝 Staging bitstream, .fpg and models ..."
 # Keep exactly one .fpg tracked: the server loads the newest .fpg in outputs/ as
 # its register map, so stale builds only make that choice ambiguous. Untrack the
 # previous one (the file stays on disk here; history keeps every build).
@@ -86,13 +88,31 @@ git rm --cached --quiet --ignore-unmatch -- "$FPG_SEARCH_DIR/*.fpg"
 # Both artifacts typically live under .gitignore'd build/output dirs, so force-add.
 git add -f -- "$OUTPUT_BIN" "$FPG_FILE"
 
+# Commit the models with the bitstream they produced, so the .slx files in git
+# always match the hardware; otherwise the newest design exists only in this
+# working copy. Only tracked models are staged (-u): a new one is added by hand.
+for slx in "$MODEL_DIR"/*.slx; do
+    if [ -e "$slx.autosave" ] && [ "$slx.autosave" -nt "$slx" ]; then
+        log "⚠️  $(basename "$slx") has unsaved changes in Simulink; only its saved version is committed."
+    fi
+done
+UNTRACKED_MODELS="$(git ls-files --others --exclude-standard -- "$MODEL_DIR/*.slx")"
+if [ -n "$UNTRACKED_MODELS" ]; then
+    log "⚠️  Not committed, because these models are untracked (git add them once if the design uses them):"
+    log "$UNTRACKED_MODELS"
+fi
+git add -u -- "$MODEL_DIR/*.slx"
+MODELS="$(git diff --cached --name-only -- "$MODEL_DIR/*.slx" | sed 's#.*/##' | paste -sd ' ' -)"
+
 if git diff --cached --quiet; then
-    log "ℹ️  Nothing to commit — bitstream and .fpg are already up to date."
+    log "ℹ️  Nothing to commit — bitstream, .fpg and models are already up to date."
 else
+    BUILT="$(basename "$OUTPUT_BIN"), $(basename "$FPG_FILE")"
+    [ -z "$MODELS" ] || BUILT="$BUILT; models: $MODELS"
     git commit -m "$COMMIT_MSG" \
-        -m "build: update bitstream and fpg ($(basename "$OUTPUT_BIN"), $(basename "$FPG_FILE"))" \
+        -m "build: update bitstream and fpg ($BUILT)" \
         || die "git commit failed"
-    log "✅ Committed $(basename "$OUTPUT_BIN") and $(basename "$FPG_FILE")."
+    log "✅ Committed $BUILT."
 fi
 
 log "📤 Pushing to remote..."

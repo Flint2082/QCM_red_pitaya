@@ -53,6 +53,11 @@ class LockStatusEvent(ApiEvent):
     lock_temp: bool
     quality_mass: float | None  # phase-error std (rad); None = window not full yet
     quality_temp: float | None
+    # Oscillator parked at 0 Hz by the last lock attempt (a 0 Hz start
+    # frequency, or the temp mode of an uncompensated lock): never locked, and
+    # not expected to be.
+    parked_mass: bool = False
+    parked_temp: bool = False
 
 @dataclass
 class CapAdjustEvent(ApiEvent):
@@ -110,6 +115,7 @@ class SystemStatusEvent(ApiEvent):
 @dataclass
 class OpcStatusEvent(ApiEvent):
     connected: bool
+    enabled: bool = True  # False = bridge switched off (opc_enabled), not a lost link
     ambient_temp:    float | None = None
     start_freq_mass: float | None = None
     start_freq_temp: float | None = None

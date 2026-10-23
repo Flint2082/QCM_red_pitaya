@@ -19,7 +19,7 @@ up as a service it is always running; otherwise start it over SSH:
 ```bash
 ssh root@<red_pitaya_ip>
 cd /root/QCM_red_pitaya
-.venv/bin/python src/main.py          # add --no-opcua if there is no PLC
+.venv/bin/python src/main.py          # OPC-UA is off until enabled in Settings
 ```
 
 See [src/README.md](../src/README.md) for full setup and the systemd service
@@ -291,6 +291,7 @@ qcm.set_freq_tracking(True, interval=10.0)
 | `settings()` | `GET /settings` (everything at once) |
 | `get_coefficients()` | `GET /settings/coefficients` (from the active crystal) |
 | `set_measurement_params(ambient_temp, mat_dens, z_ratio, target_thickness=None)` | `POST /settings/measurement_params` (persist run parameters without starting a run) |
+| `set_measurement_mode(mode)` | `POST /settings/measurement_mode` — `"compensated"` (default, both modes) or `"uncompensated"` (mass mode only, temp oscillator parked, no temperature) |
 
 ### Drive gain and AGC
 Each oscillator's excitation sinewave is scaled in the FPGA by `output_gain_1` /
@@ -383,6 +384,7 @@ sensor parameters. Activating one applies all of them.
 | method | endpoint |
 |--------|----------|
 | `start_sweep(oscillator_idx, start_freq, stop_freq, step_size, settle_time)` | `POST /sweep/start` |
+| `start_sweep_centered(oscillator_idx, center_freq, span, step_size, settle_time)` | `POST /sweep/start` with a centre and span, as the web UI sends it (points symmetric about the centre) |
 | `sweep_mode(oscillator_idx, settle_time=0.05)` | 50 kHz window at 100 Hz around the crystal's lock frequency |
 | `abort_sweep()` | `POST /sweep/abort` |
 | `sweeps()` | `GET /sweeps` — sweep CSVs on the Pitaya, newest first |
@@ -519,6 +521,7 @@ other side of each seam.
 |--------|----------|
 | `opc_settings()` | `GET /opc/settings` |
 | `opc_connect(url, user="", password=None, base_node=None)` | `POST /opc/connect` — `password=None` keeps the stored one |
+| `set_opc_enabled(enabled)` | `POST /opc/enabled` — switch the bridge on or off (off by default; kept across restarts) |
 | `opc_nodes()` | `GET /opc/nodes` (the node tree to mirror on the PLC) |
 
 ### System
@@ -576,4 +579,7 @@ curl -X POST "http://192.168.1.50:8000/measurement/stop"
   `start_measurement()`.
 - **`stream()` raises "Live streaming needs websocket-client"** — run
   `pip install websocket-client`.
-- **`opc_connect` returns 503** — the server was started with `--no-opcua`.
+- **`opc_connect` / `set_opc_enabled` return 503** — the server was started
+  with `--no-opcua`.
+- **The PLC gets nothing** — the OPC-UA bridge is off by default: switch it
+  on under Settings → OPC-UA, or `qcm.set_opc_enabled(True)`.

@@ -56,6 +56,17 @@ class TempCompAlgorithm:
         """Film thickness [m] deposited while the (temperature-clean) mass-mode
         frequency moved from f_from to f_to, via the Z-match equation."""
         return (self._zmatch_areal_mass(f_to) - self._zmatch_areal_mass(f_from)) / self.mat_dens
+
+    def FreqToThickness(self, fM):
+        """Uncompensated thickness [nm] from the mass mode alone, for a run with
+        no temperature mode: the whole frequency shift since the start is taken
+        as film, so it is only as good as the crystal's temperature is steady.
+        None on failure, like FreqToTemp, so a bad sample cannot stop the loop."""
+        try:
+            return self.freq_to_thickness(self.fM_start, fM) * 1e9 * self.tooling_ratio
+        except Exception as e:
+            print(f"Error in FreqToThickness: {e}")
+            return None
         
         
          

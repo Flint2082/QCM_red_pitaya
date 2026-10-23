@@ -263,14 +263,14 @@ footer { height: 24px; background: var(--surface); border-top: 1px solid var(--b
       <button class="btn" onclick="clearCharts()">CLEAR</button>
     </div>
     <div class="stat-bar">
-      <div class="stat"><div class="stat-label">Comp. Thickness</div><div class="stat-value" id="val-comp" style="color:var(--green)">—</div><div class="stat-unit">nm</div></div>
+      <div class="stat"><div class="stat-label comp-label" data-uncomp="Thickness (Uncomp.)">Comp. Thickness</div><div class="stat-value" id="val-comp" style="color:var(--green)">—</div><div class="stat-unit">nm</div></div>
       <div class="stat"><div class="stat-label">Temperature</div><div class="stat-value" id="val-T" style="color:var(--orange)">—</div><div class="stat-unit" id="val-T-unit">°C</div></div>
       <div class="stat"><div class="stat-label">Uncomp. Thickness</div><div class="stat-value" id="val-uncomp">—</div><div class="stat-unit">nm</div></div>
       <div class="stat"><div class="stat-label">Sample Count</div><div class="stat-value" id="val-n">0</div><div class="stat-unit">points</div></div>
     </div>
     <div class="chart-grid" style="grid-template-columns:1fr; grid-template-rows:1fr 1fr;">
       <div class="chart-card">
-        <div class="chart-card-header"><div class="chart-card-title"><div class="chart-color-bar" style="background:var(--green)"></div>COMPENSATED THICKNESS</div><div class="chart-card-meta" id="meta-comp">—</div></div>
+        <div class="chart-card-header"><div class="chart-card-title"><div class="chart-color-bar" style="background:var(--green)"></div><span class="comp-label" data-uncomp="THICKNESS — UNCOMPENSATED">COMPENSATED THICKNESS</span></div><div class="chart-card-meta" id="meta-comp">—</div></div>
         <div class="chart-body"><canvas id="chart-main-comp"></canvas></div>
       </div>
       <div class="chart-card">
@@ -298,14 +298,14 @@ footer { height: 24px; background: var(--surface); border-top: 1px solid var(--b
       <div class="stat"><div class="stat-label">Mass Mode Freq</div><div class="stat-value" id="val-fM" style="color:var(--green)">—</div><div class="stat-unit">Hz</div></div>
       <div class="stat"><div class="stat-label">Temp Mode Freq</div><div class="stat-value" id="val-fT" style="color:var(--blue)">—</div><div class="stat-unit">Hz</div></div>
       <div class="stat"><div class="stat-label">Comp. Mass Freq</div><div class="stat-value" id="val-comp-fM" style="color:var(--purple)">—</div><div class="stat-unit">Hz</div></div>
-      <div class="stat"><div class="stat-label">Comp. Thickness</div><div class="stat-value" id="val-comp-a" style="color:var(--green)">—</div><div class="stat-unit">nm</div></div>
+      <div class="stat"><div class="stat-label comp-label" data-uncomp="Thickness (Uncomp.)">Comp. Thickness</div><div class="stat-value" id="val-comp-a" style="color:var(--green)">—</div><div class="stat-unit">nm</div></div>
       <div class="stat"><div class="stat-label">Uncomp. Thickness</div><div class="stat-value" id="val-uncomp-a">—</div><div class="stat-unit">nm</div></div>
       <div class="stat"><div class="stat-label">Temperature</div><div class="stat-value" id="val-T-a" style="color:var(--orange)">—</div><div class="stat-unit" id="val-T-a-unit">°C</div></div>
       <div class="stat" title="Phase-error standard deviation over the lock window. Lower is better; this is what the lock decision is made on."><div class="stat-label">Mass Lock σ</div><div class="stat-value" id="val-q-mass">—</div><div class="stat-unit">mrad</div></div>
       <div class="stat" title="Phase-error standard deviation over the lock window. Lower is better; this is what the lock decision is made on."><div class="stat-label">Temp Lock σ</div><div class="stat-value" id="val-q-temp">—</div><div class="stat-unit">mrad</div></div>
     </div>
     <div class="chart-grid" style="grid-template-columns:1fr 1fr; grid-template-rows:1fr 1fr 1fr; overflow-y:auto;">
-      <div class="chart-card"><div class="chart-card-header"><div class="chart-card-title"><div class="chart-color-bar" style="background:var(--green)"></div>COMP. THICKNESS</div><div class="chart-card-meta" id="meta-comp-a">—</div></div><div class="chart-body" style="min-height:110px"><canvas id="chart-comp-a"></canvas></div></div>
+      <div class="chart-card"><div class="chart-card-header"><div class="chart-card-title"><div class="chart-color-bar" style="background:var(--green)"></div><span class="comp-label" data-uncomp="THICKNESS (UNCOMP.)">COMP. THICKNESS</span></div><div class="chart-card-meta" id="meta-comp-a">—</div></div><div class="chart-body" style="min-height:110px"><canvas id="chart-comp-a"></canvas></div></div>
       <div class="chart-card"><div class="chart-card-header"><div class="chart-card-title"><div class="chart-color-bar" style="background:var(--orange)"></div>TEMPERATURE</div><div class="chart-card-meta" id="meta-temp-a">—</div></div><div class="chart-body" style="min-height:110px"><canvas id="chart-temp-a"></canvas></div></div>
       <div class="chart-card"><div class="chart-card-header"><div class="chart-card-title"><div class="chart-color-bar" style="background:var(--green)"></div>MASS MODE FREQ</div><div class="chart-card-meta" id="meta-fM">—</div></div><div class="chart-body" style="min-height:110px"><canvas id="chart-fM"></canvas></div></div>
       <div class="chart-card"><div class="chart-card-header"><div class="chart-card-title"><div class="chart-color-bar" style="background:var(--blue)"></div>TEMP MODE FREQ</div><div class="chart-card-meta" id="meta-fT">—</div></div><div class="chart-body" style="min-height:110px"><canvas id="chart-fT"></canvas></div></div>
@@ -323,14 +323,14 @@ footer { height: 24px; background: var(--surface); border-top: 1px solid var(--b
         <option value="2">2 — Temp</option>
       </select>
       <div class="toolbar-sep"></div>
-      <span class="toolbar-label">START</span>
+      <span class="toolbar-label">CENTER</span>
       <div class="num-input-wrap">
-        <input id="sweep-start" type="number" value="5900000" min="100000" max="50000000" step="1000">
+        <input id="sweep-center" type="number" value="6000000" min="100000" max="50000000" step="1000">
         <span class="num-input-unit">Hz</span>
       </div>
-      <span class="toolbar-label">STOP</span>
+      <span class="toolbar-label">SPAN</span>
       <div class="num-input-wrap">
-        <input id="sweep-stop" type="number" value="6100000" min="100000" max="50000000" step="1000">
+        <input id="sweep-span" type="number" value="200000" min="0" max="50000000" step="1000">
         <span class="num-input-unit">Hz</span>
       </div>
       <span class="toolbar-label">STEP</span>
@@ -451,6 +451,11 @@ footer { height: 24px; background: var(--surface); border-top: 1px solid var(--b
       <div class="settings-content">
 
         <div class="settings-panel active" id="spanel-meas">
+          <div class="settings-section-title">MODE</div>
+          <div class="settings-group">
+            <div class="settings-row"><div><div class="settings-row-label">Measurement Mode</div><div class="settings-row-desc"><b>Compensated</b> locks both modes and solves the crystal temperature from the temp mode, so the thickness is corrected for it. <b>Uncompensated</b> locks the mass mode only — GET LOCK parks the temp oscillator at 0 Hz — and reports the plain thickness from the mass-mode shift, with no temperature: every frequency change is taken as film, so it is only as good as the crystal's temperature is steady. For a crystal with no usable temp mode or no calibration. GET LOCK uses the new mode straight away; a run in progress keeps the mode it was started in. Either mode is also parked by setting its lock frequency to 0 Hz</div></div><div></div><div style="display:flex;align-items:center;gap:6px"><select class="settings-input" id="s-meas-mode" style="width:150px;text-align:left"><option value="compensated">Compensated</option><option value="uncompensated">Uncompensated</option></select></div></div>
+          </div>
+
           <div class="settings-section-title">MATERIAL PROPERTIES</div>
           <div class="settings-group">
             <div class="settings-row"><div><div class="settings-row-label">Material Density</div><div class="settings-row-desc">Deposited film material density</div></div><div></div><div style="display:flex;align-items:center;gap:6px"><input class="settings-input" type="number" id="s-mat-dens" value="19320" step="10"><span class="settings-unit">kg/m³</span></div></div>
@@ -498,7 +503,7 @@ footer { height: 24px; background: var(--surface); border-top: 1px solid var(--b
 
           <div class="settings-section-title">LOCK RECOVERY</div>
           <div class="settings-group">
-            <div class="settings-row"><div><div class="settings-row-label">Auto Re-lock</div><div class="settings-row-desc">Re-acquire automatically if the <b>mass mode</b> loses lock during a measurement — that is the mode the thickness is measured from, and nothing in software can retrieve it off resonance. A temp-mode-only loss never triggers one: re-locking resets <b>both</b> oscillators and blocks for several seconds, which would drag the mass loop through a re-acquisition it did not need, and on marginal lock detection it repeats that indefinitely while breaking the loops it is trying to rescue. The temp loop is left running with its capture window where the lock was last good and usually returns on its own; GET LOCK re-acquires both on demand</div></div><div></div><div style="display:flex;align-items:center;gap:6px"><select class="settings-input" id="s-auto-relock" style="width:150px;text-align:left"><option value="1">Enabled</option><option value="0">Disabled</option></select></div></div>
+            <div class="settings-row"><div><div class="settings-row-label">Auto Re-lock</div><div class="settings-row-desc">Re-acquire automatically if the <b>mass mode</b> loses lock during a measurement — that is the mode the thickness is measured from, and nothing in software can retrieve it off resonance. A temp-mode-only loss never triggers one: re-locking resets <b>both</b> oscillators and interrupts the thickness output for a few seconds (the raw readings keep streaming), which would drag the mass loop through a re-acquisition it did not need, and on marginal lock detection it repeats that indefinitely while breaking the loops it is trying to rescue. The temp loop is left running with its capture window where the lock was last good and usually returns on its own; GET LOCK re-acquires both on demand</div></div><div></div><div style="display:flex;align-items:center;gap:6px"><select class="settings-input" id="s-auto-relock" style="width:150px;text-align:left"><option value="1">Enabled</option><option value="0">Disabled</option></select></div></div>
             <div class="settings-row"><div><div class="settings-row-label">Hold Temperature On Lock Loss</div><div class="settings-row-desc">Hold the last calculated temperature while the temp mode is unlocked, rather than solving it from an off-resonance Ft. Only the thermal <i>correction</i> pauses: the mass mode is still measured and the compensated thickness keeps coming out, following the film sample for sample. Held samples show as <b>HELD</b> on the Monitor tab.<br><br><b>Disabled</b>, the temperature is solved from whatever Ft currently reads, locked or not — the live figure, with the lock flag and lock quality beside it to say how far to trust it. Useful when lock detection is marginal and the loops are in fact fine. Either way a sample is produced every cycle and the run is never interrupted</div></div><div></div><div style="display:flex;align-items:center;gap:6px"><select class="settings-input" id="s-temp-hold" style="width:150px;text-align:left"><option value="1">Enabled</option><option value="0">Disabled</option></select></div></div>
             <div class="settings-row"><div><div class="settings-row-label">Track Lock Frequencies</div><div class="settings-row-desc">While both modes are locked, keep the start frequencies on the frequencies the PLLs are actually holding, so a re-lock aims at where the resonances are now instead of where they were hours ago. Does not change the crystal profile on disk</div></div><div></div><div style="display:flex;align-items:center;gap:6px"><select class="settings-input" id="s-freq-track" style="width:150px;text-align:left"><option value="1">Enabled</option><option value="0">Disabled</option></select></div></div>
             <div class="settings-row"><div><div class="settings-row-label">Tracking Interval</div><div class="settings-row-desc">How often the start frequencies are updated</div></div><div></div><div style="display:flex;align-items:center;gap:6px"><input class="settings-input" type="number" id="s-freq-track-interval" value="10" step="1" min="1"><span class="settings-unit">s</span></div></div>
@@ -550,6 +555,7 @@ footer { height: 24px; background: var(--surface); border-top: 1px solid var(--b
         <div class="settings-panel" id="spanel-opc">
           <div class="settings-section-title">CONNECTION</div>
           <div class="settings-group">
+            <div class="settings-row"><div><div class="settings-row-label">OPC-UA Bridge</div><div class="settings-row-desc">Link to the WAGO PLC. Off by default: while disabled the QCM holds no connection, so the PLC can neither read results nor trigger GET LOCK / START / STOP. Takes effect immediately and is remembered across restarts; the connection settings below are kept either way, and RESTORE DEFAULTS leaves this alone</div></div><div></div><div style="display:flex;align-items:center;gap:6px"><select class="settings-input" id="s-opc-enabled" style="width:150px;text-align:left" onchange="setOpcEnabled(this.value === '1')"><option value="0">Disabled</option><option value="1">Enabled</option></select></div></div>
             <div class="settings-row">
               <div><div class="settings-row-label">Status</div><div class="settings-row-desc">WAGO PLC link</div></div>
               <div></div>
@@ -607,7 +613,7 @@ footer { height: 24px; background: var(--surface); border-top: 1px solid var(--b
               <div class="crystal-stat-label">Total Deposited</div>
               <div class="crystal-stat-value"><span id="s-crystal-deposited">—</span> <span style="font-size:10px;color:var(--text-dim)">nm</span></div>
             </div>
-            <div class="crystal-stat-cell">
+            <div class="crystal-stat-cell" title="Mass-mode frequency drop since the crystal was new: (virgin − current) / virgin. 0 % on a fresh crystal, rising as film builds up. Updated while the mass mode is locked">
               <div class="crystal-stat-label">Usage</div>
               <div class="crystal-stat-value"><span id="s-crystal-usage">—</span> <span style="font-size:10px;color:var(--text-dim)">%</span></div>
             </div>
@@ -797,7 +803,7 @@ function setWindowMonitor(v) {
 // defaults, which is a nuisance when a crystal needs a particular sweep span.
 const UI_STORE_KEY = 'qcm.ui';
 const UI_PREF_IDS = ['input-window-main', 'input-window-monitor',
-                     'sweep-osc', 'sweep-start', 'sweep-stop', 'sweep-step', 'sweep-settle'];
+                     'sweep-osc', 'sweep-center', 'sweep-span', 'sweep-step', 'sweep-settle'];
 
 function saveUiPrefs() {
   try {
@@ -1132,12 +1138,13 @@ function toggleSweep() {
 
 async function runSweep() {
   const osc    = parseInt(document.getElementById('sweep-osc').value);
-  const start  = parseFloat(document.getElementById('sweep-start').value);
-  const stop   = parseFloat(document.getElementById('sweep-stop').value);
+  const center = parseFloat(document.getElementById('sweep-center').value);
+  const span   = parseFloat(document.getElementById('sweep-span').value);
   const step   = parseFloat(document.getElementById('sweep-step').value);
   const settle = parseFloat(document.getElementById('sweep-settle').value);
-  if ([start, stop, step, settle].some(isNaN)) { showToast('Enter valid sweep parameters.', true); return; }
-  await startSweep(osc, start, stop, step, settle);
+  if ([center, span, step, settle].some(isNaN) || step <= 0 || span < 0) { showToast('Enter valid sweep parameters.', true); return; }
+  if (center - span / 2 < 0) { showToast('The span reaches below 0 Hz — narrow it or move the center up.', true); return; }
+  await startSweep(osc, center, span, step, settle);
 }
 
 // SWEEP fM / SWEEP fT: centre the standard window on the crystal's lock
@@ -1151,24 +1158,33 @@ async function runModeSweep(osc) {
     showToast(`Set a valid ${osc === 1 ? 'mass' : 'temp'} lock frequency in Crystal Settings`, true);
     return;
   }
-  const start = centre - MODE_SWEEP_WINDOW / 2;
-  const stop  = centre + MODE_SWEEP_WINDOW / 2;
-  document.getElementById('sweep-osc').value   = String(osc);
-  document.getElementById('sweep-start').value = start;
-  document.getElementById('sweep-stop').value  = stop;
-  document.getElementById('sweep-step').value  = MODE_SWEEP_STEP;
+  document.getElementById('sweep-osc').value    = String(osc);
+  document.getElementById('sweep-center').value = centre;
+  document.getElementById('sweep-span').value   = MODE_SWEEP_WINDOW;
+  document.getElementById('sweep-step').value   = MODE_SWEEP_STEP;
+  saveUiPrefs();  // set from code, so no change event fires to remember them
   const settle = parseFloat(document.getElementById('sweep-settle').value) || 0.05;
   showToast(`Sweeping ${osc === 1 ? 'fM' : 'fT'} — ${fmtHz(MODE_SWEEP_WINDOW)} around ${(centre/1e6).toFixed(4)} MHz`);
-  await startSweep(osc, start, stop, MODE_SWEEP_STEP, settle);
+  await startSweep(osc, centre, MODE_SWEEP_WINDOW, MODE_SWEEP_STEP, settle);
 }
 
-async function startSweep(osc, start, stop, step, settle) {
-  _sweepTotal = Math.floor((stop - start) / step) + 1;
+// The server lays a centred sweep out symmetrically on the step grid, so the
+// centre is always a point and a ragged span loses the same at both ends. The
+// point count here follows the same rule, for the progress readout.
+async function startSweep(osc, center, span, step, settle) {
+  _sweepTotal = 2 * Math.floor(span / 2 / step) + 1;
   clearSweep();
   document.getElementById('val-sweep-status').textContent = 'PENDING';
   setSweepBtnState(true);
   try {
-    await fetch(`${API_URL}/sweep/start?oscillator_idx=${osc}&start_freq=${start}&stop_freq=${stop}&step_size=${step}&settle_time=${settle}`, { method: 'POST' });
+    const r = await fetch(`${API_URL}/sweep/start?oscillator_idx=${osc}&center_freq=${center}&span=${span}&step_size=${step}&settle_time=${settle}`, { method: 'POST' });
+    if (!r.ok) {
+      let detail = '';
+      try { detail = (await r.json()).detail || ''; } catch(e) {}
+      showToast(`Sweep refused — ${detail || r.status}`, true);
+      document.getElementById('val-sweep-status').textContent = 'ERROR';
+      setSweepBtnState(false);
+    }
   } catch(e) {
     console.error('Sweep failed:', e);
     document.getElementById('val-sweep-status').textContent = 'ERROR';
@@ -1397,12 +1413,35 @@ function push(chart, value, dsIdx = 0, max = MAX_PTS_MAIN, label = '') {
   }
 }
 
+// ---- Measurement mode / parked oscillators ----
+// Uncompensated runs lock the mass mode alone; GET LOCK then parks the temp
+// oscillator, as it parks either one whose lock frequency is 0 Hz. Which ones
+// the instrument actually has parked comes from LockStatusEvent; _measMode is
+// the mode as last loaded or applied (not an unapplied edit in the form).
+let _measMode = 'compensated';
+const _parked = { mass: false, temp: false };
+
+// Thickness tiles and chart titles say which thickness they are showing: in an
+// uncompensated run calculated_thickness is the uncompensated one. Each label
+// carries its uncompensated text in data-uncomp and keeps its own in data-comp.
+let _compView = true;
+function setCompensatedView(compensated) {
+  if (compensated === _compView) return;
+  _compView = compensated;
+  document.querySelectorAll('.comp-label').forEach(el => {
+    if (el.dataset.comp == null) el.dataset.comp = el.textContent;
+    el.textContent = compensated ? el.dataset.comp : el.dataset.uncomp;
+  });
+}
+
 function setLock(mode, locked) {
   const dot   = document.getElementById(`lock-dot-${mode}`);
   const label = document.getElementById(`lock-label-${mode}`);
   if (!dot) return;
-  dot.className   = 'ws-dot ' + (locked ? 'connected' : 'error');
-  label.textContent = (mode === 'mass' ? 'MASS' : 'TEMP') + (locked ? ' LOCKED' : ' UNLOCKED');
+  // A parked oscillator is grey rather than red: not locked, but not meant to be.
+  const parked = _parked[mode];
+  dot.className   = 'ws-dot ' + (parked ? '' : (locked ? 'connected' : 'error'));
+  label.textContent = (mode === 'mass' ? 'MASS' : 'TEMP') + (parked ? ' PARKED' : (locked ? ' LOCKED' : ' UNLOCKED'));
   if (mode === 'mass') lockMass = locked;
   if (mode === 'temp') lockTemp = locked;
   updateCalLockStatus();
@@ -1438,14 +1477,18 @@ function fmtHz(hz) {
 function setMeta(id, v, u) { const el = document.getElementById(id); if (el) el.textContent = v != null ? `${fmt(v,4)} ${u}` : '—'; }
 function setText(id, v) { const el = document.getElementById(id); if (el) el.textContent = v; }
 
-// Crystal usage = current Fm / virgin Fm × 100. Virgin Freq field is the reference;
-// when it's 0 ("use run start") fall back to the first Fm seen this run.
+// Crystal usage = how far the mass mode has dropped from the virgin frequency,
+// (virgin − current) / virgin × 100: 0 % on a fresh crystal, rising as film builds
+// up. Virgin Freq field is the reference; when it's 0 ("use run start") fall back
+// to the first Fm seen this run. Clamped at 0, since temperature alone can lift a
+// fresh crystal a little above its virgin frequency. Only fed locked readings:
+// an unlocked or parked (0 Hz) mass mode is not a resonance.
 function updateCrystalUsage(currentFm) {
   const el = document.getElementById('s-crystal-usage');
   if (!el || currentFm == null) return;
   const virginInput = parseFloat(fieldValue('s-crystal-freq-virgin'));
   const virgin = (virginInput > 0) ? virginInput : _runStartFm;
-  el.textContent = virgin ? (currentFm / virgin * 100).toFixed(2) : '—';
+  el.textContent = virgin ? Math.max(0, (virgin - currentFm) / virgin * 100).toFixed(2) : '—';
 }
 
 // Lock quality = phase-error σ, shown in mrad because a good lock lives in the
@@ -1481,7 +1524,7 @@ function setTempHeld(held) {
 function applyTelemetry(e, ts) {
   setText('val-fM', fmt(e.freq_mass_mode, 2));
   setText('val-fT', fmt(e.freq_temp_mode, 2));
-  updateCrystalUsage(e.freq_mass_mode);
+  if (e.lock_mass) updateCrystalUsage(e.freq_mass_mode);
 
   // Calibration tab: remember the latest live frequencies for ADD POINT, and
   // mirror them into the calibrate stat bar + live charts.
@@ -1521,6 +1564,7 @@ function onMeasurement(e) {
   const ts = e.timestamp ? new Date(e.timestamp * 1000).toLocaleTimeString() : '';
 
   applyTelemetry(e, ts);
+  setCompensatedView(e.compensated !== false);
 
   // Virgin-frequency fallback: the first Fm of the *run*, so this is set here
   // and not in applyTelemetry — idle telemetry must not claim the reference.
@@ -2223,6 +2267,12 @@ async function loadInitialSettings() {
     }
     if (s.output_mode != null) document.getElementById('s-output-mode').value = s.output_mode;
     if (s.measurement) {
+      if (s.measurement.mode) {
+        _measMode = s.measurement.mode;
+        document.getElementById('s-meas-mode').value = _measMode;
+        // Outside a run the labels follow the setting; in one, the samples say.
+        if (!_isRunning) setCompensatedView(_measMode !== 'uncompensated');
+      }
       if (s.measurement.ambient_temp != null) document.getElementById('s-amb-temp').value   = s.measurement.ambient_temp;
       if (s.measurement.mat_dens != null)     document.getElementById('s-mat-dens').value   = s.measurement.mat_dens;
       if (s.measurement.z_ratio != null)      document.getElementById('s-mat-zratio').value = s.measurement.z_ratio;
@@ -2273,6 +2323,9 @@ async function loadInitialSettings() {
 
   try {
     const opc = await fetch(`${API_URL}/opc/settings`).then(r => r.json());
+    const opcSel = document.getElementById('s-opc-enabled');
+    if (opcSel && opc.enabled != null) opcSel.value = opc.enabled ? '1' : '0';
+    if (opcSel && opc.available === false) opcSel.disabled = true;   // --no-opcua
     if (opc.url)       document.getElementById('s-opc-url').value  = opc.url;
     if (opc.user)      document.getElementById('s-opc-user').value = opc.user;
     if (opc.base_node) document.getElementById('s-opc-base').value = opc.base_node;
@@ -2309,7 +2362,11 @@ async function connectOpc() {
     // used to wipe the saved password whenever only the URL or user was edited.
     if (password) params.set('password', password);
     const r = await fetch(`${API_URL}/opc/connect?${params}`, { method: 'POST' });
-    if (r.ok) { showToast('Reconnecting…'); loadOpcNodes(); }
+    if (r.ok) {
+      const d = await r.json();
+      showToast(d.enabled === false ? 'Saved — switch the bridge on to connect' : 'Reconnecting…');
+      loadOpcNodes();
+    }
     else showToast('Connect failed', true);
   } catch(e) { showToast('Connect failed', true); }
 }
@@ -2481,11 +2538,16 @@ function toggleStartStop() {
   if (btn && btn.classList.contains('btn-red')) {
     sendCommand('stop');
   } else {
-    if (!lockMass || !lockTemp) {
-      document.getElementById('confirm-mass-status').textContent = lockMass ? '✓ LOCKED' : '✗ UNLOCKED';
-      document.getElementById('confirm-temp-status').textContent = lockTemp ? '✓ LOCKED' : '✗ UNLOCKED';
+    // An uncompensated run needs the mass mode alone.
+    const needTemp = _measMode !== 'uncompensated';
+    if (!lockMass || (needTemp && !lockTemp)) {
+      const status = (locked, parked) => locked ? '✓ LOCKED' : (parked ? '✗ PARKED' : '✗ UNLOCKED');
+      document.getElementById('confirm-mass-status').textContent = status(lockMass, _parked.mass);
+      document.getElementById('confirm-temp-status').textContent = needTemp
+        ? status(lockTemp, _parked.temp) : '— not used (uncompensated)';
       document.getElementById('confirm-mass-status').style.color = lockMass ? 'var(--green)' : 'var(--red)';
-      document.getElementById('confirm-temp-status').style.color = lockTemp ? 'var(--green)' : 'var(--red)';
+      document.getElementById('confirm-temp-status').style.color = !needTemp ? 'var(--text-dim)'
+        : (lockTemp ? 'var(--green)' : 'var(--red)');
       document.getElementById('modal-confirm-start').style.display = 'flex';
     } else {
       sendCommand('start');
@@ -2501,6 +2563,8 @@ function doStartAnyway() {
 // Throttled heartbeat: keeps the dots and the quality tiles honest while the
 // worker is between telemetry pushes (e.g. mid-sweep, or during cap adjust).
 function onLockStatus(ev) {
+  _parked.mass = !!ev.parked_mass;
+  _parked.temp = !!ev.parked_temp;
   setLock('mass', ev.lock_mass);
   setLock('temp', ev.lock_temp);
   setLockQuality('mass', ev.quality_mass);
@@ -2536,15 +2600,34 @@ function onStartFreqAutoUpdated(ev) {
 
 function onOpcStatus(ev) {
   const connected = ev.connected;
+  // Switched off (the default) is not a lost link: grey, and no alert. An event
+  // without the field comes from a server that predates the switch.
+  const enabled = ev.enabled !== false;
 
-  if (_prevOpcConnected === true && !connected) {
+  if (enabled && _prevOpcConnected === true && !connected) {
     sendNotif('QCM — OPC Disconnected', 'Connection to WAGO PLC lost', 'opcLost');
   }
-  _prevOpcConnected = connected;
+  _prevOpcConnected = enabled ? connected : null;
 
-  document.getElementById('opc-dot').className       = 'ws-dot ' + (connected ? 'connected' : 'error');
-  document.getElementById('opc-panel-dot').className = 'ws-dot ' + (connected ? 'connected' : 'error');
-  document.getElementById('opc-panel-label').textContent = connected ? 'CONNECTED' : 'DISCONNECTED';
+  const cls = 'ws-dot ' + (!enabled ? '' : (connected ? 'connected' : 'error'));
+  document.getElementById('opc-dot').className       = cls;
+  document.getElementById('opc-panel-dot').className = cls;
+  document.getElementById('opc-panel-label').textContent = !enabled ? 'DISABLED' : (connected ? 'CONNECTED' : 'DISCONNECTED');
+  const sel = document.getElementById('s-opc-enabled');
+  if (sel) sel.value = enabled ? '1' : '0';
+}
+
+// Takes effect at once, like CONNECT, rather than waiting for APPLY: it is a
+// link to another machine, not a setting of this one.
+async function setOpcEnabled(enabled) {
+  try {
+    await postOrThrow(`${API_URL}/opc/enabled?enabled=${enabled}`);
+    showToast(enabled ? 'OPC-UA bridge enabled — connecting…' : 'OPC-UA bridge disabled');
+  } catch(e) {
+    showToast(`Could not switch OPC-UA — ${e.message || e}`, true);
+    const sel = document.getElementById('s-opc-enabled');
+    if (sel) sel.value = enabled ? '0' : '1';
+  }
 }
 
 // ---- Commands ----
@@ -2732,6 +2815,10 @@ async function applyMeasurementParams() {
   await postOrThrow(`${API_URL}/settings/measurement_params?ambient_temp=${t}&mat_dens=${dens}&z_ratio=${zr}`
             + (isNaN(target) ? '' : `&target_thickness=${target}`));
   updateTargetStatus();
+  const mode = document.getElementById('s-meas-mode').value;
+  await postOrThrow(`${API_URL}/settings/measurement_mode?mode=${mode}`);
+  _measMode = mode;
+  if (!_isRunning) setCompensatedView(mode !== 'uncompensated');
 }
 
 async function applyAllSettings() {
@@ -2760,7 +2847,7 @@ const CRYSTAL_SETTING_IDS = [
 // Every settings input that APPLY commits. OPC fields are excluded (they have
 // their own CONNECT action).
 const SETTING_IDS = [
-  's-mat-dens', 's-mat-zratio', 's-amb-temp', 's-target-thickness',
+  's-meas-mode', 's-mat-dens', 's-mat-zratio', 's-amb-temp', 's-target-thickness',
   's-osc1-int', 's-osc1-lpf', 's-osc1-inv', 's-osc1-agc', 's-osc1-gain', 's-osc1-amp',
   's-osc2-int', 's-osc2-lpf', 's-osc2-inv', 's-osc2-agc', 's-osc2-gain', 's-osc2-amp',
   's-lock-phase', 's-lock-std', 's-auto-relock', 's-temp-hold',
@@ -2813,7 +2900,7 @@ async function restoreDefaults() {
       'Restore the standard settings?\n\n'
     + 'Oscillator gains, LPF cutoffs, feedback inversion, drive gain control (back to '
     + 'manual at 1.0), output mode, lock detection, '
-    + 'auto re-lock, the film parameters and the target thickness go back to the values '
+    + 'auto re-lock, the measurement mode (compensated), the film parameters and the target thickness go back to the values '
     + 'that ship with the software, immediately. Unapplied edits in this panel are discarded.\n\n'
     + 'The active crystal and the OPC connection describe this instrument, so they are '
     + 'left as they are.'
@@ -3157,7 +3244,7 @@ function clearLogs() {
   <div class="modal">
     <div class="modal-title">⚠ PLL LOCK FAILED</div>
     <div class="modal-body">
-      The oscillators did not lock within the expected time.<br><br>
+      The lock attempt did not settle within 5 s. GET LOCK tries once; the data keeps streaming on the Monitor tab while it does.<br><br>
       Please check the following:
       <ul>
         <li><strong>Start Frequencies</strong> — must be within ~<span id="lock-capture-range">2 kHz</span> of the crystal's resonant frequency</li>

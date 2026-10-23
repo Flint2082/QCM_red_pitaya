@@ -61,7 +61,10 @@ def build_system(enable_opcua: bool = True):
         opc_command_queue = queue.Queue()
         opc_event_queue   = queue.Queue()
         opc_status_queue  = queue.Queue()
-        wago = WagoClient(auto_connect=True)
+        # Not connected here: the bridge is off until the opc_enabled setting
+        # (Settings -> OPC-UA, off by default) switches it on, and the worker
+        # makes the connection then, with the persisted connection settings.
+        wago = WagoClient(auto_connect=False)
         opc_worker = OPCUAWorker(
             client=wago,
             command_queue=opc_command_queue,
@@ -83,6 +86,7 @@ def build_system(enable_opcua: bool = True):
         api_command_queue=api_command_queue,
         api_event_queue=api_event_queue,
         wago_client=wago if enable_opcua else None,
+        opc_worker=opc_worker,
         version=version,
     )
     # OPC-triggered actions take their parameters from the REST settings.
@@ -173,7 +177,8 @@ def main():
     parser.add_argument(
         "--no-opcua",
         action="store_true",
-        help="Disable OPC-UA PLC bridge"
+        help="Leave the OPC-UA PLC bridge out entirely. It is off by default "
+             "anyway; switch it on under Settings -> OPC-UA"
     )
     args = parser.parse_args()
 

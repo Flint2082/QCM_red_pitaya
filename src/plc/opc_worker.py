@@ -61,17 +61,26 @@ _POLL_INTERVAL      =  0.5   # seconds between CTRL-fallback polls
 _SUBSCRIPTION_MS    =  100   # OPC-UA subscription publishing interval (ms)
 
 
+def _num(value) -> float:
+    """A reading as a float, NaN where there is none. An uncompensated run has
+    no temperature, and a failed compensation has no thickness either; float()
+    of that None raised here and took the whole OPC thread down with it."""
+    return float("nan") if value is None else float(value)
+
+
 def _build_measurement_payload(data: MeasurementData, target_reached: bool = False) -> dict:
+    # In an uncompensated run CompensatedThickness carries the uncompensated
+    # thickness (the one figure there is) and Temperature is NaN.
     return {
         "GVL_QCM.READ.TargetReached":            bool(target_reached),
-        "GVL_QCM.READ.MassFrequency":            float(data.freq_mass_mode),
-        "GVL_QCM.READ.TempFrequency":            float(data.freq_temp_mode),
-        "GVL_QCM.READ.MassAmplitude":            float(data.amp_mass),
-        "GVL_QCM.READ.TempAmplitude":            float(data.amp_temp),
-        "GVL_QCM.READ.Temperature":              float(data.calculated_temp),
-        "GVL_QCM.READ.CompensatedThickness":     float(data.calculated_thickness),
-        "GVL_QCM.READ.UncompensatedThickness":   float(data.uncompensated_thickness),
-        "GVL_QCM.READ.CompensatedMassFrequency": float(data.compensated_freq),
+        "GVL_QCM.READ.MassFrequency":            _num(data.freq_mass_mode),
+        "GVL_QCM.READ.TempFrequency":            _num(data.freq_temp_mode),
+        "GVL_QCM.READ.MassAmplitude":            _num(data.amp_mass),
+        "GVL_QCM.READ.TempAmplitude":            _num(data.amp_temp),
+        "GVL_QCM.READ.Temperature":              _num(data.calculated_temp),
+        "GVL_QCM.READ.CompensatedThickness":     _num(data.calculated_thickness),
+        "GVL_QCM.READ.UncompensatedThickness":   _num(data.uncompensated_thickness),
+        "GVL_QCM.READ.CompensatedMassFrequency": _num(data.compensated_freq),
         "GVL_QCM.READ.Timestamp":                int(data.timestamp),
         "GVL_QCM.READ.ErrorCode":                "",
         "GVL_QCM.READ.LockMass":                 bool(data.lock_mass),
@@ -129,6 +138,7 @@ class OPCUAWorker(threading.Thread):
         command_queue: queue.Queue,
         event_queue: queue.Queue,
         status_queue: queue.Queue,
+        enabled: bool = False,
     ):
         super().__init__(daemon=True, name="opcua-worker")
         self.client = client
@@ -136,6 +146,12 @@ class OPCUAWorker(threading.Thread):
         self.event_queue = event_queue
         self.status_queue = status_queue
         self.running = True
+        # Whether the bridge is switched on (the opc_enabled setting, off by
+        # default). Off, the thread still runs — so the setting can be flipped
+        # without a restart — but it holds no connection, subscribes to nothing
+        # and writes nothing: the PLC can neither read the QCM nor start it.
+        self.enabled = bool(enabled)
+        self._was_enabled: bool | None = None  # None = not acted on yet
 
         self._settings: dict[str, object] = {}   # edge-detection state for CTRL fallback
         self._last_poll = 0.0
@@ -184,14 +200,50 @@ class OPCUAWorker(threading.Thread):
     def stop(self):
         self.running = False
 
-    def run(self):
-        print("[OPCUA] Worker started")
+    def set_enabled(self, enabled: bool):
+        """Switch the bridge on or off. Called from the REST thread; the worker
+        loop picks the change up within a cycle and connects or disconnects."""
+        self.enabled = bool(enabled)
+
+    def _apply_enabled(self):
+        """Act on an on/off change, once per change."""
+        if self.enabled == self._was_enabled:
+            return
+        self._was_enabled = self.enabled
+        if self.enabled:
+            print("[OPCUA] Bridge enabled — connecting")
+            self._last_reconnect = 0.0  # connect now, not at the next interval
+            if self.client.is_connected:  # a client handed over already connected
+                self._setup_ctrl_subscription()
+        else:
+            print("[OPCUA] Bridge disabled")
+            self._teardown_ctrl_subscription()
+            if self.client.is_connected:
+                self.client.disconnect()
         self._emit_status()
 
-        if self.client.is_connected:
-            self._setup_ctrl_subscription()
+    def _discard_events(self):
+        """Drain the event queue while disabled — the application keeps feeding
+        it every measurement — keeping only the target flag, so switching the
+        bridge on mid-run hands the PLC the right level straight away."""
+        while True:
+            try:
+                event = self.event_queue.get_nowait()
+            except queue.Empty:
+                return
+            if isinstance(event, TargetReachedEvent):
+                self._target_reached = bool(event.reached)
+
+    def run(self):
+        print("[OPCUA] Worker started")
 
         while self.running:
+            self._apply_enabled()
+            if not self.enabled:
+                self._discard_events()
+                time.sleep(0.1)
+                continue
+
             self._process_events()
 
             now = time.time()
@@ -264,8 +316,9 @@ class OPCUAWorker(threading.Thread):
     def _emit_status(self):
         connected = self.client.is_connected
         self._was_connected = connected
-        # Settings are REST-owned, so the status event only reports the link.
-        self.status_queue.put(OpcStatusEvent(connected=connected))
+        # Settings are REST-owned, so the status event only reports the link —
+        # and whether it is meant to be up at all.
+        self.status_queue.put(OpcStatusEvent(connected=connected, enabled=self.enabled))
 
     # --------------------------------------------------
     # Event queue → PLC writes

@@ -130,16 +130,21 @@ class _LoggingForwarder(logging.Handler):
 # makes it impossible to tell, while debugging, whether a value is in use).
 _SETTING_KEYS = frozenset({
     "osc_settings", "output_mode", "lock_phase_tolerance", "lock_phase_std",
-    "auto_relock", "temp_hold", "freq_tracking", "freq_track_interval",
+    "auto_relock", "temp_hold", "freq_tracking", "freq_track_interval", "measurement_mode",
     "prune_old_runs", "trim_current_run",
     "active_crystal", "ambient_temp", "mat_dens", "z_ratio",
     "target_thickness",
-    "opc_url", "opc_user", "opc_password", "opc_base_node",
+    "opc_enabled", "opc_url", "opc_user", "opc_password", "opc_base_node",
 })
+
+# Measurement modes. "compensated" locks both modes and solves the temperature
+# from fT; "uncompensated" locks the mass mode alone and parks the temp
+# oscillator, for a crystal with no usable temp mode or no calibration.
+MEASUREMENT_MODES = ("compensated", "uncompensated")
 
 # OPC keys, kept together because they are carried through verbatim when the
 # bridge is disabled (see _save_settings).
-_OPC_SETTING_KEYS = ("opc_url", "opc_user", "opc_password", "opc_base_node")
+_OPC_SETTING_KEYS = ("opc_enabled", "opc_url", "opc_user", "opc_password", "opc_base_node")
 
 # The settings every instrument starts from and that RESTORE DEFAULTS returns
 # to. They ship with the software rather than being captured per box, so every
@@ -186,6 +191,7 @@ DEFAULT_SETTINGS = {
     "lock_phase_std": 0.1,          # rad, max phase-error sigma ("lock quality")
     "auto_relock": True,            # re-acquire automatically on a lost lock
     "temp_hold": True,              # hold the last temperature while temp lock is lost
+    "measurement_mode": "compensated",  # both modes; "uncompensated" = mass mode only
     "freq_tracking": True,          # follow the locked frequencies for re-lock
     "freq_track_interval": 10.0,    # s between lock-frequency updates
     "prune_old_runs": True,         # delete finished runs when the disk runs low
@@ -274,10 +280,17 @@ class ConnectionManager:
 
 class RestServer:
     def __init__(self, api_command_queue: queue.Queue, api_event_queue: queue.Queue,
-                 wago_client=None, version=None):
+                 wago_client=None, opc_worker=None, version=None):
         self.command_queue = api_command_queue
         self.event_queue = api_event_queue
         self._wago_client = wago_client  # optional reference for live reconfiguration
+        self._opc_worker = opc_worker    # switched on and off by the opc_enabled setting
+        # Whether the OPC-UA bridge runs. Off unless this box's settings.json
+        # says otherwise: an instrument without a PLC should not sit retrying a
+        # connection to a coater that is not there. Kept with the connection
+        # settings, outside DEFAULT_SETTINGS, so RESTORE DEFAULTS cannot cut the
+        # link to a coater that does rely on it.
+        self._opc_enabled: bool = False
         self._version = version  # domain.version.VersionInfo, served by GET /version
         self.manager = ConnectionManager()
         self._thread: threading.Thread | None = None
@@ -329,6 +342,8 @@ class RestServer:
         # disabled (--no-opcua), where there is no client to read them back off.
         self._opc_settings: dict = {}
         self._load_settings()   # override the defaults with this box's saved values
+        if self._opc_worker:
+            self._opc_worker.set_enabled(self._opc_enabled)
         self._enqueue_settings("boot")  # push settings to the hardware on startup
         self.app = self._build_app()
         
@@ -349,6 +364,7 @@ class RestServer:
             "lock_phase_std":       self._lock_phase_std,
             "auto_relock":    self._auto_relock,
             "temp_hold":      self._temp_hold,
+            "measurement_mode": self._measurement_mode,
             "freq_tracking":  self._freq_tracking,
             "freq_track_interval": self._freq_track_interval,
             "prune_old_runs":   self._prune_old_runs,
@@ -391,6 +407,8 @@ class RestServer:
             self._auto_relock = bool(d["auto_relock"])
         if "temp_hold" in d:
             self._temp_hold = bool(d["temp_hold"])
+        if d.get("measurement_mode") in MEASUREMENT_MODES:
+            self._measurement_mode = d["measurement_mode"]
         if "freq_tracking" in d:
             self._freq_tracking = bool(d["freq_tracking"])
         if "freq_track_interval" in d:
@@ -429,6 +447,7 @@ class RestServer:
         # URL. set_connection drops the connection instead, and the OPC worker's
         # reconnect loop brings it straight back up with the saved settings.
         self._opc_settings = {k: d[k] for k in _OPC_SETTING_KEYS if k in d}
+        self._opc_enabled = bool(d.get("opc_enabled", False))
         c = self._wago_client
         if c and "opc_url" in d:
             if d.get("opc_base_node"):
@@ -477,6 +496,7 @@ class RestServer:
         # unchanged — otherwise one run without the bridge would erase the PLC
         # connection settings the moment any unrelated setting was saved.
         if self._wago_client:
+            data["opc_enabled"]   = self._opc_enabled
             data["opc_url"]       = self._wago_client.url
             data["opc_user"]      = self._wago_client.user
             data["opc_password"]  = self._wago_client.password
@@ -580,6 +600,7 @@ class RestServer:
         self.command_queue.put(SetLockDetectCommand(self._lock_phase_tolerance, self._lock_phase_std))
         self.command_queue.put(SetAutoRelockCommand(self._auto_relock))
         self.command_queue.put(SetTempHoldCommand(self._temp_hold))
+        self.command_queue.put(SetMeasurementModeCommand(self._measurement_mode == "compensated"))
         self.command_queue.put(SetFreqTrackingCommand(self._freq_tracking, self._freq_track_interval))
         self.command_queue.put(SetStorageReclaimCommand(self._prune_old_runs, self._trim_current_run))
         self.command_queue.put(SetTargetThicknessCommand(self._target_thickness))
@@ -694,14 +715,19 @@ class RestServer:
 
                 if msg.get("type") == "StateEvent":
                     new_state = msg.get("state", "IDLE")
-                    old_state = self._last_state
                     self._last_state = new_state
+                    # A run spans its re-locks, which go RUNNING -> LOCKING ->
+                    # RUNNING. Keyed on the bare RUNNING edges, every re-lock used
+                    # to close the run's stats and open new ones — adding the
+                    # thickness so far to the crystal's total twice, and marking
+                    # the run as no longer recording, so it could be deleted.
+                    in_run = self._measurement_start_time is not None
                     # Start tracking when measurement begins
-                    if new_state == "RUNNING" and old_state != "RUNNING":
+                    if new_state == "RUNNING" and not in_run:
                         self._measurement_start_time = time.time()
                         self._session_thickness = 0.0
                     # Flush stats when measurement ends
-                    elif old_state == "RUNNING" and new_state != "RUNNING":
+                    elif in_run and new_state not in ("RUNNING", "LOCKING"):
                         self._recording = False  # the worker closes the log when a run ends
                         if self._measurement_start_time is not None and self._active_crystal:
                             elapsed_h = (time.time() - self._measurement_start_time) / 3600
@@ -966,6 +992,20 @@ class RestServer:
             self._save_settings()
             return {"status": "ok"}
 
+        @app.post("/settings/measurement_mode")
+        def set_measurement_mode(mode: str):
+            """"compensated" (both modes locked, temperature solved from fT) or
+            "uncompensated" (mass mode only: GET LOCK locks just the mass mode,
+            parks the temp oscillator, and the run reports the uncompensated
+            thickness with no temperature). GET LOCK picks it up straight away; a
+            run in progress keeps the mode it started in."""
+            if mode not in MEASUREMENT_MODES:
+                raise HTTPException(400, f"mode must be one of {', '.join(MEASUREMENT_MODES)}")
+            self._measurement_mode = mode
+            self.command_queue.put(SetMeasurementModeCommand(mode == "compensated"))
+            self._save_settings()
+            return {"status": "ok"}
+
         @app.post("/settings/freq_tracking")
         def set_freq_tracking(enabled: bool, interval: float = 10.0):
             """Follow the locked frequencies: while both modes are locked, the
@@ -1052,6 +1092,7 @@ class RestServer:
                 "oscillators":      self._osc_settings,
                 "output_mode":      self._output_mode,
                 "measurement": {
+                    "mode":             self._measurement_mode,
                     "ambient_temp":     self._ambient_temp,
                     "mat_dens":         self._mat_dens,
                     "z_ratio":          self._z_ratio,
@@ -1325,9 +1366,30 @@ class RestServer:
         # ---- Sweep ----
 
         @app.post("/sweep/start")
-        def start_sweep(oscillator_idx: int, start_freq: float, stop_freq: float, step_size: float, settle_time: float):
+        def start_sweep(oscillator_idx: int, step_size: float, settle_time: float,
+                        center_freq: float | None = None, span: float | None = None,
+                        start_freq: float | None = None, stop_freq: float | None = None):
+            """Sweep one oscillator open-loop. Give the range as `center_freq` +
+            `span` (what the web UI sends) or as `start_freq` + `stop_freq`.
+
+            A centred sweep is laid out symmetrically on the step grid around the
+            centre, so the centre is always one of the points: a span that is not
+            a whole number of steps loses the remainder at both ends equally,
+            rather than all of it at the top."""
+            if step_size <= 0:
+                raise HTTPException(400, "step_size must be greater than 0")
+            if center_freq is not None and span is not None:
+                if span < 0:
+                    raise HTTPException(400, "span must not be negative")
+                half = math.floor(span / 2 / step_size) * step_size
+                start_freq, stop_freq = center_freq - half, center_freq + half
+            elif start_freq is None or stop_freq is None:
+                raise HTTPException(400, "give center_freq and span, or start_freq and stop_freq")
+            if start_freq < 0 or stop_freq < start_freq:
+                raise HTTPException(400, "the sweep must run upwards from 0 Hz or more")
             self.command_queue.put(StartSweepCommand(oscillator_idx, start_freq, stop_freq, step_size, settle_time))
-            return {"status": "ok"}
+            return {"status": "ok", "start_freq": start_freq, "stop_freq": stop_freq,
+                    "n_points": int(math.floor((stop_freq - start_freq) / step_size)) + 1}
 
         @app.post("/sweep/abort")
         def abort_sweep():
@@ -1389,6 +1451,10 @@ class RestServer:
         def get_opc_settings():
             c = self._wago_client
             return {
+                # `available` is false only when the server was started with
+                # --no-opcua; `enabled` is the on/off setting.
+                "available": self._opc_worker is not None,
+                "enabled":   self._opc_enabled,
                 "url":       c.url       if c else "",
                 "user":      c.user      if c else "",
                 "base_node": c.base_node_path if c else "",
@@ -1398,11 +1464,26 @@ class RestServer:
                 "has_password": bool(c.password) if c else False,
             }
 
+        @app.post("/opc/enabled")
+        def set_opc_enabled(enabled: bool):
+            """Switch the OPC-UA bridge on or off, immediately and persistently.
+            Off (the default) it holds no connection, so the PLC can neither read
+            the QCM nor trigger GET LOCK / START / STOP. The connection settings
+            are kept either way."""
+            if not self._opc_worker:
+                raise HTTPException(503, "OPC-UA bridge not available (server started with --no-opcua)")
+            self._opc_enabled = enabled
+            self._opc_worker.set_enabled(enabled)
+            self._save_settings()
+            return {"status": "ok", "enabled": enabled}
+
         @app.post("/opc/connect")
         def opc_connect(url: str, user: str = "", password: str | None = None,
                         base_node: str | None = None):
+            """Set the connection and reconnect with it. With the bridge switched
+            off the settings are saved and used once it is switched on."""
             if not self._wago_client:
-                raise HTTPException(503, "OPC-UA bridge not enabled")
+                raise HTTPException(503, "OPC-UA bridge not available (server started with --no-opcua)")
             if base_node is not None:
                 self._wago_client.set_base_node_path(base_node)
             # An omitted password means "keep the stored one". The UI never
@@ -1412,7 +1493,7 @@ class RestServer:
             pwd = self._wago_client.password if password is None else password
             self._wago_client.set_connection(url, user, pwd)
             self._save_settings()
-            return {"status": "ok", "url": url}
+            return {"status": "ok", "url": url, "enabled": self._opc_enabled}
 
         @app.get("/opc/nodes")
         def opc_nodes():

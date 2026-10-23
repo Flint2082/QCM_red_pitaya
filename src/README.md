@@ -60,6 +60,28 @@ unit accordingly. It runs as `root` (required for `/dev/mem` and the FPGA
 bitstream load), waits for the network, and restarts automatically if the
 process exits.
 
+## Front-panel LEDs
+
+The bitstream wires the 4-bit `led_control` register straight to the LEDs, and
+the control software drives it ([`domain/status_leds.py`](domain/status_leds.py)):
+
+| LED | meaning |
+|---|---|
+| 1 | on while the software runs on a loaded bitstream; **flashes** while a run has a problem: a lost lock (the temp mode only counts in a compensated run), a re-lock in progress, recording failed, or no thickness coming out |
+| 2 | mass-mode PLL locked |
+| 3 | temp-mode PLL locked (dark while parked) |
+| 4 | yellow, not assigned yet |
+
+The lock LEDs stay dark through a sweep and a capacitor adjustment, which open
+the loops. All four go dark when the service stops.
+
+## OPC-UA
+
+The bridge to the WAGO PLC is **off by default**: switch it on under Settings →
+OPC-UA (or `POST /opc/enabled?enabled=true`). The setting is remembered across
+restarts, and RESTORE DEFAULTS leaves it alone. `--no-opcua` on the command line
+leaves the bridge out entirely.
+
 ## Versions
 
 The web UI shows what the box is running in the header badge, with details

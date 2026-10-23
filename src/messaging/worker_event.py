@@ -50,6 +50,11 @@ class LockStatusEvent(Event):
     lock_temp: bool
     quality_mass: float | None  # phase-error std (rad); None = window not full yet
     quality_temp: float | None
+    # Oscillator parked at 0 Hz by the last lock attempt (a 0 Hz start
+    # frequency, or the temp mode of an uncompensated lock): never locked, and
+    # not expected to be.
+    parked_mass: bool = False
+    parked_temp: bool = False
 
 @dataclass
 class CapAdjustEvent(Event):

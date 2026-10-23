@@ -150,6 +150,8 @@ class Application(threading.Thread):
             self.worker_command_queue.put(wc.SetAutoRelockCommand(command.enabled))
         elif isinstance(command, ac.SetTempHoldCommand):
             self.worker_command_queue.put(wc.SetTempHoldCommand(command.enabled))
+        elif isinstance(command, ac.SetMeasurementModeCommand):
+            self.worker_command_queue.put(wc.SetMeasurementModeCommand(command.compensated))
         elif isinstance(command, ac.SetFreqTrackingCommand):
             self.worker_command_queue.put(wc.SetFreqTrackingCommand(command.enabled, command.interval))
         elif isinstance(command, ac.SetTargetThicknessCommand):
@@ -217,7 +219,8 @@ class Application(threading.Thread):
         elif isinstance(event, we.LockStatusEvent):
             self._emit(ae.LockStatusEvent(
                 lock_mass=event.lock_mass, lock_temp=event.lock_temp,
-                quality_mass=event.quality_mass, quality_temp=event.quality_temp))
+                quality_mass=event.quality_mass, quality_temp=event.quality_temp,
+                parked_mass=event.parked_mass, parked_temp=event.parked_temp))
 
         elif isinstance(event, we.CapAdjustEvent):
             self._emit(ae.CapAdjustEvent(

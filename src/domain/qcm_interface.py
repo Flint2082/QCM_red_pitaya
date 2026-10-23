@@ -1,5 +1,6 @@
 ### Class to interface with the QCM Red Pitaya firmware, and to run measurements and calibrations.
 
+import math
 import os
 import time
 import processing.TempCompAlgorithm as tca
@@ -8,6 +9,7 @@ from collections import deque
 import numpy as np
 
 from domain.measurement import MeasurementData, TelemetryData
+from domain.status_leds import StatusLEDs
 
 
 # Frequency capture window (Hz). Must match the FPGA's scan window so the PLL
@@ -15,6 +17,18 @@ from domain.measurement import MeasurementData, TelemetryData
 # module level so other layers (e.g. the REST API) can report the resulting
 # capture range without needing a QCMInterface instance.
 WINDOW_SIZE = 2**12
+
+
+def is_parked(freq) -> bool:
+    """Whether a lock start frequency parks its oscillator rather than naming a
+    resonance. 0 Hz is the way to ask for it; anything else below the capture
+    window cannot be a resonance either, and would put the window start below
+    0 Hz, which the frequency register cannot hold."""
+    try:
+        freq = float(freq)
+    except (TypeError, ValueError):
+        return True
+    return not math.isfinite(freq) or freq < WINDOW_SIZE
 
 # Drive gain, written to output_gain_1/2 in Fixed 32.32: the FPGA multiplies the
 # excitation sinewave by it. 1.0 is the undivided drive — what the hardware put
@@ -70,6 +84,17 @@ class QCMInterface:
         self.LOCK_PHASE_STD = 0.05        # rad — max phase-error std ("lock quality")
         self.LOCK_WINDOW = 12             # samples in the rolling estimate (~1.2 s at 10 Hz)
         self.LOCK_MIN_SAMPLES = 4         # fewer than this says nothing either way
+        # Single-sample limit, as a multiple of the phase-noise limit (never
+        # tighter than the mean tolerance). The window above judges a lock well
+        # but late: a loop slipping off resonance takes several samples to move
+        # a 12-sample mean or std past its limit, and every one of those samples
+        # carries an fT that is already off. One sample's phase error is an
+        # immediate measure of that — near resonance the phase moves ~0.04 rad
+        # per Hz on a ~50 Hz-wide mode, so 0.3 rad is ~7 Hz of fT, ~0.03 K — so
+        # it is what the temperature hold acts on (isPhaseTrusted), and
+        # LOCK_LOSS_SAMPLES of them in a row drop the lock flag straight away.
+        self.LOCK_SAMPLE_SIGMAS = 3.0
+        self.LOCK_LOSS_SAMPLES = 2
         # Phase (radians) the loop settles at once locked, for the default
         # inverted feedback. The phase detector locks in quadrature at -pi/2;
         # non-inverted feedback flips the sign — see getPhaseLockTarget.
@@ -94,6 +119,16 @@ class QCMInterface:
         self.T_start = 0
         self.fT_start = 0
         self.fM_start = 0
+        # False for a run taken on the mass mode alone (see setMeasurementReference).
+        self.compensated = True
+        # Oscillators the last lock attempt parked (0 Hz, integrator off) instead
+        # of locking: a 0 Hz start frequency, or the temp mode of an
+        # uncompensated run. A parked channel never reads as locked, and its
+        # integrator is not written, which would set the NCO walking from 0 Hz.
+        self._parked = set()
+        # True between beginLock and finishLock. The integrators then run at the
+        # acquisition gain, which a settings push must not replace mid-attempt.
+        self._acquiring = False
         # Cached per-oscillator loop settings, updated via setOscConfig and reused
         # by startupPLL so a lock honors the configured settings rather than fixed
         # defaults. Defaults match startupPLL's historical hard-coded values.
@@ -189,6 +224,9 @@ class QCMInterface:
             print("[QCM] Bitstream has no output_gain registers — drive gain "
                   "control and AGC are inactive (fixed hardware drive)")
 
+        # Front-panel LEDs; LED 1 comes on here, the bitstream being loaded.
+        self.leds = StatusLEDs(self.fpga)
+
     def to_signed(self, value, bits):
         """Interpret unsigned integer as signed."""
         mask = (1 << bits) - 1
@@ -201,7 +239,10 @@ class QCMInterface:
     # ===========================
 
     def setFreq(self, osc_index, freq):
-        self.fpga.write_register(register_name='freq_'+str(osc_index),value=int(freq*2**6)) # multiplication to account for fixed-point (32F6) representation in FPGA
+        # Clamped at 0: the register is unsigned, and a negative word does not
+        # wrap, it raises — which used to leave GET LOCK on a parked (0 Hz) mode
+        # stuck in LOCKING until the service was restarted.
+        self.fpga.write_register(register_name='freq_'+str(osc_index),value=int(max(0.0, freq)*2**6)) # multiplication to account for fixed-point (32F6) representation in FPGA
 
     def setInt(self, osc_index, gain):
         self.fpga.write_register(register_name='integral_'+str(osc_index),value=int(gain*2**32)) # multiplication to account for fixed-point (32F32) representation in FPGA
@@ -280,10 +321,14 @@ class QCMInterface:
         """Apply and remember the configured per-oscillator loop settings. The
         cached values are reused by startupPLL so a lock uses the persisted
         settings. Low-level setters (setInt/setLPFFreq) stay uncached for the
-        transient writes done during locking, sweeps and standby."""
+        transient writes done during locking, sweeps and standby.
+
+        The integrator gain is only cached for a parked channel or during a lock
+        attempt; finishLock writes it when the attempt ends."""
         if int_gain is not None:
             self._int_gain[osc_index] = int_gain
-            self.setInt(osc_index, int_gain)
+            if not (self._acquiring or osc_index in self._parked):
+                self.setInt(osc_index, int_gain)
         if lpf_freq is not None:
             self._lpf_freq[osc_index] = lpf_freq
             self.setLPFFreq(osc_index, lpf_freq)
@@ -387,26 +432,51 @@ class QCMInterface:
         weak signal shows up here without anyone having to know what amplitude to
         expect at this temperature, on this crystal, under this much film."""
         buf = self._phase_err[osc_index]
-        if len(buf) < self.LOCK_MIN_SAMPLES:
+        if osc_index in self._parked or len(buf) < self.LOCK_MIN_SAMPLES:
             return None
         return float(np.std(buf))
+
+    def getSampleLimit(self):
+        """Largest phase error (rad) a single sample may have and still be
+        trusted — see LOCK_SAMPLE_SIGMAS."""
+        return max(self.LOCK_PHASE_TOLERANCE, self.LOCK_SAMPLE_SIGMAS * self.LOCK_PHASE_STD)
+
+    def isPhaseTrusted(self, osc_index):
+        """Whether the newest sample alone says this channel is on resonance.
+        Judged on that one sample, so it reacts the cycle a loop starts to slip,
+        where getLockDetect needs the window to notice."""
+        buf = self._phase_err[osc_index]
+        return (osc_index not in self._parked and len(buf) > 0
+                and abs(buf[-1]) <= self.getSampleLimit())
+
+    def isLockWindowFull(self, osc_index):
+        return len(self._phase_err[osc_index]) >= self.LOCK_WINDOW
+
+    def isParked(self, osc_index):
+        return osc_index in self._parked
 
     def getLockDetect(self, osc_index):
         """True when the phase error is both centred on the lock point and quiet.
 
-        The response is deliberately asymmetric: a single wild sample entering
-        the window lifts the std straight away, so a lost lock is flagged within
-        a sample or two, while clearing the flag needs the whole window to refill
-        with quiet samples. Fast to distrust, slow to trust."""
+        The response is deliberately asymmetric: LOCK_LOSS_SAMPLES consecutive
+        samples outside the single-sample limit drop the flag at once, however
+        good the rest of the window looks, while clearing it needs the mean and
+        std of the whole window back inside their limits. Fast to distrust, slow
+        to trust. A parked channel is never locked."""
         buf = self._phase_err[osc_index]
-        if len(buf) < self.LOCK_MIN_SAMPLES:
+        if osc_index in self._parked or len(buf) < self.LOCK_MIN_SAMPLES:
+            return False
+        limit = self.getSampleLimit()
+        recent = list(buf)[-self.LOCK_LOSS_SAMPLES:]
+        if all(abs(e) > limit for e in recent):
             return False
         return (abs(float(np.mean(buf))) < self.LOCK_PHASE_TOLERANCE
                 and float(np.std(buf)) < self.LOCK_PHASE_STD)
 
     def _fillLockWindows(self, osc_indices=(1, 2), interval=0.02):
         """Take a fresh burst of phase samples and report {osc: locked}. Used
-        where no acquisition loop is feeding sampleLock — i.e. during startupPLL.
+        where no acquisition loop is feeding sampleLock — i.e. by the blocking
+        startupPLL of the dev shell.
 
         Channels are interleaved rather than filled one after the other, so the
         burst costs one settling period instead of one per channel. The burst is
@@ -553,77 +623,108 @@ class QCMInterface:
             amplitudes.append(amplitude)
             print(f"Freq: {f}\t Phase: {phase}\t Amplitude: {amplitude}")      
              
-    def startupPLL(self, start_freq_mass: float, start_freq_temp: float):
-        self.bothLocked = False
-        self.MAX_STARTUP_TRIES = 10  
-        
-        print(f"Starting up PLLs around frequencies {start_freq_mass} and {start_freq_temp}")
+    def beginLock(self, start_freq_mass: float, start_freq_temp: float, osc_indices=(1, 2)):
+        """Start one lock attempt and return the oscillators it is locking.
 
-        ## Apply the configured per-oscillator settings (inversion + LPF cutoff),
-        ## and acquire at the manual drive — the AGC only takes over once there
-        ## is a lock for it to servo against, so every attempt starts from the
-        ## same known drive level rather than wherever the last one ended up.
-        self.setInv(1, self._inv[1])
-        self.setLPFFreq(1, self._lpf_freq[1])
-        self.applyManualGain(1)
+        Returns at once: the caller keeps sampling (sampleLock) while the loops
+        pull in, judges the lock from those samples, and ends the attempt with
+        finishLock. That is what keeps the data flowing through a GET LOCK — the
+        attempt used to sleep through up to ten retries, ~12 s of nothing.
 
-        self.setInv(2, self._inv[2])
-        self.setLPFFreq(2, self._lpf_freq[2])
-        self.applyManualGain(2)
+        Only the channels in `osc_indices` are locked, and of those only the ones
+        whose start frequency is a resonance; every other channel is parked at
+        0 Hz with its integrator off (see is_parked). There is one reset register
+        for both loops, so the reset that starts the attempt disturbs a parked
+        channel too — harmless, it has nothing to lose."""
+        starts = {1: start_freq_mass, 2: start_freq_temp}
+        active = tuple(i for i in (1, 2) if i in osc_indices and not is_parked(starts[i]))
+        self._parked = {i for i in (1, 2) if i not in active}
+        self._acquiring = True
 
-        for t in range(self.MAX_STARTUP_TRIES): # try to lock for up to MAX_STARTUP_TRIES
-            self.setFreq(1,start_freq_mass-self.WINDOW_SIZE/2)
-            self.setInt(1,self.INT_GAIN_PRE_LOCK)
-            
-            self.setFreq(2,start_freq_temp-self.WINDOW_SIZE/2)
-            self.setInt(2,self.INT_GAIN_PRE_LOCK)
-            
-            self.reset()  # Ensure we're starting from a known state each time
-            
-            time.sleep(1)  # wait a bit for PLL to respond
+        names = {1: "mass", 2: "temp"}
+        print("Starting up PLLs: " + ", ".join(
+            f"{names[i]} " + (f"around {starts[i]:.0f} Hz" if i in active else "parked")
+            for i in (1, 2)))
 
-            # Both windows are filled before either is judged — evaluating them
-            # with `and` would short-circuit and leave channel 2 empty, so it
-            # could never read as locked.
-            locked = self._fillLockWindows((1, 2))
-            bothLocked = locked[1] and locked[2]
-            if bothLocked:
-                break
+        for i in (1, 2):
+            # The configured inversion and LPF cutoff, and the manual drive: the
+            # AGC only takes over once there is a lock for it to servo against,
+            # so every attempt starts from the same known drive level rather
+            # than wherever the last one ended up.
+            self.setInv(i, self._inv[i])
+            self.setLPFFreq(i, self._lpf_freq[i])
+            self.applyManualGain(i)
+            if i in active:
+                self.setFreq(i, starts[i] - self.WINDOW_SIZE / 2)
+                self.setInt(i, self.INT_GAIN_PRE_LOCK)
+            else:
+                self.setFreq(i, 0)
+                self.setInt(i, 0)
+        self.reset()  # start the loops from a known state (also clears the lock windows)
+        return active
 
-            print(f"Trying to lock... ( {t} / {self.MAX_STARTUP_TRIES} )", end='\r')
-        
-        if not bothLocked:
-            print("Warning: PLLs did not lock within expected time. Check starting frequencies.")
-            # Lock now rests on two conditions per channel, so "did not lock" on
-            # its own narrows nothing down. Report both against their limits.
-            for i in (1, 2):
-                buf = self._phase_err[i]
-                if not buf:
-                    print(f"  Oscillator {i}: no phase samples taken")
-                    continue
-                mean, std = abs(float(np.mean(buf))), float(np.std(buf))
-                print(f"  Oscillator {i}: "
-                      f"|mean err| {mean:.4f} / {self.LOCK_PHASE_TOLERANCE} "
-                      f"{'ok' if mean < self.LOCK_PHASE_TOLERANCE else 'FAIL'}   "
-                      f"sigma {std:.4f} / {self.LOCK_PHASE_STD} "
-                      f"{'ok' if std < self.LOCK_PHASE_STD else 'FAIL'}   "
-                      f"(phase {self.getPhase(i):+.4f}, target "
-                      f"{self.getPhaseLockTarget(i):+.4f}, amp {self.getMag(i):.0f})")
-        else:
+    def finishLock(self, active, locked: bool, report: bool = True):
+        """End the attempt beginLock started: report how it went, then hand the
+        locked channels their configured (post-lock) integrator gain."""
+        # Cleared first: should a write below fail, a flag left set would stop
+        # every later integrator-gain setting from reaching the hardware.
+        self._acquiring = False
+        if report:
+            self.reportLock(active, locked)
+        for i in active:
+            self.setInt(i, self._int_gain[i])
+        # A successful lock keeps its window: those samples are the ones that
+        # just passed the lock test, from the same ~10 Hz loop that carries on
+        # filling it. Clearing it, as the blocking lock did (its burst sampled at
+        # a different rate), dropped the flag to "unlocked" for the four samples
+        # the window needs — now that lock status streams during the attempt,
+        # that reads as a lock lost straight after it was gained. A failed
+        # attempt starts the window afresh.
+        if not locked:
+            self.resetLockStats()
+
+    def reportLock(self, active, locked: bool):
+        if locked:
             print("PLLs locked successfully at frequencies:")
-            for i in (1, 2):
+            for i in active:
                 q = self.getLockQuality(i)
                 print(f"  Oscillator {i}: {self.getFreq(i)} Hz    Phase: {self.getPhase(i)}    "
                       f"Amplitude: {self.getMag(i)}    Quality: {'—' if q is None else f'{q:.4f} rad'}")
+            return
+        if not active:
+            print("Warning: nothing to lock — both modes are parked (0 Hz).")
+            return
+        print("Warning: PLLs did not lock. Check starting frequencies.")
+        # Lock rests on two conditions per channel, so "did not lock" on its own
+        # narrows nothing down. Report both against their limits.
+        for i in active:
+            buf = self._phase_err[i]
+            if not buf:
+                print(f"  Oscillator {i}: no phase samples taken")
+                continue
+            mean, std = abs(float(np.mean(buf))), float(np.std(buf))
+            print(f"  Oscillator {i}: "
+                  f"|mean err| {mean:.4f} / {self.LOCK_PHASE_TOLERANCE} "
+                  f"{'ok' if mean < self.LOCK_PHASE_TOLERANCE else 'FAIL'}   "
+                  f"sigma {std:.4f} / {self.LOCK_PHASE_STD} "
+                  f"{'ok' if std < self.LOCK_PHASE_STD else 'FAIL'}   "
+                  f"(phase {self.getPhase(i):+.4f}, target "
+                  f"{self.getPhaseLockTarget(i):+.4f}, amp {self.getMag(i):.0f})")
 
-        # Settle to the configured (post-lock) integrator gain
-        self.setInt(1, self._int_gain[1])
-        self.setInt(2, self._int_gain[2])
-        # Drop the acquisition-time samples: they were taken at the pre-lock gain,
-        # and mixing them with post-lock ones would let the gain change itself show
-        # up as phase noise and trip an immediate false "lock lost".
-        self.resetLockStats()
-        return bothLocked
+    def startupPLL(self, start_freq_mass: float, start_freq_temp: float, osc_indices=(1, 2),
+                   settle: float = 1.0):
+        """One blocking lock attempt, for the dev shell. The instrument itself
+        locks through the worker, which runs the same attempt without blocking."""
+        active = self.beginLock(start_freq_mass, start_freq_temp, osc_indices)
+        locked = False
+        if active:
+            time.sleep(settle)  # let the loops pull in
+            # Every window is filled before any is judged — evaluating them with
+            # `and` would short-circuit and leave the rest empty.
+            result = self._fillLockWindows(active)
+            locked = all(result.values())
+        self.finishLock(active, locked)
+        return locked
         
     def getSettingsSnapshot(self) -> dict:
         """Loop/lock configuration as plain data, for recording alongside a run so
@@ -650,7 +751,10 @@ class QCMInterface:
                 "phase_tolerance": self.LOCK_PHASE_TOLERANCE,
                 "phase_std":       self.LOCK_PHASE_STD,
                 "window":          self.LOCK_WINDOW,
+                "sample_limit":    self.getSampleLimit(),
+                "loss_samples":    self.LOCK_LOSS_SAMPLES,
             },
+            "parked": sorted(self._parked),
             "window_size": self.WINDOW_SIZE,
             "agc": {
                 "available":  self._has_output_gain,
@@ -678,9 +782,18 @@ class QCMInterface:
             tc.c = tc.fM_1 * tc.fT_0 - tc.fT_1 * tc.fM_0
         print(f"[QCM] Coefficients updated")
 
-    def setMeasurementReference(self, T = 23, mat_dens=19320, z_ratio=1.0):
-        self.fM_start = self.getFreq(1)
-        self.fT_start = self.getFreq(2)
+    def setMeasurementReference(self, T = 23, mat_dens=19320, z_ratio=1.0, compensated=True):
+        """Take the run's starting point. `compensated` False is a run on the mass
+        mode alone: no temperature is solved, and the thickness is the
+        uncompensated one (see getMeasurement)."""
+        fM = self.getFreq(1)
+        if not fM > 0:
+            # Every thickness is a ratio against this, so a run cannot start from
+            # it — say why here rather than divide by zero further down.
+            raise ValueError("mass-mode frequency reads 0 Hz — lock the mass mode before starting a run")
+        self.compensated = bool(compensated)
+        self.fM_start = fM
+        self.fT_start = self.getFreq(2) if self.compensated else 0.0
         self.T_start = T # would be nice to measure this with a thermometer
         self.temp_comp = tca.TempCompAlgorithm(
             coefficients = self.coefficients,
@@ -695,7 +808,10 @@ class QCMInterface:
             fT_start= self.fT_start # Hz
         )
 
-        print(f"Reference set: fM={self.fM_start}, fT={self.fT_start}, T={self.T_start}")
+        if self.compensated:
+            print(f"Reference set: fM={self.fM_start}, fT={self.fT_start}, T={self.T_start}")
+        else:
+            print(f"Reference set (uncompensated, mass mode only): fM={self.fM_start}")
         
     def getTelemetry(self) -> TelemetryData:
         """One sample of everything the hardware reports directly. Needs no
@@ -723,11 +839,30 @@ class QCMInterface:
         """One compensated sample. hold_temp carries the last solved temperature
         forward instead of solving it from fT — see TempCompAlgorithm.FreqToTemp.
         The caller decides when to use it (the worker does, on a lost temp-mode
-        lock), so the policy lives with the automation rather than in here."""
+        lock), so the policy lives with the automation rather than in here.
+
+        An uncompensated run (see setMeasurementReference) has no temperature:
+        calculated_thickness is then the uncompensated thickness, so the target,
+        the PLC and the charts all carry on reading the one figure there is, and
+        `compensated` False on the sample says which it is."""
         t = self.getTelemetry()
+        if not self.compensated:
+            thickness = self.temp_comp.FreqToThickness(t.freq_mass_mode)
+            if np.isfinite(t.freq_mass_mode):
+                self.setMockSigFreq(t.freq_mass_mode)
+            return MeasurementData(
+                **vars(t),
+                uncompensated_thickness=thickness,
+                calculated_thickness=thickness,
+                calculated_temp=None,
+                compensated_freq=t.freq_mass_mode,
+                temp_held=False,
+                compensated=False,
+            )
         T_calc, uncompensated_thickness_nm, compensated_thickness_nm, compensated_m_freq = \
             self.temp_comp.FreqToTemp(t.freq_temp_mode, t.freq_mass_mode, hold_temp=hold_temp)
-        if np.isfinite(compensated_m_freq):
+        # None when the solve failed (FreqToTemp reports that itself).
+        if compensated_m_freq is not None and np.isfinite(compensated_m_freq):
             self.setMockSigFreq(compensated_m_freq)
         return MeasurementData(
             **vars(t),

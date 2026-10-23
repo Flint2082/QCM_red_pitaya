@@ -104,6 +104,13 @@ class SetAutoRelockCommand(ApiCommand):
     enabled: bool  # re-acquire automatically when lock is lost mid-measurement
 
 @dataclass
+class SetMeasurementModeCommand(ApiCommand):
+    """Compensated (both modes locked, temperature solved from fT) or
+    uncompensated (mass mode only; the temp oscillator is parked). Read at GET
+    LOCK and at run start, so a run keeps the mode it was started in."""
+    compensated: bool
+
+@dataclass
 class SetTempHoldCommand(ApiCommand):
     """Hold the last calculated temperature while the temp-mode lock is lost,
     instead of solving the compensation from an untrustworthy fT."""

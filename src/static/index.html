@@ -155,7 +155,7 @@ footer { height: 24px; background: var(--surface); border-top: 1px solid var(--b
 .log-error   { color:var(--red); }
 .log-critical{ color:var(--red); font-weight:500; }
 .log-debug   { color:var(--text-dim); }
-.modal-overlay { position:fixed; inset:0; background:rgba(0,0,0,0.75); display:flex; align-items:center; justify-content:center; z-index:9000; }
+.modal-overlay { position:fixed; top:0; right:0; bottom:0; left:0; background:rgba(0,0,0,0.75); display:flex; align-items:center; justify-content:center; z-index:9000; }
 .modal { background:var(--surface); border:1px solid var(--border-2); border-radius:4px; padding:28px; max-width:500px; width:90%; box-shadow:0 8px 32px rgba(0,0,0,0.5); }
 .modal-title { font-family:'DM Mono',monospace; font-size:13px; letter-spacing:0.08em; color:var(--orange); margin-bottom:12px; }
 .modal-title.green { color: var(--green); }
@@ -171,7 +171,7 @@ footer { height: 24px; background: var(--surface); border-top: 1px solid var(--b
 /* Toggle switch */
 .toggle-switch { position: relative; width: 38px; height: 22px; flex-shrink: 0; }
 .toggle-switch input { opacity: 0; width: 0; height: 0; }
-.toggle-slider { position: absolute; inset: 0; background: var(--border-2); border-radius: 11px; cursor: pointer; transition: 0.2s; }
+.toggle-slider { position: absolute; top: 0; right: 0; bottom: 0; left: 0; background: var(--border-2); border-radius: 11px; cursor: pointer; transition: 0.2s; }
 .toggle-slider::before { content: ''; position: absolute; width: 16px; height: 16px; left: 3px; top: 3px; background: var(--text-dim); border-radius: 50%; transition: 0.2s; }
 .toggle-switch input:checked + .toggle-slider { background: var(--blue); }
 .toggle-switch input:checked + .toggle-slider::before { transform: translateX(16px); background: #fff; }
@@ -765,6 +765,15 @@ footer { height: 24px; background: var(--surface); border-top: 1px solid var(--b
 </footer>
 
 <script>
+// ---- Older-browser compatibility ----
+// The GUI is also opened from older lab PCs whose Chromium/Edge predates v80. Those
+// cannot parse optional chaining (?.) or nullish coalescing (??): a single one is a
+// syntax error that kills the whole script and leaves a dead page. Nor do they have
+// structuredClone (v98). Keep this script to ES2019 and use these helpers instead.
+function fieldValue(id) { const el = document.getElementById(id); return el ? el.value : undefined; }
+function ifNull(v, d) { return v == null ? d : v; }
+function deepCopy(o) { return JSON.parse(JSON.stringify(o)); }  // plain data only (chart options)
+
 const DEV_HOSTS = ['localhost', '127.0.0.1', ''];
 const backendHost = DEV_HOSTS.includes(location.hostname) ? 'rp-f0ea58.local' : location.hostname;
 let API_URL = `http://${backendHost}:8000`;
@@ -813,7 +822,10 @@ function loadUiPrefs() {
   // The chart windows are held in JS variables, not read from the DOM per point.
   setWindowMain(document.getElementById('input-window-main').value);
   setWindowMonitor(document.getElementById('input-window-monitor').value);
-  for (const id of UI_PREF_IDS) document.getElementById(id)?.addEventListener('change', saveUiPrefs);
+  for (const id of UI_PREF_IDS) {
+    const el = document.getElementById(id);
+    if (el) el.addEventListener('change', saveUiPrefs);
+  }
 }
 loadUiPrefs();
 // ---- State tracking ----
@@ -837,7 +849,8 @@ function switchTab(name, el) {
   document.querySelectorAll('.tab-panel').forEach(p => p.classList.toggle('active', p.id === 'panel-' + name));
   setTimeout(() => {
     [...Object.values(charts), ...Object.values(sweepCharts), ...Object.values(calibCharts)].forEach(c => c && c.resize());
-    if (name === 'logs' && document.getElementById('log-autoscroll')?.checked) {
+    const autoscroll = document.getElementById('log-autoscroll');
+    if (name === 'logs' && autoscroll && autoscroll.checked) {
       const out = document.getElementById('log-output');
       if (out) out.scrollTop = out.scrollHeight;
     }
@@ -861,7 +874,7 @@ const BASE_OPTS = { responsive: true, maintainAspectRatio: false, animation: fal
 
 function makeChart(id, color) {
   const ctx = document.getElementById(id); if (!ctx) return null;
-  return new Chart(ctx, { type: 'line', data: { labels: [], datasets: [{ data: [], borderColor: color, borderWidth: 1.5, pointRadius: 0, tension: 0.2, fill: true, backgroundColor: color + '14' }] }, options: structuredClone(BASE_OPTS) });
+  return new Chart(ctx, { type: 'line', data: { labels: [], datasets: [{ data: [], borderColor: color, borderWidth: 1.5, pointRadius: 0, tension: 0.2, fill: true, backgroundColor: color + '14' }] }, options: deepCopy(BASE_OPTS) });
 }
 
 function makeDualChart(id, c1, c2) {
@@ -872,7 +885,7 @@ function makeDualChart(id, c1, c2) {
       { data: [], borderColor: c1, borderWidth: 1.5, pointRadius: 0, tension: 0.2, fill: false, yAxisID: 'y', label: 'AMP' },
       { data: [], borderColor: c2, borderWidth: 1.5, pointRadius: 0, tension: 0.2, fill: false, yAxisID: 'y2', borderDash: [4,2], label: 'PHASE' },
     ]},
-    options: { ...structuredClone(BASE_OPTS),
+    options: { ...deepCopy(BASE_OPTS),
       plugins: { tooltip: { enabled: false }, legend: { display: true, labels: { color: TC, font: { family: 'DM Mono', size: 9 }, boxWidth: 14, padding: 8 } }, zoom: ZOOM_CFG },
       scales: { x: TAXIS, y: { ...YAXIS, position: 'left' }, y2: { ...YAXIS, position: 'right', grid: { drawOnChartArea: false } } }
     }
@@ -971,7 +984,7 @@ const sweepCrosshairPlugin = {
 
 function makeSweepChart(id, color) {
   const ctx = document.getElementById(id); if (!ctx) return null;
-  const opts = structuredClone(BASE_OPTS);
+  const opts = deepCopy(BASE_OPTS);
   opts.scales.x = XAXIS;
   return new Chart(ctx, {
     type: 'line',
@@ -1199,8 +1212,8 @@ function wrapPi(x) { return ((x + Math.PI) % TWO_PI + TWO_PI) % TWO_PI - Math.PI
 // and non-inverted feedback flips it to +π/2. Read from the oscillator the
 // Analysis tab is sweeping, so the markers match how that channel actually locks.
 function lockPhaseTarget() {
-  const osc = document.getElementById('sweep-osc')?.value === '2' ? 2 : 1;
-  const inv = document.getElementById(`s-osc${osc}-inv`)?.value !== '0';
+  const osc = fieldValue('sweep-osc') === '2' ? 2 : 1;
+  const inv = fieldValue(`s-osc${osc}-inv`) !== '0';
   return inv ? -Math.PI / 2 : Math.PI / 2;
 }
 
@@ -1292,7 +1305,7 @@ function updateSweepLockPoints() {
 
   // Tiles list the strongest first. Crossings with no amplitude reading sort last
   // rather than to the top, which is where a null would land in a naive compare.
-  const ranked = pts.slice().sort((x, y) => (y.amp ?? -Infinity) - (x.amp ?? -Infinity));
+  const ranked = pts.slice().sort((x, y) => ifNull(y.amp, -Infinity) - ifNull(x.amp, -Infinity));
   setText('val-sweep-lock-n', freqs.length ? String(pts.length) : '—');
   setText('val-sweep-lock1',  ranked[0] ? fmt(ranked[0].freq, 0) : '—');
   setText('val-sweep-lock2',  ranked[1] ? fmt(ranked[1].freq, 0) : '—');
@@ -1320,7 +1333,8 @@ async function downloadSweepCsv() {
   if (!name) {
     try {
       const d = await fetch(`${API_URL}/sweeps`).then(r => r.json());
-      name = d.current || (d.sweeps || []).find(s => s.size > 0)?.name;
+      const recorded = (d.sweeps || []).find(s => s.size > 0);
+      name = d.current || (recorded && recorded.name);
     } catch(e) { /* fall through to the error toast */ }
   }
   if (!name) { showToast('No recorded sweep to download', true); return; }
@@ -1363,7 +1377,7 @@ function push(chart, value, dsIdx = 0, max = MAX_PTS_MAIN, label = '') {
   const d = chart.data;
   if (dsIdx === 0) d.labels.push(label);
   d.datasets[dsIdx].data.push(value);
-  if (!chart._zoomGroupState?.zoomed) {
+  if (!(chart._zoomGroupState && chart._zoomGroupState.zoomed)) {
     if (d.labels.length > max) { d.labels.shift(); d.datasets.forEach(ds => { if (ds.data.length > max) ds.data.shift(); }); }
     _dirtyCharts.add(chart);
   }
@@ -1415,7 +1429,7 @@ function setText(id, v) { const el = document.getElementById(id); if (el) el.tex
 function updateCrystalUsage(currentFm) {
   const el = document.getElementById('s-crystal-usage');
   if (!el || currentFm == null) return;
-  const virginInput = parseFloat(document.getElementById('s-crystal-freq-virgin')?.value);
+  const virginInput = parseFloat(fieldValue('s-crystal-freq-virgin'));
   const virgin = (virginInput > 0) ? virginInput : _runStartFm;
   el.textContent = virgin ? (currentFm / virgin * 100).toFixed(2) : '—';
 }
@@ -1427,7 +1441,7 @@ function setLockQuality(mode, sigma) {
   const el = document.getElementById(`val-q-${mode}`);
   if (!el) return;
   if (sigma == null || !isFinite(sigma)) { el.textContent = '—'; el.style.color = ''; return; }
-  const limit = parseFloat(document.getElementById('s-lock-std')?.value) || 0.05;
+  const limit = parseFloat(fieldValue('s-lock-std')) || 0.05;
   el.textContent = (sigma * 1000).toFixed(1);
   el.style.color = sigma < limit * 0.5 ? 'var(--green)'
                  : sigma < limit       ? 'var(--orange)'
@@ -1950,7 +1964,7 @@ function stopFromTarget() {
 function updateTargetStatus() {
   const el = document.getElementById('s-target-status');
   if (!el) return;
-  const target = parseFloat(document.getElementById('s-target-thickness')?.value);
+  const target = parseFloat(fieldValue('s-target-thickness'));
   if (!(target > 0)) {
     el.textContent = 'NO TARGET';
     el.style.color = 'var(--text-dim)';
@@ -2064,14 +2078,14 @@ async function loadCrystalForm(name) {
   try {
     const p = await fetch(`${API_URL}/crystals/${name}`).then(r => r.json());
     document.getElementById('s-crystal-name').value         = p.name || '';
-    document.getElementById('s-crystal-freq-mass').value    = p.freq_mass ?? '';
-    document.getElementById('s-crystal-freq-temp').value    = p.freq_temp ?? '';
-    document.getElementById('s-crystal-hours').textContent  = (p.hours_active ?? 0).toFixed(2);
-    document.getElementById('s-crystal-deposited').textContent = (p.total_deposited ?? 0).toFixed(2);
-    document.getElementById('s-crystal-mass-sens').value = p.mass_sensitivity ?? -13.3e-8;
-    document.getElementById('s-crystal-sens-area').value = p.sens_area ?? 5.25e-5;
-    document.getElementById('s-crystal-tooling').value = p.tooling_ratio ?? 1;
-    document.getElementById('s-crystal-freq-virgin').value = p.freq_virgin ?? 6000000;
+    document.getElementById('s-crystal-freq-mass').value    = ifNull(p.freq_mass, '');
+    document.getElementById('s-crystal-freq-temp').value    = ifNull(p.freq_temp, '');
+    document.getElementById('s-crystal-hours').textContent  = ifNull(p.hours_active, 0).toFixed(2);
+    document.getElementById('s-crystal-deposited').textContent = ifNull(p.total_deposited, 0).toFixed(2);
+    document.getElementById('s-crystal-mass-sens').value = ifNull(p.mass_sensitivity, -13.3e-8);
+    document.getElementById('s-crystal-sens-area').value = ifNull(p.sens_area, 5.25e-5);
+    document.getElementById('s-crystal-tooling').value = ifNull(p.tooling_ratio, 1);
+    document.getElementById('s-crystal-freq-virgin').value = ifNull(p.freq_virgin, 6000000);
     const coeffMap = { fM0:'fM_0', fM1:'fM_1', fM2:'fM_2', fM3:'fM_3',
                        fT0:'fT_0', fT1:'fT_1', fT2:'fT_2', fT3:'fT_3' };
     for (const [id, key] of Object.entries(coeffMap)) {
@@ -2097,7 +2111,7 @@ async function refreshCrystalList(select = null) {
     const names = d.crystals || [];
     _activeCrystal = d.active || null;
     // Names are sanitized server-side (alphanumerics, - and _ only).
-    const chosen = select ?? (sel.value || _activeCrystal || names[0] || '');
+    const chosen = ifNull(select, sel.value || _activeCrystal || names[0] || '');
     sel.innerHTML = names.length
       ? names.map(n => `<option value="${n}"${n === chosen ? ' selected' : ''}>${n === _activeCrystal ? '● ' : ''}${n}</option>`).join('')
       : '<option value="">— no profiles —</option>';
@@ -2159,7 +2173,7 @@ const INFO_FOLD_CHARS = 90;
 function initSettingsInfo() {
   for (const desc of document.querySelectorAll('.settings-row-desc')) {
     const row = desc.closest('.settings-row');
-    const label = row?.querySelector('.settings-row-label');
+    const label = row && row.querySelector('.settings-row-label');
     if (!row || !label) continue;   // e.g. the standalone note above the OPC node list
     if (desc.textContent.trim().length < INFO_FOLD_CHARS) continue;
     desc.hidden = true;
@@ -2184,10 +2198,10 @@ async function loadInitialSettings() {
   try {
     s = await fetch(`${API_URL}/settings`).then(r => r.json());
     for (const osc of [1, 2]) {
-      const os = s.oscillators?.[osc];
+      const os = s.oscillators && s.oscillators[osc];
       if (!os) continue;
-      document.getElementById(`s-osc${osc}-int`).value = os.int_gain ?? '';
-      document.getElementById(`s-osc${osc}-lpf`).value  = os.lpf_freq  ?? '';
+      document.getElementById(`s-osc${osc}-int`).value = ifNull(os.int_gain, '');
+      document.getElementById(`s-osc${osc}-lpf`).value  = ifNull(os.lpf_freq, '');
       document.getElementById(`s-osc${osc}-inv`).value = os.inverted ? '1' : '0';
       document.getElementById(`s-osc${osc}-agc`).value = os.agc_enabled ? '1' : '0';
       if (os.manual_gain != null) document.getElementById(`s-osc${osc}-gain`).value = os.manual_gain;
@@ -2201,7 +2215,7 @@ async function loadInitialSettings() {
       if (s.measurement.target_thickness != null) document.getElementById('s-target-thickness').value = s.measurement.target_thickness;
     }
     // Lock-failed hint tracks the PLL capture window rather than a fixed number.
-    if (s.pll?.capture_range != null) {
+    if (s.pll && s.pll.capture_range != null) {
       const el = document.getElementById('lock-capture-range');
       if (el) el.textContent = fmtHz(s.pll.capture_range);
     }
@@ -2234,7 +2248,7 @@ async function loadInitialSettings() {
       if (lf.mass != null) document.getElementById('s-crystal-freq-mass').value = lf.mass;
       if (lf.temp != null) document.getElementById('s-crystal-freq-temp').value = lf.temp;
     }
-    const c = s.coefficients ?? {};
+    const c = s.coefficients || {};
     const coeffMap = { fM0:'fM_0', fM1:'fM_1', fM2:'fM_2', fM3:'fM_3',
                        fT0:'fT_0', fT1:'fT_1', fT2:'fT_2', fT3:'fT_3' };
     for (const [id, key] of Object.entries(coeffMap)) {
@@ -2260,7 +2274,7 @@ async function loadInitialSettings() {
   try {
     const t = await fetch(`${API_URL}/measurement/target`).then(r => r.json());
     _targetReached = !!t.reached;
-    _targetInfo = { thickness: t.thickness_at_target ?? 0, target: t.target_thickness ?? 0 };
+    _targetInfo = { thickness: ifNull(t.thickness_at_target, 0), target: ifNull(t.target_thickness, 0) };
     document.getElementById('target-pill').style.display = _targetReached ? 'flex' : 'none';
   } catch(e) { /* older backend without the target endpoint */ }
   updateTargetStatus();
@@ -2527,8 +2541,8 @@ async function sendCommand(action) {
     if (isNaN(t)) { showToast('Set a valid ambient temperature in Settings.', true); return; }
     _startRequested = true;  // marks this RUNNING transition as a fresh run (clears the buffer)
     // Film material parameters from the Measurement settings (per-run values)
-    const dens = parseFloat(document.getElementById('s-mat-dens')?.value);
-    const zr   = parseFloat(document.getElementById('s-mat-zratio')?.value);
+    const dens = parseFloat(fieldValue('s-mat-dens'));
+    const zr   = parseFloat(fieldValue('s-mat-zratio'));
     url = `${API_URL}/measurement/start?ambient_temp=${t}`
         + (isNaN(dens) ? '' : `&mat_dens=${dens}`)
         + (isNaN(zr)   ? '' : `&z_ratio=${zr}`);
@@ -2665,7 +2679,8 @@ function goToCrystalSettings() {
   document.querySelectorAll('.tab-panel').forEach(p => p.classList.toggle('active', p.id === 'panel-settings'));
   document.querySelectorAll('.settings-nav-item').forEach(i => i.classList.remove('active'));
   document.querySelectorAll('.settings-panel').forEach(p => p.classList.toggle('active', p.id === 'spanel-crystals'));
-  document.querySelector('[onclick*="crystals"]')?.classList.add('active');
+  const crystalsNav = document.querySelector('[onclick*="crystals"]');
+  if (crystalsNav) crystalsNav.classList.add('active');
   initCoeffChartsIfNeeded();
 }
 
@@ -2745,7 +2760,7 @@ let _baselineReady = false;
 function isDirty(ids) {
   return ids.some(id => {
     const el = document.getElementById(id);
-    return el && String(el.value) !== String(_baseline[id] ?? '');
+    return el && String(el.value) !== String(ifNull(_baseline[id], ''));
   });
 }
 
@@ -2821,11 +2836,15 @@ function undoSettings() {
 }
 
 // Recompute dirtiness whenever any settings field is edited.
-document.querySelector('.settings-content')?.addEventListener('input', updateDirtyState);
-document.querySelector('.settings-content')?.addEventListener('change', updateDirtyState);
+const settingsContent = document.querySelector('.settings-content');
+if (settingsContent) {
+  settingsContent.addEventListener('input', updateDirtyState);
+  settingsContent.addEventListener('change', updateDirtyState);
+}
 // The target readout follows the field as it is typed, so "ARMED at 250 nm"
 // reflects what is in the box even before APPLY commits it.
-document.getElementById('s-target-thickness')?.addEventListener('input', updateTargetStatus);
+const targetThicknessInput = document.getElementById('s-target-thickness');
+if (targetThicknessInput) targetThicknessInput.addEventListener('input', updateTargetStatus);
 
 function toggleCrystalAdvanced(btn) {
   const adv = document.getElementById('crystal-advanced');
@@ -2872,7 +2891,7 @@ function initCoeffChartsIfNeeded() {
 
 function updateCoeffCharts() {
   if (!_coeffChartsInit) return;
-  const gv = id => parseFloat(document.getElementById(id)?.value) || 0;
+  const gv = id => parseFloat(fieldValue(id)) || 0;
   const fM3 = gv('s-coeff-fM3'), fM2 = gv('s-coeff-fM2'), fM1 = gv('s-coeff-fM1');
   const fT3 = gv('s-coeff-fT3'), fT2 = gv('s-coeff-fT2'), fT1 = gv('s-coeff-fT1');
   const temps = Array.from({ length: 101 }, (_, i) => i);  // 0–100 °C
@@ -3013,8 +3032,9 @@ function promptDeleteCalPoint(i) {
 // the compensation algorithm derives from the start frequencies rather than the fit.
 function renderCalCoeffs() {
   const set = (id, v) => { const el = document.getElementById(id); if (el) el.textContent = (v == null) ? '—' : Number(v).toPrecision(7); };
-  set('cal-fM3', _calCoefM?.[0]); set('cal-fM2', _calCoefM?.[1]); set('cal-fM1', _calCoefM?.[2]);
-  set('cal-fT3', _calCoefT?.[0]); set('cal-fT2', _calCoefT?.[1]); set('cal-fT1', _calCoefT?.[2]);
+  const m = _calCoefM || [], t = _calCoefT || [];
+  set('cal-fM3', m[0]); set('cal-fM2', m[1]); set('cal-fM1', m[2]);
+  set('cal-fT3', t[0]); set('cal-fT2', t[1]); set('cal-fT1', t[2]);
   const btn = document.getElementById('btn-cal-transfer');
   if (btn) btn.disabled = !(_calCoefM && _calCoefT);
 }
@@ -3059,7 +3079,7 @@ function transferCalCoeffs() {
   if (!_calCoefM || !_calCoefT) { showToast('Need at least 4 points to fit', true); return; }
   ensureTransferCharts();
   const temps = Array.from({ length: 101 }, (_, i) => i);  // 0–100 °C
-  const gv = id => parseFloat(document.getElementById(id)?.value) || 0;
+  const gv = id => parseFloat(fieldValue(id)) || 0;
   const poly = (c3, c2, c1) => temps.map(t => c3*t**3 + c2*t**2 + c1*t);  // constant term omitted
   setTransferChart(_transferCharts.fM, temps,
     poly(gv('s-coeff-fM3'), gv('s-coeff-fM2'), gv('s-coeff-fM1')),
@@ -3105,7 +3125,8 @@ function onLogEvent(ev) {
   const dot = document.getElementById('log-tab-dot');
   if (dot && dot.style.background !== 'var(--green)') dot.style.background = 'var(--green)';
 
-  if (document.getElementById('log-autoscroll')?.checked) out.scrollTop = out.scrollHeight;
+  const autoscroll = document.getElementById('log-autoscroll');
+  if (autoscroll && autoscroll.checked) out.scrollTop = out.scrollHeight;
 }
 
 function clearLogs() {

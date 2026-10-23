@@ -868,7 +868,10 @@ function switchSettings(name, el) {
 // ---- Chart factory ----
 const TC = '#8a95a8';  // tick color — matches --text-dim
 const YAXIS = { display: true, ticks: { color: TC, font: { family: 'DM Mono', size: 9 }, maxTicksLimit: 4 }, grid: { color: 'rgba(255,255,255,0.03)' }, border: { color: 'transparent' } };
-const TAXIS = { display: true, ticks: { color: TC, font: { family: 'DM Mono', size: 9 }, maxTicksLimit: 5, autoSkip: true }, grid: { display: false }, border: { color: 'transparent' } };
+// sampleSize: fitting the time labels measures 5 of them instead of every one
+// (3000 on Main), which was a third of each redraw. They are all HH:MM:SS, so the
+// sample gives the same ticks.
+const TAXIS = { display: true, ticks: { color: TC, font: { family: 'DM Mono', size: 9 }, maxTicksLimit: 5, autoSkip: true, sampleSize: 5 }, grid: { display: false }, border: { color: 'transparent' } };
 const ZOOM_CFG = { zoom: { drag: { enabled: true, backgroundColor: 'rgba(74,158,255,0.06)', borderColor: 'rgba(74,158,255,0.35)', borderWidth: 1 }, mode: 'x' } };
 const BASE_OPTS = { responsive: true, maintainAspectRatio: false, animation: false, plugins: { legend: { display: false }, tooltip: { enabled: false }, zoom: ZOOM_CFG }, scales: { x: TAXIS, y: YAXIS } };
 
@@ -1365,10 +1368,21 @@ let sampleCount = 0;
 // progressively unresponsive as the charts filled up.
 const CHART_REDRAW_MS = 100;
 const _dirtyCharts = new Set();
+// A chart on a hidden tab is skipped and stays dirty, so it draws within one tick
+// of its tab being shown. Most of the live charts are off-screen at any moment,
+// and updating them cost as much as drawing the visible ones — on a slow PC that
+// alone was enough to saturate the page.
+function chartOnVisibleTab(c) {
+  const panel = c.canvas.closest('.tab-panel');
+  return !panel || panel.classList.contains('active');
+}
 setInterval(() => {
   if (document.hidden) return;  // skip repaints in background tabs; data still accumulates
-  for (const c of _dirtyCharts) c.update('none');
-  _dirtyCharts.clear();
+  for (const c of _dirtyCharts) {
+    if (!chartOnVisibleTab(c)) continue;
+    c.update('none');
+    _dirtyCharts.delete(c);
+  }
 }, CHART_REDRAW_MS);
 
 function push(chart, value, dsIdx = 0, max = MAX_PTS_MAIN, label = '') {

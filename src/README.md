@@ -75,6 +75,21 @@ the control software drives it ([`domain/status_leds.py`](domain/status_leds.py)
 The lock LEDs stay dark through a sweep and a capacitor adjustment, which open
 the loops. All four go dark when the service stops.
 
+## Temperature sensors (LTC2986)
+
+The V2 board carries an LTC2986 on the SPI pins of the E2 connector
+(`/dev/spidev1.0`), wired for a 4-wire PT100 and a thermocouple whose cold
+junction is a TSic 501F on the board. A background thread
+([`workers/temperature_worker.py`](workers/temperature_worker.py)) reads all
+three once a second; the readings, with any fault the chip flags, show in the
+**TEMP SENSORS** tab and at `GET /temperatures`. A box without the board just
+shows them as unavailable, with the reason.
+
+The channel map, and the values the schematic does not give (the sense resistor
+R22, the thermocouple type), are at the top of
+[`domain/temperature_sensors.py`](domain/temperature_sensors.py). The PT100
+reads in proportion to the sense resistor, so set it to the fitted value.
+
 ## OPC-UA
 
 The bridge to the WAGO PLC is **off by default**: switch it on under Settings →

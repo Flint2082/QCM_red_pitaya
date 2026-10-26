@@ -8,6 +8,7 @@ from domain.fpga_interface import FPGAInterface
 from domain.qcm_interface import QCMInterface
 from domain.version import VersionInfo
 from workers.qcm_worker import QCMWorker
+from workers.temperature_worker import TemperatureWorker
 from app.application import Application
 from api.server import RestServer
 from plc.wago_client import WagoClient
@@ -52,6 +53,11 @@ def build_system(enable_opcua: bool = True):
         version=version,
     )
 
+    # LTC2986 temperature sensors on the SPI bus. A box without them only gets
+    # "unavailable" in the TEMP SENSORS tab; see domain/temperature_sensors.py.
+    temperature_queue = queue.Queue()
+    temperature_worker = TemperatureWorker(event_queue=temperature_queue)
+
     # OPC-UA bridge (optional — system works without a PLC)
     opc_worker = None
     opc_command_queue = None
@@ -80,6 +86,7 @@ def build_system(enable_opcua: bool = True):
         opc_command_queue=opc_command_queue,
         opc_event_queue=opc_event_queue,
         opc_status_queue=opc_status_queue,
+        temperature_queue=temperature_queue,
     )
 
     rest_server = RestServer(
@@ -99,6 +106,7 @@ def build_system(enable_opcua: bool = True):
         qcm=qcm,
         version=version,
         qcm_worker=qcm_worker,
+        temperature_worker=temperature_worker,
         application=application,
         rest_server=rest_server,
         worker_command_queue=worker_command_queue,
@@ -108,6 +116,7 @@ def build_system(enable_opcua: bool = True):
         opc_command_queue=opc_command_queue,
         opc_event_queue=opc_event_queue,
         opc_status_queue=opc_status_queue,
+        temperature_queue=temperature_queue,
     )
     if opc_worker:
         system["opc_worker"] = opc_worker
@@ -136,6 +145,7 @@ def run_normal(system: dict):
     """Start worker + application threads and run the main loop."""
 
     system["qcm_worker"].start()
+    system["temperature_worker"].start()
     system["application"].start()
     if "opc_worker" in system:
         system["opc_worker"].start()
@@ -161,6 +171,8 @@ def run_normal(system: dict):
         if "opc_worker" in system:
             system["opc_worker"].stop()
             system["opc_worker"].join()
+        system["temperature_worker"].stop()
+        system["temperature_worker"].join()
         system["application"].stop()
         system["qcm_worker"].stop()
         system["qcm_worker"].join()

@@ -113,6 +113,17 @@ class SystemStatusEvent(ApiEvent):
     lock_status_temp_mode: bool
 
 @dataclass
+class TemperatureEvent(ApiEvent):
+    """One round of readings from the LTC2986 temperature sensors, from
+    workers/temperature_worker.py. `sensors` holds one dict per sensor (key,
+    name, channel, temperature in °C or None, faults); it is empty while the
+    chip is unavailable, and `error` then says why."""
+    available: bool
+    sensors: list[dict] = field(default_factory=list)
+    error: str | None = None
+    timestamp: float | None = None
+
+@dataclass
 class OpcStatusEvent(ApiEvent):
     connected: bool
     enabled: bool = True  # False = bridge switched off (opc_enabled), not a lost link

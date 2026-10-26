@@ -39,6 +39,8 @@ class Application(threading.Thread):
         opc_command_queue: queue.Queue | None = None,
         opc_event_queue:   queue.Queue | None = None,
         opc_status_queue:  queue.Queue | None = None,
+        # Readings from the temperature worker (optional)
+        temperature_queue: queue.Queue | None = None,
 
         system_state=None,
     ):
@@ -49,6 +51,7 @@ class Application(threading.Thread):
         self._command_queues: list[queue.Queue] = [q for q in (api_command_queue, opc_command_queue) if q]
         self._event_queues:   list[queue.Queue] = [q for q in (api_event_queue,   opc_event_queue)   if q]
         self._opc_status_queue: queue.Queue | None = opc_status_queue
+        self._temperature_queue: queue.Queue | None = temperature_queue
         self.system_state = system_state
         self.running = True
 
@@ -72,6 +75,7 @@ class Application(threading.Thread):
                 did_work = self._process_api_commands()
                 did_work |= self._process_worker_events()
                 did_work |= self._process_opc_status()
+                did_work |= self._process_temperatures()
                 # Sleep briefly when idle — without this the loop busy-spins at
                 # 100% CPU, starving the worker and the uvicorn event loop (GIL
                 # contention), which makes the UI laggy and drops WebSockets.
@@ -93,6 +97,22 @@ class Application(threading.Thread):
         try:
             while True:
                 self._emit(self._opc_status_queue.get_nowait())
+                did_work = True
+        except queue.Empty:
+            pass
+        return did_work
+
+    # --------------------------------------------------
+    # Inbound: temperature readings → forward to REST/WS clients
+    # --------------------------------------------------
+
+    def _process_temperatures(self) -> bool:
+        if self._temperature_queue is None:
+            return False
+        did_work = False
+        try:
+            while True:
+                self._emit(self._temperature_queue.get_nowait())
                 did_work = True
         except queue.Empty:
             pass

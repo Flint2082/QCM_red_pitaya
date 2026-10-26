@@ -299,6 +299,7 @@ class RestServer:
         self._broadcaster_started = False  # guards against starting two broadcasters
         self._last_state: str = "IDLE"
         self._last_opc_status: dict | None = None
+        self._last_temperatures: dict | None = None  # latest TemperatureEvent, as sent
         # Run log the worker is currently writing (None = not recording). Tracked
         # so the UI downloads the run it just took rather than whichever file in
         # data/runs/ happens to have the newest mtime.
@@ -778,6 +779,9 @@ class RestServer:
                 elif msg.get("type") == "OpcStatusEvent":
                     self._last_opc_status = msg
 
+                elif msg.get("type") == "TemperatureEvent":
+                    self._last_temperatures = msg
+
                 await self.manager.broadcast(msg)
             except queue.Empty:
                 await asyncio.sleep(0.01)
@@ -817,6 +821,8 @@ class RestServer:
             await ws.send_json({"type": "StateEvent", "state": self._last_state})
             if self._last_opc_status:
                 await ws.send_json(self._last_opc_status)
+            if self._last_temperatures:
+                await ws.send_json(self._last_temperatures)
             try:
                 while True:
                     await ws.receive_text()   # keep connection alive; we only push, not receive
@@ -1444,6 +1450,15 @@ class RestServer:
         @app.get("/state")
         def get_state():
             return {"state": self._last_state}
+
+        @app.get("/temperatures")
+        def get_temperatures():
+            """The latest read of the LTC2986 temperature sensors (°C), or why
+            there is none. See domain/temperature_sensors.py for the channels."""
+            if self._last_temperatures is None:
+                return {"available": False, "sensors": [], "error": "no reading yet",
+                        "timestamp": None}
+            return {k: v for k, v in self._last_temperatures.items() if k != "type"}
 
         # ---- OPC-UA connection management ----
 

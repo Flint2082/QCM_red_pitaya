@@ -244,6 +244,7 @@ footer { height: 24px; background: var(--surface); border-top: 1px solid var(--b
   <button class="tab" onclick="switchTab('calibrate',this)"><div class="tab-dot" style="background:#26d0ce"></div>CALIBRATE</button>
   <button class="tab" onclick="switchTab('settings',this)"><div class="tab-dot" style="background:var(--orange)"></div>SETTINGS</button>
   <button class="tab" onclick="switchTab('logs',this)"><div class="tab-dot" id="log-tab-dot" style="background:var(--border-2)"></div>LOGS</button>
+  <button class="tab" onclick="switchTab('temps',this)"><div class="tab-dot" id="temps-tab-dot" style="background:var(--border-2)"></div>TEMP SENSORS</button>
 </div>
 
 <div class="content">
@@ -763,6 +764,28 @@ footer { height: 24px; background: var(--surface); border-top: 1px solid var(--b
     <div id="log-output"></div>
   </div>
 
+  <!-- TEMP SENSORS — temporary: a direct readout of the LTC2986 on the V2 board.
+       Labels and channels are filled in from the backend's TemperatureEvent. -->
+  <div class="tab-panel" id="panel-temps">
+    <div class="toolbar">
+      <span class="toolbar-label">LTC2986</span>
+      <div class="status-pill idle" id="temps-status">WAITING</div>
+      <span id="temps-error" style="font-family:'DM Mono',monospace;font-size:10px;color:var(--red)"></span>
+      <div class="header-spacer"></div>
+      <button class="btn" onclick="clearTempCharts()">CLEAR</button>
+    </div>
+    <div class="stat-bar">
+      <div class="stat"><div class="stat-label" id="label-temp-pt100">PT100</div><div class="stat-value" id="val-temp-pt100" style="color:var(--orange)">—</div><div class="stat-unit" id="unit-temp-pt100">°C</div></div>
+      <div class="stat"><div class="stat-label" id="label-temp-thermocouple">Thermocouple</div><div class="stat-value" id="val-temp-thermocouple" style="color:var(--red)">—</div><div class="stat-unit" id="unit-temp-thermocouple">°C</div></div>
+      <div class="stat"><div class="stat-label" id="label-temp-cold_junction">Cold Junction</div><div class="stat-value" id="val-temp-cold_junction" style="color:var(--blue)">—</div><div class="stat-unit" id="unit-temp-cold_junction">°C</div></div>
+    </div>
+    <div class="chart-grid" style="grid-template-columns:1fr; grid-template-rows:1fr 1fr 1fr;">
+      <div class="chart-card"><div class="chart-card-header"><div class="chart-card-title"><div class="chart-color-bar" style="background:var(--orange)"></div><span id="title-temp-pt100">PT100</span></div><div class="chart-card-meta" id="meta-temp-pt100">—</div></div><div class="chart-body"><canvas id="chart-temp-pt100"></canvas></div></div>
+      <div class="chart-card"><div class="chart-card-header"><div class="chart-card-title"><div class="chart-color-bar" style="background:var(--red)"></div><span id="title-temp-thermocouple">THERMOCOUPLE</span></div><div class="chart-card-meta" id="meta-temp-thermocouple">—</div></div><div class="chart-body"><canvas id="chart-temp-thermocouple"></canvas></div></div>
+      <div class="chart-card"><div class="chart-card-header"><div class="chart-card-title"><div class="chart-color-bar" style="background:var(--blue)"></div><span id="title-temp-cold_junction">COLD JUNCTION</span></div><div class="chart-card-meta" id="meta-temp-cold_junction">—</div></div><div class="chart-body"><canvas id="chart-temp-cold_junction"></canvas></div></div>
+    </div>
+  </div>
+
 </div>
 
 <footer>
@@ -854,7 +877,8 @@ function switchTab(name, el) {
   el.classList.add('active');
   document.querySelectorAll('.tab-panel').forEach(p => p.classList.toggle('active', p.id === 'panel-' + name));
   setTimeout(() => {
-    [...Object.values(charts), ...Object.values(sweepCharts), ...Object.values(calibCharts)].forEach(c => c && c.resize());
+    [...Object.values(charts), ...Object.values(sweepCharts), ...Object.values(calibCharts),
+     ...Object.values(tempCharts)].forEach(c => c && c.resize());
     const autoscroll = document.getElementById('log-autoscroll');
     if (name === 'logs' && autoscroll && autoscroll.checked) {
       const out = document.getElementById('log-output');
@@ -1645,6 +1669,56 @@ function clearCharts() {
   Object.values(charts).forEach(c => { if (!c) return; c.data.labels=[]; c.data.datasets.forEach(d=>d.data=[]); c.update('none'); });
 }
 
+// ---- Temperature sensors (LTC2986) — the temporary TEMP SENSORS tab ----
+// Kept out of `charts` so CLEAR on Main/Monitor leaves them alone. Keyed by the
+// backend's sensor keys (domain/temperature_sensors.py); the element ids follow.
+const TEMP_MAX_PTS = 3600;  // one hour at the backend's 1 s read interval
+const tempCharts = {
+  pt100:         makeChart('chart-temp-pt100',         '#f5a623'),
+  thermocouple:  makeChart('chart-temp-thermocouple',  '#e05c5c'),
+  cold_junction: makeChart('chart-temp-cold_junction', '#4a9eff'),
+};
+
+function onTemperature(ev) {
+  const pill = document.getElementById('temps-status');
+  pill.className = 'status-pill ' + (ev.available ? 'running' : 'error');
+  pill.textContent = ev.available ? 'READING' : 'UNAVAILABLE';
+  setText('temps-error', ev.available ? '' : (ev.error || ''));
+  const ts = ev.timestamp ? new Date(ev.timestamp * 1000).toLocaleTimeString() : '';
+  if (!ev.available) {
+    // Blank the tiles rather than leave the last readings looking live, and
+    // break the lines so the outage shows on the charts.
+    document.getElementById('temps-tab-dot').style.background = 'var(--red)';
+    for (const key of Object.keys(tempCharts)) {
+      setText('val-temp-' + key, '—');
+      setText('meta-temp-' + key, '—');
+      setText('unit-temp-' + key, '°C');
+      document.getElementById('unit-temp-' + key).style.color = '';
+      if (tempCharts[key] && tempCharts[key].data.labels.length) push(tempCharts[key], null, 0, TEMP_MAX_PTS, ts);
+    }
+    return;
+  }
+  let anyFault = false;
+  for (const s of ev.sensors) {
+    if (!(s.key in tempCharts)) continue;
+    const faults = s.faults || [];
+    anyFault = anyFault || faults.length > 0;
+    setText('label-temp-' + s.key, `${s.name} · CH${s.channel}`);
+    setText('title-temp-' + s.key, s.name);
+    setText('val-temp-' + s.key, fmt(s.temperature, 2));
+    const unit = document.getElementById('unit-temp-' + s.key);
+    unit.textContent = faults.length ? '°C · ' + faults.join(', ') : '°C';
+    unit.style.color = faults.length ? 'var(--red)' : '';
+    setMeta('meta-temp-' + s.key, s.temperature, '°C');
+    push(tempCharts[s.key], s.temperature, 0, TEMP_MAX_PTS, ts);
+  }
+  document.getElementById('temps-tab-dot').style.background = anyFault ? 'var(--orange)' : 'var(--green)';
+}
+
+function clearTempCharts() {
+  Object.values(tempCharts).forEach(c => { if (!c) return; c.data.labels=[]; c.data.datasets.forEach(d=>d.data=[]); c.update('none'); });
+}
+
 // ---- WebSocket ----
 let ws = null;
 function setWsStatus(s) {
@@ -1697,6 +1771,7 @@ function connect() {
       if (ev.type === 'SweepCompleteEvent') onSweepComplete(ev);
       if (ev.type === 'CapAdjustEvent')     onCapAdjust(ev);
       if (ev.type === 'OpcStatusEvent')     onOpcStatus(ev);
+      if (ev.type === 'TemperatureEvent')   onTemperature(ev);
       if (ev.type === 'LockFailedEvent')    document.getElementById('modal-lock-failed').style.display = 'flex';
       if (ev.type === 'LockStatusEvent')    onLockStatus(ev);
       if (ev.type === 'StartFreqAutoUpdatedEvent') onStartFreqAutoUpdated(ev);

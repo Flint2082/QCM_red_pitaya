@@ -28,13 +28,13 @@ SPI_DEVICE = "/dev/spidev1.0"
 SPI_SPEED_HZ = 1_000_000   # the LTC2986 allows 2 MHz; a few bytes a second need nothing near it
 
 # ---- check against the board ----
-# R22. The schematic only calls it R_SENSE, so this is the 2 kΩ ADI's own PT100
-# boards use. The PT100 reads in direct proportion to it: 1 % off here is nearly
-# 3 °C off at room temperature, so put the measured value in.
-RSENSE_OHMS = 2000.0
+# R22, the sense resistor (the schematic only calls it R_SENSE). The PT100 reads
+# in direct proportion to it: 1 % off here is nearly 3 °C off at room
+# temperature, so put the measured value in.
+RSENSE_OHMS = 1000.0
 # Type of the thermocouple on CN5.
 THERMOCOUPLE_TYPE = "K"
-# PT100 excitation. 250 µA through 2 kΩ is 0.5 V, well inside the ADC's range;
+# PT100 excitation. 250 µA through 1 kΩ is 0.25 V, well inside the ADC's range;
 # a larger R22 needs less (ltc2986.rtd() refuses a combination that cannot fit).
 RTD_EXCITATION_UA = 250
 # TSic 501F: 0-1 V output, linear over -10..+60 °C (T = 70 °C/V * V - 10 °C).

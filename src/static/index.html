@@ -371,7 +371,7 @@ footer { height: 24px; background: var(--surface); border-top: 1px solid var(--b
         <div class="chart-body"><canvas id="chart-sweep-amp"></canvas></div>
       </div>
       <div class="chart-card">
-        <div class="chart-card-header" title="Dashed line = the loop's phase lock point (∓π/2, per this oscillator's feedback inversion). Crosses mark where the phase crosses it on a falling edge — the frequencies this oscillator can lock to."><div class="chart-card-title"><div class="chart-color-bar" style="background:var(--purple)"></div>PHASE vs FREQUENCY</div><div class="chart-card-meta" id="meta-sweep-phase">—</div></div>
+        <div class="chart-card-header" title="Solid = phase unwrapped (the ±2π jumps at ±π removed); grey dashed = the phase as measured, wrapped to ±π. Orange dashed line = the loop's phase lock point (∓π/2, per this oscillator's feedback inversion), which the measured phase crosses. Crosses mark where it does so on a falling edge — the frequencies this oscillator can lock to — drawn on the unwrapped trace."><div class="chart-card-title"><div class="chart-color-bar" style="background:var(--purple)"></div>PHASE vs FREQUENCY <span style="opacity:.5;text-transform:none;letter-spacing:0">— unwrapped, raw dashed</span></div><div class="chart-card-meta" id="meta-sweep-phase">—</div></div>
         <div class="chart-body"><canvas id="chart-sweep-phase"></canvas></div>
       </div>
     </div>
@@ -917,10 +917,11 @@ const charts = {
 // ---- Sweep charts (x-axis = frequency) ----
 const XAXIS = { display: true, ticks: { color: TC, font: { family: 'DM Mono', size: 9 }, maxTicksLimit: 8, callback: function(v) { return (this.getLabelForValue(v)/1e6).toFixed(3) + 'M'; } }, grid: { color: 'rgba(255,255,255,0.03)' }, border: { color: 'transparent' } };
 
-// Both sweep charts carry the same three datasets at the same indices, so the
+// Both sweep charts carry the same four datasets at the same indices, so the
 // amp/phase pair can be driven by one piece of code. The amp chart simply never
-// gets TARGET data.
-const SWEEP_DS = { TRACE: 0, TARGET: 1, MARKS: 2 };
+// gets TARGET or RAW data. On the phase chart TRACE is the unwrapped phase and
+// RAW the phase as measured, wrapped to ±π.
+const SWEEP_DS = { TRACE: 0, TARGET: 1, MARKS: 2, RAW: 3 };
 const LOCK_MARK_COLOR = '#f5a623';
 
 // Hovering either sweep chart annotates both — they share one frequency axis, so
@@ -976,7 +977,11 @@ const sweepCrosshairPlugin = {
       }
     }
 
-    const text = `${(freq / 1e6).toFixed(6)} MHz   ${val == null || !isFinite(val) ? '—' : Number(val).toFixed(4)}`;
+    // The phase chart also gives the measured value when unwrapping moved it.
+    const raw = chart.data.datasets[SWEEP_DS.RAW].data[i];
+    const rawNote = (raw != null && isFinite(raw) && val != null && Math.abs(raw - val) > 1e-9)
+      ? `   (raw ${Number(raw).toFixed(4)})` : '';
+    const text = `${(freq / 1e6).toFixed(6)} MHz   ${val == null || !isFinite(val) ? '—' : Number(val).toFixed(4)}${rawNote}`;
     ctx.font = '9px "DM Mono", monospace';
     const w = ctx.measureText(text).width + 10;
     // Flip the box to the left of the rule when it would overflow the plot.
@@ -991,19 +996,24 @@ const sweepCrosshairPlugin = {
   }
 };
 
-function makeSweepChart(id, color) {
+// `fill` shades under the trace — right for amplitude, meaningless for phase,
+// whose unwrapped trace can run whole turns from zero and would drag a slab.
+function makeSweepChart(id, color, fill = true) {
   const ctx = document.getElementById(id); if (!ctx) return null;
   const opts = deepCopy(BASE_OPTS);
   opts.scales.x = XAXIS;
   return new Chart(ctx, {
     type: 'line',
     data: { labels: [], datasets: [
-      { label: 'trace', data: [], borderColor: color, borderWidth: 1.5, pointRadius: 0, tension: 0, fill: true, backgroundColor: color + '14', order: 3 },
+      { label: 'trace', data: [], borderColor: color, borderWidth: 1.5, pointRadius: 0, tension: 0, fill, backgroundColor: color + '14', order: 3 },
       // Horizontal reference at the loop's phase lock point (phase chart only).
       { label: 'lock point', data: [], borderColor: 'rgba(245,166,35,0.4)', borderWidth: 1, borderDash: [4, 3], pointRadius: 0, fill: false, order: 2 },
       // Sparse: null everywhere except the samples nearest a lock point, so the
       // markers ride the same category axis as the trace.
       { label: 'lock points', data: [], showLine: false, pointStyle: 'crossRot', pointRadius: 6, pointBorderWidth: 2, borderColor: LOCK_MARK_COLOR, backgroundColor: LOCK_MARK_COLOR, order: 1 },
+      // The measured phase before unwrapping (phase chart only), greyed out and
+      // drawn underneath the trace.
+      { label: 'raw phase', data: [], borderColor: 'rgba(138,149,168,0.5)', borderWidth: 1, borderDash: [3, 3], pointRadius: 0, tension: 0, fill: false, order: 4 },
     ]},
     options: opts,
     plugins: [sweepCrosshairPlugin],
@@ -1011,7 +1021,7 @@ function makeSweepChart(id, color) {
 }
 const sweepCharts = {
   amp:   makeSweepChart('chart-sweep-amp',   '#4a9eff'),
-  phase: makeSweepChart('chart-sweep-phase', '#a78bfa'),
+  phase: makeSweepChart('chart-sweep-phase', '#a78bfa', false),
 };
 
 // ---- Calibration scatter + cubic-fit charts (x-axis = temperature) ----
@@ -1199,11 +1209,33 @@ async function abortSweep() {
   document.getElementById('val-sweep-status').textContent = 'ABORTED';
 }
 
+// Phase unwrapping. The demodulator reports the phase wrapped to ±π, so a trace
+// passing ±π jumps by 2π and the shape across a resonance is lost in the jumps.
+// Each step is taken the short way round instead (wrapPi of the difference) and
+// added to the previous unwrapped value, which removes the jumps and leaves
+// the real phase change. A step of more than π is ambiguous, and the short way
+// is the guess, as it is for any unwrap: resolving the phase across a resonance
+// needs steps well under its ~50 Hz width. The trace starts from the first
+// measured value, so it lies within ±π there and can drift from that band by
+// whole turns.
+//
+// `_unwrapLast` is the last sample with a reading, so a missing one leaves a gap
+// without breaking the continuity of what follows.
+let _unwrapLast = null;   // { raw, unwrapped }
+function unwrapNext(raw) {
+  if (raw == null || !isFinite(raw)) return null;
+  const u = _unwrapLast ? _unwrapLast.unwrapped + wrapPi(raw - _unwrapLast.raw) : raw;
+  _unwrapLast = { raw, unwrapped: u };
+  return u;
+}
+
 function onSweepPoint(e) {
+  const unwrapped = unwrapNext(e.phase);
   sweepCharts.amp.data.labels.push(e.frequency);
   sweepCharts.amp.data.datasets[SWEEP_DS.TRACE].data.push(e.amplitude);
   sweepCharts.phase.data.labels.push(e.frequency);
-  sweepCharts.phase.data.datasets[SWEEP_DS.TRACE].data.push(e.phase);
+  sweepCharts.phase.data.datasets[SWEEP_DS.TRACE].data.push(unwrapped);
+  sweepCharts.phase.data.datasets[SWEEP_DS.RAW].data.push(e.phase);
   _dirtyCharts.add(sweepCharts.amp);
   _dirtyCharts.add(sweepCharts.phase);
 
@@ -1211,7 +1243,7 @@ function onSweepPoint(e) {
   const pct = _sweepTotal > 0 ? Math.round(100 * n / _sweepTotal) : 0;
   setText('val-sweep-n', n);
   document.getElementById('meta-sweep-amp').textContent   = fmt(e.amplitude, 4);
-  document.getElementById('meta-sweep-phase').textContent = fmt(e.phase, 4);
+  document.getElementById('meta-sweep-phase').textContent = fmt(unwrapped, 4);
   document.getElementById('val-sweep-status').textContent = `${pct}%`;
 
   updateSweepLockPoints();
@@ -1302,19 +1334,26 @@ function findLockPoints(freqs, phases, amps, target) {
 let _sweepLockPoints = [];
 
 function updateSweepLockPoints() {
-  const freqs  = sweepCharts.phase.data.labels;
-  const phases = sweepCharts.phase.data.datasets[SWEEP_DS.TRACE].data;
-  const amps   = sweepCharts.amp.data.datasets[SWEEP_DS.TRACE].data;
+  const freqs     = sweepCharts.phase.data.labels;
+  // Found on the phase as measured: the search is wrap-safe by itself, and the
+  // ±π reading is the one the loop's lock point is defined on.
+  const phases    = sweepCharts.phase.data.datasets[SWEEP_DS.RAW].data;
+  const unwrapped = sweepCharts.phase.data.datasets[SWEEP_DS.TRACE].data;
+  const amps      = sweepCharts.amp.data.datasets[SWEEP_DS.TRACE].data;
   const target = lockPhaseTarget();
   const pts = findLockPoints(freqs, phases, amps, target);
   _sweepLockPoints = pts;
 
   // Markers snap to the nearer of the two bracketing samples; the reported
-  // frequency stays interpolated, which is where the precision matters.
+  // frequency stays interpolated, which is where the precision matters. On the
+  // phase chart a marker sits on the unwrapped trace, at the lock point shifted
+  // by the whole turns unwrapping has added there.
   const phaseMarks = new Array(freqs.length).fill(null);
   const ampMarks   = new Array(freqs.length).fill(null);
   pts.forEach(p => {
-    phaseMarks[p.index] = target;
+    const u = unwrapped[p.index];
+    phaseMarks[p.index] = (u == null || !isFinite(u)) ? target
+                        : target + TWO_PI * Math.round((u - target) / TWO_PI);
     const a = amps[p.index];
     ampMarks[p.index] = (a == null || !isFinite(a)) ? null : a;
   });
@@ -1369,6 +1408,7 @@ function clearSweep() {
     c.data.labels = []; c.data.datasets.forEach(d => d.data = []); c.update('none');
   });
   _sweepLockPoints = [];
+  _unwrapLast = null;
   ['val-sweep-n','val-sweep-lock-n','val-sweep-lock1',
    'val-sweep-lock2'].forEach(id => setText(id, '—'));
   document.getElementById('meta-sweep-amp').textContent   = '—';

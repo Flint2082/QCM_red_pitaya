@@ -16,6 +16,11 @@ strongest well-separated maxima are marked, which is the same "peak / 2nd peak"
 the web UI reports — use them to read off the resonance and whatever else the
 crystal is doing nearby.
 
+The phase is unwrapped by default, as on the web UI's ANALYSIS tab: the ±2π
+jumps where the measured phase passes ±π are removed, and the phase as measured
+is drawn underneath as a grey dashed line. Untick "Unwrap phase" for the
+measured phase alone.
+
 Usage:
     python tools/sweep_plotter.py [path/to/qcm_sweep.csv]
 
@@ -41,6 +46,7 @@ PEAK_SEPARATION_STEPS = 5
 
 AMP_COLOR   = "tab:blue"
 PHASE_COLOR = "tab:purple"
+RAW_PHASE_COLOR = "0.6"   # grey: the measured phase under an unwrapped trace
 
 
 def find_default_csv():
@@ -119,6 +125,18 @@ def format_settings(settings, notes):
     return text
 
 
+def unwrap_phase(phase):
+    """The phase with its ±2π jumps removed: every step taken the short way
+    round, as the web UI does. Missing samples stay missing without breaking the
+    continuity of the rest (np.unwrap alone would carry a NaN forward). A step
+    of more than π is ambiguous and the short way is a guess, so the result is
+    only as good as the step is fine compared with the resonance width."""
+    out = np.full_like(phase, np.nan)
+    ok = np.isfinite(phase)
+    out[ok] = np.unwrap(phase[ok])
+    return out
+
+
 def find_peaks(freqs, amps, count=2):
     """The `count` highest well-separated maxima, tallest first.
 
@@ -169,9 +187,14 @@ def main():
     plt.subplots_adjust(left=0.26, right=0.90, bottom=0.10, top=0.93)
 
     ax_phase = ax.twinx()
+    unwrapped = unwrap_phase(phase)
     (amp_line,)   = ax.plot(freqs, amps, color=AMP_COLOR, linewidth=1.4, label="Amplitude")
-    (phase_line,) = ax_phase.plot(freqs, phase, color=PHASE_COLOR, linewidth=1.0,
-                                  alpha=0.75, label="Phase")
+    # The measured phase, drawn under the trace; on its own (unwrapping off) it
+    # is the trace and takes the phase colour instead.
+    (raw_phase_line,) = ax_phase.plot(freqs, phase, color=RAW_PHASE_COLOR, linewidth=0.9,
+                                      linestyle="--", label="Phase (raw)", zorder=1)
+    (phase_line,) = ax_phase.plot(freqs, unwrapped, color=PHASE_COLOR, linewidth=1.0,
+                                  alpha=0.75, label="Phase (unwrapped)", zorder=2)
 
     ax.set_xlabel("Frequency (Hz)")
     ax.set_ylabel("Amplitude (log)", color=AMP_COLOR)
@@ -200,19 +223,30 @@ def main():
     settings_box.set_visible(False)
 
     # --- options check boxes -------------------------------------------------
-    ax_opts = fig.add_axes([0.02, 0.55, 0.20, 0.30])
+    ax_opts = fig.add_axes([0.02, 0.52, 0.20, 0.35])
     ax_opts.set_title("Options", fontsize=10)
     options_check = CheckButtons(
         ax_opts,
-        ["Amplitude", "Phase", "Peaks", "Show settings", "Log amplitude", "Log X axis"],
-        [True, True, bool(peak_artists), False, True, False],
+        ["Amplitude", "Phase", "Unwrap phase", "Peaks", "Show settings", "Log amplitude", "Log X axis"],
+        [True, True, True, bool(peak_artists), False, True, False],
     )
 
     def redraw(_=None):
-        (show_amp, show_phase, show_peaks, show_settings,
+        (show_amp, show_phase, unwrap, show_peaks, show_settings,
          log_amp, log_x) = options_check.get_status()
         amp_line.set_visible(show_amp)
-        phase_line.set_visible(show_phase)
+        # Unwrapped: the unwrapped trace over the raw one in grey dashes.
+        # Not: the raw phase alone, styled as the trace it now is.
+        phase_line.set_visible(show_phase and unwrap)
+        raw_phase_line.set_visible(show_phase)
+        raw_phase_line.set_color(RAW_PHASE_COLOR if unwrap else PHASE_COLOR)
+        raw_phase_line.set_linestyle("--" if unwrap else "-")
+        raw_phase_line.set_alpha(1.0 if unwrap else 0.75)
+        ax_phase.set_ylabel("Phase (rad, unwrapped)" if unwrap else "Phase (rad)", color=PHASE_COLOR)
+        # Rescale to what is shown: the unwrapped trace can run whole turns
+        # outside ±π, and should not stretch the axis once it is hidden.
+        ax_phase.relim(visible_only=True)
+        ax_phase.autoscale_view()
         for artist in peak_artists:
             artist.set_visible(show_peaks)
         settings_box.set_visible(show_settings)

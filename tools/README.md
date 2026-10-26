@@ -420,8 +420,8 @@ python sweep_plotter.py sweep.csv
 
 It draws amplitude and phase against frequency and marks the two strongest
 well-separated peaks — the same "peak / 2nd peak" the ANALYSIS tab reports. The
-phase is unwrapped by default, like the ANALYSIS tab's, with the measured phase
-as a grey dashed line underneath; untick "Unwrap phase" for the raw phase. With
+phase is unwrapped by default, like the ANALYSIS tab's; untick "Unwrap phase"
+for the phase as measured. With
 no argument it opens a file dialog or picks the newest `qcm_sweep_*.csv` from
 the current directory, `./data/sweeps`, or your Downloads folder.
 

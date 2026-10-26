@@ -17,9 +17,8 @@ the web UI reports — use them to read off the resonance and whatever else the
 crystal is doing nearby.
 
 The phase is unwrapped by default, as on the web UI's ANALYSIS tab: the ±2π
-jumps where the measured phase passes ±π are removed, and the phase as measured
-is drawn underneath as a grey dashed line. Untick "Unwrap phase" for the
-measured phase alone.
+jumps where the measured phase passes ±π are removed. Untick "Unwrap phase" for
+the phase as measured.
 
 Usage:
     python tools/sweep_plotter.py [path/to/qcm_sweep.csv]
@@ -46,7 +45,6 @@ PEAK_SEPARATION_STEPS = 5
 
 AMP_COLOR   = "tab:blue"
 PHASE_COLOR = "tab:purple"
-RAW_PHASE_COLOR = "0.6"   # grey: the measured phase under an unwrapped trace
 
 
 def find_default_csv():
@@ -189,12 +187,9 @@ def main():
     ax_phase = ax.twinx()
     unwrapped = unwrap_phase(phase)
     (amp_line,)   = ax.plot(freqs, amps, color=AMP_COLOR, linewidth=1.4, label="Amplitude")
-    # The measured phase, drawn under the trace; on its own (unwrapping off) it
-    # is the trace and takes the phase colour instead.
-    (raw_phase_line,) = ax_phase.plot(freqs, phase, color=RAW_PHASE_COLOR, linewidth=0.9,
-                                      linestyle="--", label="Phase (raw)", zorder=1)
+    # One trace; "Unwrap phase" picks which phase it shows (see redraw).
     (phase_line,) = ax_phase.plot(freqs, unwrapped, color=PHASE_COLOR, linewidth=1.0,
-                                  alpha=0.75, label="Phase (unwrapped)", zorder=2)
+                                  alpha=0.75, label="Phase")
 
     ax.set_xlabel("Frequency (Hz)")
     ax.set_ylabel("Amplitude (log)", color=AMP_COLOR)
@@ -235,17 +230,12 @@ def main():
         (show_amp, show_phase, unwrap, show_peaks, show_settings,
          log_amp, log_x) = options_check.get_status()
         amp_line.set_visible(show_amp)
-        # Unwrapped: the unwrapped trace over the raw one in grey dashes.
-        # Not: the raw phase alone, styled as the trace it now is.
-        phase_line.set_visible(show_phase and unwrap)
-        raw_phase_line.set_visible(show_phase)
-        raw_phase_line.set_color(RAW_PHASE_COLOR if unwrap else PHASE_COLOR)
-        raw_phase_line.set_linestyle("--" if unwrap else "-")
-        raw_phase_line.set_alpha(1.0 if unwrap else 0.75)
+        phase_line.set_visible(show_phase)
+        phase_line.set_ydata(unwrapped if unwrap else phase)
         ax_phase.set_ylabel("Phase (rad, unwrapped)" if unwrap else "Phase (rad)", color=PHASE_COLOR)
-        # Rescale to what is shown: the unwrapped trace can run whole turns
-        # outside ±π, and should not stretch the axis once it is hidden.
-        ax_phase.relim(visible_only=True)
+        # Rescale to the phase shown: unwrapped it can run whole turns outside
+        # ±π, measured it never leaves ±π.
+        ax_phase.relim()
         ax_phase.autoscale_view()
         for artist in peak_artists:
             artist.set_visible(show_peaks)

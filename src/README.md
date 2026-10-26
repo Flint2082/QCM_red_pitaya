@@ -78,7 +78,7 @@ the loops. All four go dark when the service stops.
 ## Temperature sensors (LTC2986)
 
 The V2 board carries an LTC2986 on the SPI pins of the E2 connector
-(`/dev/spidev1.0`), wired for a 4-wire PT100 and a thermocouple whose cold
+(`/dev/spidev2.0`), wired for a 4-wire PT100 and a thermocouple whose cold
 junction is a TSic 501F on the board. A background thread
 ([`workers/temperature_worker.py`](workers/temperature_worker.py)) reads all
 three once a second; the readings, with any fault the chip flags, show in the

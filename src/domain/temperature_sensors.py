@@ -12,7 +12,7 @@ Wiring, from Hardware/QCM_hardware_V2/QCM_hardware_V2.SchDoc (U3):
 | CH9, CH10 | CN6 "SPARE"                          | unassigned                            |
 
 The chip is on the SPI pins of the Pitaya's E2 connector (J10 21-24), which
-Linux exposes as /dev/spidev1.0. Its INTERRUPT pin is not wired to the Pitaya,
+Linux exposes as /dev/spidev2.0. Its INTERRUPT pin is not wired to the Pitaya,
 so conversions are polled for.
 
 The values under "check against the board" are not in the schematic. Each one
@@ -24,7 +24,7 @@ from dataclasses import dataclass
 from domain import ltc2986
 from domain.spi import SpiDevice
 
-SPI_DEVICE = "/dev/spidev1.0"
+SPI_DEVICE = "/dev/spidev2.0"
 SPI_SPEED_HZ = 1_000_000   # the LTC2986 allows 2 MHz; a few bytes a second need nothing near it
 
 # ---- check against the board ----

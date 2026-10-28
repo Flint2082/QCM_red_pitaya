@@ -119,14 +119,17 @@ The **CALIBRATE** tab's points are taken and kept on the Pitaya
 `data/calibration/points.json`, so they survive a page reload and a restart.
 A settle detector watches the readings and shows on the tab's SETTLE row whether
 the crystal is ready for a point. Over the last WINDOW, both modes must stay
-locked, fT must drift less than the limit in Hz/min, and, with a sensor as the
+locked, fT must drift less than the limit in Hz/min (over the whole window and
+over its last third), and, with a sensor as the
 TEMP source, that sensor must report no fault and drift less than its limit in
 °C/min. All of that has to hold for HOLD.
 
 Each point is the average of fM, fT and the temperature over the window. With a
 sensor as the source and AUTO on, the point is taken by itself once the crystal
 has settled, and the page signals that it is time to set the next temperature.
-The next automatic point waits until fT has moved about 0.6 °C away. With the
+The next one waits until fT has left that temperature (100 Hz, about 0.7 °C,
+for 10 s in a row) and then for a whole window recorded after that, so it is
+never averaged partly on the old plateau. With the
 Manual source, the page signals when the crystal has settled, and you enter the
 temperature and press ADD POINT. ADD POINT before the crystal has settled asks
 first. The same is available at `GET /calibration`,

@@ -9,19 +9,29 @@ neither on a browser staying open nor on somebody clicking at the right time.
 Settled means that over the last `window_s`:
   * both modes stayed locked;
   * fT moved less than `max_ft_drift` Hz/min — the crystal's own reading, and
-    the criterion of the calibration method: 2 Hz/min is about 0.012 °C/min;
+    the criterion of the calibration method: 2 Hz/min is about 0.012 °C/min —
+    over the whole window and over its last third alone;
   * with a sensor as the temperature source, that sensor reported no fault and
     moved less than `max_temp_drift` °C/min;
 and that all of this has held for `hold_s` without a break. Drifts are
-least-squares slopes over the window. A point is the average over that same
-window, so fM, fT and the reference temperature come from one and the same span.
+least-squares slopes. A point is the average over that same window, so fM, fT
+and the reference temperature come from one and the same span. The last-third
+fT drift is there because a three-minute fit hardly notices a change that has
+only just begun: it would call the start of a ramp settled for a while.
 
 With a sensor as the source and auto_capture on, the point is taken as soon as
 the crystal has settled, and the operator only has to change the Peltier when
-told. The next automatic point waits until fT has moved REARM_HZ away from the
-last one, i.e. until the temperature has actually been changed. A point can
-always be taken by hand too; with the manual source that is the only way, since
-only the operator knows the temperature.
+told. After a point, the crystal counts as having left it once fT has stayed
+more than REARM_HZ away for DEPART_S seconds in a row. From then on the window
+only reaches back to that moment, so the next point is judged and averaged on
+the new temperature alone; it also has to average out REARM_HZ away from the
+last one. (On 2026-10-28 a point was taken 1:44 after the previous one: fT had
+jumped ~100 Hz in the last few seconds when the Peltier was turned down, which
+the window fit did not register while the newest second already counted as a
+new temperature, and the average was 5 Hz off the old plateau.)
+
+A point can always be taken by hand too; with the manual source that is the
+only way, since only the operator knows the temperature.
 
 Frequency samples (~10 Hz) are averaged into one-second bins as they arrive:
 that is all the resolution a settling with a ten-minute time constant needs, and
@@ -52,10 +62,12 @@ POINTS_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..
 SOURCES = {"manual": "Manual", **{s.key: s.name for s in SENSORS}}
 
 # How far fT has to move from the last point before the next one is taken
-# automatically: about 0.6 °C on the crystals in use, whose temp mode moves
-# ~170 Hz/°C. Keeps a plateau from being captured twice, while still letting a
-# temperature be visited again from the other direction.
+# automatically: 0.6-0.7 °C on the crystals in use, whose temp modes move
+# 145-170 Hz/°C. Keeps a plateau from being captured twice, while still letting
+# a temperature be visited again from the other direction.
 REARM_HZ = 100.0
+# ...and for how long in a row, so a brief excursion does not count as leaving.
+DEPART_S = 10
 # Locked seconds a point needs at the least; a shorter average is mostly noise.
 MIN_POINT_SECONDS = 10
 # Readings count as stopped after this long without one (a sweep or a capacitor
@@ -130,10 +142,12 @@ class CalibrationRecorder:
         # which the chip was unavailable.
         self._temps: deque = deque()
         self._steady_since: float | None = None
-        # fT of the last point taken, and its id. The next automatic point waits
-        # for fT to move REARM_HZ away from it; deleting that point lifts the wait.
-        self._rearm_fT: float | None = None
-        self._rearm_point: int | None = None
+        # The last settled point: its fT, id and the end of its window, and when
+        # fT left it (None while it has not). Deleting that point forgets it.
+        self._last_fT: float | None = None
+        self._last_point: int | None = None
+        self._last_end: float = 0.0
+        self._left_at: float | None = None
         self._auto_error: str | None = None   # last reason an automatic point failed, said once
         self.save_error: str | None = None    # why the last save failed, shown in the status
         self._load()
@@ -212,9 +226,35 @@ class CalibrationRecorder:
                 values.append((t, temperature))
         return values, problem
 
+    def _departure(self) -> float | None:
+        """When fT left the last point: the first second of a run of DEPART_S
+        seconds in a row more than REARM_HZ away from it. Found once, then kept."""
+        if self._left_at is None and self._last_fT is not None:
+            run_start, run = None, 0
+            for b in self._bins:
+                if b.t < self._last_end or not b.n:
+                    continue
+                if abs(b.fT / b.n - self._last_fT) > REARM_HZ:
+                    run_start = b.t if run == 0 else run_start
+                    run += 1
+                    if run >= DEPART_S:
+                        self._left_at = run_start
+                        break
+                else:
+                    run = 0
+        return self._left_at
+
+    def _window_start(self, now: float) -> float:
+        """Where the window starts: window_s back, but never before fT left the
+        last point, so the next point is judged and averaged on its own
+        temperature and never partly on the old one."""
+        start = now - self.settings.window_s
+        left = self._departure()
+        return start if left is None else max(start, left)
+
     def _evaluate(self, now: float) -> dict:
         s = self.settings
-        start = now - s.window_s
+        start = self._window_start(now)
         bins = [b for b in self._bins if b.t >= start]
         good = [b for b in bins if b.n]
         latest = self._bins[-1] if self._bins else None
@@ -223,17 +263,24 @@ class CalibrationRecorder:
             "source": s.source, "source_name": SOURCES[s.source],
             "window_s": s.window_s, "hold_s": s.hold_s, "covered_s": len(good),
             "max_ft_drift": s.max_ft_drift, "max_temp_drift": s.max_temp_drift,
-            "fM": None, "fT": None, "fM_drift": None, "fT_drift": None,
+            "fM": None, "fT": None, "fM_drift": None, "fT_drift": None, "fT_recent_drift": None,
             "temperature": None, "temp_faults": [], "temp_drift": None,
             "steady_for": None, "auto_capture": s.auto_capture, "armed": False,
             "points": len(self.points), "save_error": self.save_error,
         }
+        window_fT = None   # average over the window
         if good:
             status["fM"] = good[-1].fM / good[-1].n
             status["fT"] = good[-1].fT / good[-1].n
             ts = [b.t for b in good]
+            fTs = [b.fT / b.n for b in good]
+            window_fT = sum(fTs) / len(fTs)
             status["fM_drift"] = _slope_per_min(ts, [b.fM / b.n for b in good])
-            status["fT_drift"] = _slope_per_min(ts, [b.fT / b.n for b in good])
+            status["fT_drift"] = _slope_per_min(ts, fTs)
+            recent = [(t, f) for t, f in zip(ts, fTs) if t >= now - s.window_s / 3]
+            if len(recent) >= 10:
+                status["fT_recent_drift"] = _slope_per_min([t for t, _ in recent],
+                                                           [f for _, f in recent])
 
         sensor = s.source != "manual"
         problem, values = None, []
@@ -249,6 +296,7 @@ class CalibrationRecorder:
             status["temp_drift"] = _slope_per_min([t for t, _ in values], [v for _, v in values])
 
         fT_drift, temp_drift = status["fT_drift"], status["temp_drift"]
+        fT_recent = status["fT_recent_drift"]
         steady = False
         if latest is None or now - latest.t > STALE_S:
             state, reason = "no_data", "no frequency readings"
@@ -263,15 +311,20 @@ class CalibrationRecorder:
             state, reason = "collecting", f"{_mmss(len(good))} of {_mmss(s.window_s)} collected"
         elif abs(fT_drift) > s.max_ft_drift:
             state, reason = "settling", f"fT drifting {fT_drift:+.2f} Hz/min"
+        elif fT_recent is not None and abs(fT_recent) > s.max_ft_drift:
+            state, reason = ("settling", f"fT drifting {fT_recent:+.2f} Hz/min "
+                                         f"over the last {_mmss(s.window_s / 3)}")
         elif sensor and abs(temp_drift) > s.max_temp_drift:
             state, reason = "settling", f"{SOURCES[s.source]} drifting {temp_drift:+.4f} °C/min"
         else:
             steady = True
             state, reason = "steady", None
 
-        # Whether the last point was taken at this temperature.
-        point_here = (self._rearm_fT is not None and status["fT"] is not None
-                      and abs(status["fT"] - self._rearm_fT) <= REARM_HZ)
+        # Whether the last point was taken at this temperature: fT has not left
+        # it, or has come back to within REARM_HZ of it on average.
+        point_here = self._last_fT is not None and (
+            self._departure() is None
+            or (window_fT is not None and abs(window_fT - self._last_fT) <= REARM_HZ))
         if not steady:
             self._steady_since = None
         elif self._steady_since is None:
@@ -311,7 +364,7 @@ class CalibrationRecorder:
 
     def _capture(self, now: float, temperature, auto: bool, run, status: dict) -> dict:
         s = self.settings
-        start = now - s.window_s
+        start = self._window_start(now)
         # Only seconds in which every sample was locked.
         good = [b for b in self._bins if b.t >= start and b.n and b.locked]
         if len(good) < MIN_POINT_SECONDS:
@@ -351,7 +404,7 @@ class CalibrationRecorder:
         # A settled point is the one for this temperature. One taken on the
         # way there is not, and must not hold up the point where it settles.
         if point["settled"]:
-            self._rearm_fT, self._rearm_point = fT, point["id"]
+            self._remember(point)
         self._save()
         print(f"[CAL] Point {point['id']} {'taken automatically' if auto else 'added'}: "
               f"{point['temperature']:.3f} °C ({point['source_name']}), fM {fM:.2f} Hz, "
@@ -365,16 +418,24 @@ class CalibrationRecorder:
             if len(kept) == len(self.points):
                 return False
             self.points = kept
-            if point_id == self._rearm_point:
-                self._rearm_fT = self._rearm_point = None   # may be taken again here
+            if point_id == self._last_point:
+                self._remember(None)   # this temperature may be taken again
             self._save()
             return True
 
     def clear(self):
         with self._lock:
             self.points = []
-            self._rearm_fT = self._rearm_point = None
+            self._remember(None)
             self._save()
+
+    def _remember(self, point: dict | None):
+        """Make `point` the last settled one, which the next automatic point
+        has to move away from; None forgets it."""
+        self._last_fT = point["fT"] if point else None
+        self._last_point = point["id"] if point else None
+        self._last_end = point["end"] if point else 0.0
+        self._left_at = None
 
     # ==================================================
     # Settings
@@ -453,8 +514,7 @@ class CalibrationRecorder:
             # it again: wait, as before, to move away from the last settled one.
             settled = [p for p in self.points if p.get("settled")]
             if settled:
-                last = max(settled, key=lambda p: p["time"])
-                self._rearm_fT, self._rearm_point = last["fT"], last["id"]
+                self._remember(max(settled, key=lambda p: p["time"]))
             print(f"[CAL] Loaded {len(self.points)} calibration point(s) from {self.path}")
         except Exception as e:
             # Keep the unreadable file for inspection rather than overwrite it.
@@ -464,6 +524,7 @@ class CalibrationRecorder:
             except OSError:
                 pass
             self.settings, self.points, self._next_id = Settings(), [], 1
+            self._remember(None)
 
     def _save(self):
         """Write everything, atomically: a power cut leaves the old file or the

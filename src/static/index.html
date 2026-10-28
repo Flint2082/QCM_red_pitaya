@@ -4,6 +4,12 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>QCM Monitor</title>
+<!-- Tab icon: the electrode pattern of the sensor crystal. The lab PC's
+     Chromium 72–79 predates SVG favicons (Chrome 80), skips the SVG link by its
+     type and takes the .ico; newer browsers prefer the SVG. The .ico holds
+     16/32/48 px PNGs rendered from the SVG — redo them if the SVG changes. -->
+<link rel="icon" href="favicon.ico" sizes="32x32">
+<link rel="icon" href="favicon.svg" type="image/svg+xml">
 <!-- Everything this page needs is served by the Pitaya itself: the control PC
      never has to reach the internet. These were CDN links (cdnjs, jsdelivr,
      Google Fonts), which on an air-gapped bench left the page not merely
@@ -46,8 +52,7 @@ body { background: var(--bg); color: var(--text); font-family: 'DM Sans', sans-s
 
 header { height: var(--header-h); background: var(--surface); border-bottom: 1px solid var(--border); display: flex; align-items: center; padding: 0 16px; gap: 16px; flex-shrink: 0; }
 .logo { font-family: 'DM Mono', monospace; font-size: 13px; font-weight: 500; letter-spacing: 0.14em; color: var(--text); display: flex; align-items: center; gap: 8px; flex-shrink: 0; }
-.logo-icon { width: 22px; height: 22px; border: 1.5px solid var(--blue); border-radius: 2px; display: flex; align-items: center; justify-content: center; }
-.logo-icon svg { width: 12px; height: 12px; stroke: var(--blue); fill: none; }
+.logo-icon { width: 22px; height: 22px; display: block; }
 .logo-sep { width: 1px; height: 20px; background: var(--border); }
 .device-badge { font-family: 'DM Mono', monospace; font-size: 10px; color: var(--text-dim); letter-spacing: 0.06em; background: var(--surface-2); border: 1px solid var(--border); border-radius: 2px; padding: 2px 8px; }
 .version-value { font-family: 'DM Mono', monospace; font-size: 12px; color: var(--text-mid); }
@@ -200,9 +205,7 @@ footer { height: 24px; background: var(--surface); border-top: 1px solid var(--b
 
 <header>
   <div class="logo">
-    <div class="logo-icon">
-      <svg viewBox="0 0 12 12" stroke-width="1.5"><circle cx="6" cy="6" r="4"/><circle cx="6" cy="6" r="1.5" fill="var(--blue)" stroke="none"/></svg>
-    </div>
+    <img class="logo-icon" src="favicon.svg" alt="">
     QCM MONITOR
   </div>
   <div class="logo-sep"></div>

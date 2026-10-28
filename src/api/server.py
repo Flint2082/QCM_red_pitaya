@@ -1672,11 +1672,13 @@ class RestServer:
         # host: on Linux from /etc/mime.types, on Windows from the registry —
         # where .js can come back as text/plain and .woff2 as nothing at all
         # (starlette then sends text/plain). Browsers tolerate that today only
-        # because these responses carry no nosniff header. Nail the two types the
+        # because these responses carry no nosniff header. Nail the types the
         # vendored offline assets depend on, so the UI does not rest on the MIME
-        # database of whichever box happens to be serving it.
+        # database of whichever box happens to be serving it. SVG is never
+        # sniffed: served as anything else, the tab icon silently goes blank.
         mimetypes.add_type("text/javascript", ".js")
         mimetypes.add_type("font/woff2", ".woff2")
+        mimetypes.add_type("image/svg+xml", ".svg")
 
         static_dir = os.path.join(os.path.dirname(__file__), "..", "static")
         app.mount("/", StaticFiles(directory=static_dir, html=True), name="static")

@@ -26,13 +26,14 @@ from fastapi import FastAPI, File, HTTPException, UploadFile, WebSocket, WebSock
 from fastapi.responses import FileResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 
+from domain.calibration_recorder import CalibrationRecorder
 from domain.crystal import CrystalManager, CrystalProfile, sanitize_name
 from domain.qcm_interface import OUTPUT_GAIN_MAX, WINDOW_SIZE
 from domain.run_logger import MIN_FREE_BYTES, RUNS_DIR, part_number, run_base
 from domain.sweep_logger import SWEEPS_DIR
 from plc.opc_worker import _READ_KEYS as OPC_READ_KEYS, _CTRL_KEYS as OPC_CTRL_KEYS
 from messaging.api_command import *
-from messaging.api_event import LogEvent
+from messaging.api_event import CalibrationPointsEvent, CalibrationStatusEvent, LogEvent
 from messaging.defines import OutputMode
 
 
@@ -300,6 +301,11 @@ class RestServer:
         self._last_state: str = "IDLE"
         self._last_opc_status: dict | None = None
         self._last_temperatures: dict | None = None  # latest TemperatureEvent, as sent
+        # Calibration points and the settle detector that decides when to take
+        # them. Fed by the broadcaster, which sees every reading go past, and
+        # evaluated by it once a second; see domain/calibration_recorder.py.
+        self._calibration = CalibrationRecorder()
+        self._last_cal_tick = 0.0
         # Run log the worker is currently writing (None = not recording). Tracked
         # so the UI downloads the run it just took rather than whichever file in
         # data/runs/ happens to have the newest mtime.
@@ -719,9 +725,14 @@ class RestServer:
             return
         self._broadcaster_started = True
         while True:
+            now = time.time()
+            if now - self._last_cal_tick >= 1.0:
+                self._last_cal_tick = now
+                self._calibration_tick()
             try:
                 event = self.event_queue.get_nowait()
                 msg = self._serialise_event(event)
+                self._calibration_feed(msg)
 
                 if msg.get("type") == "StateEvent":
                     new_state = msg.get("state", "IDLE")
@@ -795,6 +806,44 @@ class RestServer:
             except queue.Empty:
                 await asyncio.sleep(0.01)
 
+    # ---- Calibration points: driven from the broadcaster ----
+    # A failure in here is printed and dropped: it must never take the
+    # broadcaster, and with it every live reading in the GUI, down.
+
+    def _calibration_feed(self, msg: dict):
+        """Pass the readings the settle detector needs on to it."""
+        try:
+            kind = msg.get("type")
+            if kind in ("MeasurementEvent", "TelemetryEvent") and msg.get("timestamp"):
+                self._calibration.add_frequencies(
+                    msg["timestamp"], msg.get("freq_mass_mode"), msg.get("freq_temp_mode"),
+                    bool(msg.get("lock_mass")) and bool(msg.get("lock_temp")))
+            elif kind == "TemperatureEvent" and msg.get("timestamp"):
+                self._calibration.add_temperatures(
+                    msg["timestamp"], bool(msg.get("available")), msg.get("sensors") or [])
+        except Exception as e:
+            print(f"[CAL] Reading not taken in: {e}")
+
+    def _calibration_tick(self):
+        """Evaluate the settle detector and queue its status, and the point it
+        took if it took one, for the clients."""
+        try:
+            status, added = self._calibration.tick(run=self._recording_run())
+            self.event_queue.put(CalibrationStatusEvent(status=status))
+            if added:
+                self._queue_calibration_points(added)
+        except Exception as e:
+            print(f"[CAL] Settle check failed: {e}")
+
+    def _queue_calibration_points(self, added: dict | None = None):
+        contents = self._calibration.contents()
+        self.event_queue.put(CalibrationPointsEvent(
+            points=contents["points"], settings=contents["settings"], added=added))
+
+    def _recording_run(self) -> str | None:
+        """The run being recorded right now, by its base name, or None."""
+        return run_base(self._current_run) if self._recording and self._current_run else None
+
     @staticmethod
     def _serialise_event(event) -> dict:
         """Convert an event object to a JSON-serialisable dict, flattening nested dataclasses."""
@@ -832,6 +881,9 @@ class RestServer:
                 await ws.send_json(self._last_opc_status)
             if self._last_temperatures:
                 await ws.send_json(self._last_temperatures)
+            await ws.send_json({"type": "CalibrationPointsEvent", **self._calibration.contents(),
+                                "added": None})
+            await ws.send_json({"type": "CalibrationStatusEvent", "status": self._calibration.status()})
             try:
                 while True:
                     await ws.receive_text()   # keep connection alive; we only push, not receive
@@ -1468,6 +1520,54 @@ class RestServer:
                 return {"available": False, "sensors": [], "error": "no reading yet",
                         "timestamp": None}
             return {k: v for k, v in self._last_temperatures.items() if k != "type"}
+
+        # ---- Calibration points (CALIBRATE tab) ----
+        # Kept on the Pitaya, with the settle detector that takes them; see
+        # domain/calibration_recorder.py. Every change is also pushed to all
+        # clients as a CalibrationPointsEvent.
+
+        @app.get("/calibration")
+        def get_calibration():
+            return {**self._calibration.contents(), "status": self._calibration.status()}
+
+        @app.post("/calibration/settings")
+        def set_calibration_settings(source: str | None = None, window_s: float | None = None,
+                                     max_ft_drift: float | None = None,
+                                     max_temp_drift: float | None = None,
+                                     hold_s: float | None = None, auto_capture: bool | None = None):
+            """Change any of the settings; the ones not given stay as they are."""
+            try:
+                settings = self._calibration.update_settings(
+                    source=source, window_s=window_s, max_ft_drift=max_ft_drift,
+                    max_temp_drift=max_temp_drift, hold_s=hold_s, auto_capture=auto_capture)
+            except ValueError as e:
+                raise HTTPException(400, str(e))
+            self._queue_calibration_points()
+            return settings
+
+        @app.post("/calibration/points")
+        def add_calibration_point(temperature: float | None = None):
+            """Take a point now from the last window, settled or not. The
+            temperature is needed with the manual source and ignored otherwise."""
+            try:
+                point = self._calibration.capture(temperature, run=self._recording_run())
+            except ValueError as e:
+                raise HTTPException(409, str(e))
+            self._queue_calibration_points(point)
+            return point
+
+        @app.delete("/calibration/points/{point_id}")
+        def delete_calibration_point(point_id: int):
+            if not self._calibration.delete(point_id):
+                raise HTTPException(404, "No such point")
+            self._queue_calibration_points()
+            return {"status": "ok"}
+
+        @app.delete("/calibration/points")
+        def clear_calibration_points():
+            self._calibration.clear()
+            self._queue_calibration_points()
+            return {"status": "ok"}
 
         # ---- OPC-UA connection management ----
 

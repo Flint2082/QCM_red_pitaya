@@ -106,6 +106,33 @@ R22, the thermocouple type), are at the top of
 [`domain/temperature_sensors.py`](domain/temperature_sensors.py). The PT100
 reads in proportion to the sense resistor, so set it to the fitted value.
 
+Every run log also carries the newest readings beside each sample, in
+`pt100_c`, `thermocouple_c` and `cold_junction_c` (°C), with any fault named in
+`temp_sensor_faults`. They are blank while there is no current reading.
+`temperature_c` is something else: the crystal temperature the compensation
+solves from the two modes.
+
+## Calibration points
+
+The **CALIBRATE** tab's points are taken and kept on the Pitaya
+([`domain/calibration_recorder.py`](domain/calibration_recorder.py)), in
+`data/calibration/points.json`, so they survive a page reload and a restart.
+A settle detector watches the readings and shows on the tab's SETTLE row whether
+the crystal is ready for a point. Over the last WINDOW, both modes must stay
+locked, fT must drift less than the limit in Hz/min, and, with a sensor as the
+TEMP source, that sensor must report no fault and drift less than its limit in
+°C/min. All of that has to hold for HOLD.
+
+Each point is the average of fM, fT and the temperature over the window. With a
+sensor as the source and AUTO on, the point is taken by itself once the crystal
+has settled, and the page signals that it is time to set the next temperature.
+The next automatic point waits until fT has moved about 0.6 °C away. With the
+Manual source, the page signals when the crystal has settled, and you enter the
+temperature and press ADD POINT. ADD POINT before the crystal has settled asks
+first. The same is available at `GET /calibration`,
+`POST /calibration/settings`, `POST /calibration/points` and
+`DELETE /calibration/points[/{id}]`.
+
 ## OPC-UA
 
 The bridge to the WAGO PLC is **off by default**: switch it on under Settings →

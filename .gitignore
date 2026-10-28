@@ -28,6 +28,7 @@ model_composer/qcm_rp/outputs/*.fpg
 
 # Runtime state written by the server, not source
 data/settings.json
+data/calibration/
 
 # Altium Designer leftovers: auto-backups on every save, ECO logs from every
 # schematic-to-PCB update, and the schematic thumbnail cache

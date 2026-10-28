@@ -40,7 +40,7 @@ class QCMWorker(threading.Thread):
     _DEFER_WHILE_LOCKING = (StartMeasurementCommand, StartSweepCommand, StartCapAdjustCommand)
 
     def __init__(self, qcm: QCMInterface, command_queue: queue.Queue, event_queue: queue.Queue,
-                 version=None):
+                 version=None, temperatures=None):
         super().__init__()
         self.qcm = qcm
         self.version = version  # domain.version.VersionInfo, recorded with each run
@@ -51,7 +51,9 @@ class QCMWorker(threading.Thread):
         # Durable server-side CSV log of each run, independent of the WebSocket.
         # Logging problems are pushed to the UI: the live plots keep working when
         # the log is dead, so nothing else would give the operator a clue.
+        # temperatures() supplies the LTC2986 readings written beside each sample.
         self.logger = RunLogger(
+            temperatures=temperatures,
             on_start=lambda name: self.event_queue.put(RunLogStartedEvent(name=name)),
             on_error=lambda reason: self.event_queue.put(RunLogFailedEvent(reason=reason)),
             on_reclaim=lambda summary, free: self.event_queue.put(

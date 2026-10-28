@@ -385,21 +385,48 @@ footer { height: 24px; background: var(--surface); border-top: 1px solid var(--b
       <button class="btn btn-green" id="btn-start-stop-3" onclick="toggleStartStop()"><svg viewBox="0 0 12 12"><polygon points="3,2 10,6 3,10"/></svg>START</button>
       <div class="toolbar-sep"></div>
       <span class="toolbar-label">TEMP</span>
-      <div class="num-input-wrap">
+      <select id="cal-temp-source" onchange="onCalTempSource()" title="Where ADD POINT takes the temperature from: typed in, or the latest reading of an LTC2986 sensor (TEMP SENSORS tab)" style="background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);color:var(--text);font-family:'DM Mono',monospace;font-size:11px;padding:0 8px;height:26px;outline:none;">
+        <option value="manual">Manual</option>
+        <option value="pt100">PT100</option>
+        <option value="thermocouple">Thermocouple</option>
+        <option value="cold_junction">Cold junction</option>
+      </select>
+      <div class="num-input-wrap" id="cal-temp-wrap">
         <input id="cal-temp-input" type="number" value="25" step="0.1">
         <span class="num-input-unit">°C</span>
       </div>
-      <button class="btn btn-blue" onclick="addCalPoint()" title="Record the current live frequencies at the temperature entered">
+      <button class="btn btn-blue" onclick="addCalPoint()" title="Add a point now: the frequencies and temperature averaged over the settle window">
         <svg viewBox="0 0 12 12"><path d="M5.25 1h1.5v3.75H10.5v1.5H6.75V10h-1.5V6.25H1.5v-1.5h3.75z"/></svg>ADD POINT
       </button>
+      <label title="Take the point by itself once the crystal has settled (with a sensor as the TEMP source)" style="display:flex;align-items:center;gap:6px;font-family:'DM Mono',monospace;font-size:10px;color:var(--text-dim);cursor:pointer;user-select:none">
+        <input type="checkbox" id="cal-auto" checked onchange="setCalSetting('auto_capture', this.checked)" style="accent-color:var(--blue)"> AUTO
+      </label>
       <div class="toolbar-sep"></div>
       <button class="btn" onclick="clearCalPoints()">CLEAR POINTS</button>
       <div class="header-spacer"></div>
       <button class="btn btn-blue" id="btn-cal-transfer" onclick="transferCalCoeffs()" disabled title="Compare against the current crystal calibration, then copy the fitted coefficients into the Crystal settings form">TRANSFER TO CRYSTAL →</button>
     </div>
+    <!-- Settle detector on the Pitaya: a point is due once fT (and the TEMP sensor)
+         have drifted less than the limits over WINDOW, for HOLD in a row. -->
+    <div class="toolbar">
+      <span class="toolbar-label">SETTLE</span>
+      <div class="status-pill idle" id="cal-settle-pill">—</div>
+      <span id="cal-settle-reason" style="font-family:'DM Mono',monospace;font-size:10px;color:var(--text-dim)"></span>
+      <div class="header-spacer"></div>
+      <span class="toolbar-label" title="Span the drifts are fitted over, and a point is averaged over">WINDOW</span>
+      <div class="num-input-wrap"><input id="cal-window" type="number" min="0.5" max="30" step="0.5" onchange="setCalSetting('window_s', this.value * 60)"><span class="num-input-unit">min</span></div>
+      <span class="toolbar-label" title="Largest temp-mode frequency drift that counts as settled">fT ≤</span>
+      <div class="num-input-wrap"><input id="cal-max-ft" type="number" min="0.01" step="0.1" onchange="setCalSetting('max_ft_drift', this.value)"><span class="num-input-unit">Hz/min</span></div>
+      <span class="toolbar-label" title="Largest drift of the TEMP sensor that counts as settled">T ≤</span>
+      <div class="num-input-wrap"><input id="cal-max-temp" type="number" min="0.0001" step="0.001" onchange="setCalSetting('max_temp_drift', this.value)"><span class="num-input-unit">°C/min</span></div>
+      <span class="toolbar-label" title="How long both have to stay within the limits">HOLD</span>
+      <div class="num-input-wrap"><input id="cal-hold" type="number" min="0" max="60" step="0.5" onchange="setCalSetting('hold_s', this.value * 60)"><span class="num-input-unit">min</span></div>
+    </div>
     <div class="stat-bar">
       <div class="stat"><div class="stat-label">Mass Mode Freq</div><div class="stat-value" id="val-cal-fM" style="color:var(--green)">—</div><div class="stat-unit">Hz</div></div>
       <div class="stat"><div class="stat-label">Temp Mode Freq</div><div class="stat-value" id="val-cal-fT" style="color:var(--blue)">—</div><div class="stat-unit">Hz</div></div>
+      <div class="stat"><div class="stat-label">fT Drift</div><div class="stat-value" id="val-cal-ft-drift">—</div><div class="stat-unit">Hz/min over the window</div></div>
+      <div class="stat"><div class="stat-label" id="label-cal-temp-drift">Sensor Drift</div><div class="stat-value" id="val-cal-temp-drift">—</div><div class="stat-unit">°C/min over the window</div></div>
       <div class="stat"><div class="stat-label">Calibration Points</div><div class="stat-value" id="cal-point-count">0</div><div class="stat-unit">points</div></div>
       <div class="stat"><div class="stat-label">Lock Status</div><div class="stat-value" id="val-cal-lock" style="font-size:14px;color:var(--red)">UNLOCKED</div><div class="stat-unit"></div></div>
     </div>
@@ -738,6 +765,13 @@ footer { height: 24px; background: var(--surface); border-top: 1px solid var(--b
                 <div class="notif-desc">The run log could not be written (usually a full disk) — the measurement continues but no CSV is produced</div>
               </div>
               <label class="toggle-switch"><input type="checkbox" id="notif-recFailed" checked onchange="setNotifOption('recFailed',this.checked)"><span class="toggle-slider"></span></label>
+            </div>
+            <div class="notif-row">
+              <div class="notif-row-info">
+                <div class="notif-label">Calibration Point</div>
+                <div class="notif-desc">The CALIBRATE tab took a point by itself (set the next temperature), or the crystal has settled and is waiting for one</div>
+              </div>
+              <label class="toggle-switch"><input type="checkbox" id="notif-calPoint" checked onchange="setNotifOption('calPoint',this.checked)"><span class="toggle-slider"></span></label>
             </div>
           </div>
           <button class="btn" onclick="testNotifSound()" style="margin-right:8px">TEST SOUND</button>
@@ -1089,7 +1123,7 @@ function makeCalibChart(id, color, key) {
             label: (c) => {
               if (c.datasetIndex !== 0) return '';
               const p = _calPoints[c.dataIndex];
-              return p ? [`T = ${p.t} °C`, `${key} = ${p[key].toFixed(2)} Hz`, '(click to delete)'] : '';
+              return p ? [`T = ${p.t} °C · ${p.source}`,`${key} = ${p[key].toFixed(2)} Hz`, '(click to delete)'] : '';
             }
           }
         },
@@ -1614,10 +1648,7 @@ function applyTelemetry(e, ts) {
   setText('val-fT', fmt(e.freq_temp_mode, 2));
   if (e.lock_mass) updateCrystalUsage(e.freq_mass_mode);
 
-  // Calibration tab: remember the latest live frequencies for ADD POINT, and
-  // mirror them into the calibrate stat bar + live charts.
-  if (e.freq_mass_mode != null) _lastFm = e.freq_mass_mode;
-  if (e.freq_temp_mode != null) _lastFt = e.freq_temp_mode;
+  // Calibration tab: mirror them into the calibrate stat bar + live charts.
   setText('val-cal-fM', fmt(e.freq_mass_mode, 2));
   setText('val-cal-fT', fmt(e.freq_temp_mode, 2));
   setMeta('meta-cal-fM-live', e.freq_mass_mode, 'Hz');
@@ -1702,6 +1733,7 @@ const tempCharts = {
   thermocouple:  makeChart('chart-temp-thermocouple',  '#e05c5c'),
   cold_junction: makeChart('chart-temp-cold_junction', '#4a9eff'),
 };
+setupZoomGroup(Object.values(tempCharts));  // double-click resets the zoom, as on the other tabs
 
 function onTemperature(ev) {
   const pill = document.getElementById('temps-status');
@@ -1713,6 +1745,8 @@ function onTemperature(ev) {
     // Blank the tiles rather than leave the last readings looking live, and
     // break the lines so the outage shows on the charts.
     document.getElementById('temps-tab-dot').style.background = 'var(--red)';
+    _lastTemps = {};
+    updateCalTemp(ev.error);
     for (const key of Object.keys(tempCharts)) {
       setText('val-temp-' + key, '—');
       setText('meta-temp-' + key, '—');
@@ -1727,6 +1761,9 @@ function onTemperature(ev) {
     if (!(s.key in tempCharts)) continue;
     const faults = s.faults || [];
     anyFault = anyFault || faults.length > 0;
+    _lastTemps[s.key] = { temperature: s.temperature, faults, at: Date.now() };
+    const opt = document.querySelector(`#cal-temp-source option[value="${s.key}"]`);
+    if (opt) opt.textContent = s.name;
     setText('label-temp-' + s.key, `${s.name} · CH${s.channel}`);
     setText('title-temp-' + s.key, s.name);
     setText('val-temp-' + s.key, fmt(s.temperature, 2));
@@ -1737,6 +1774,7 @@ function onTemperature(ev) {
     push(tempCharts[s.key], s.temperature, 0, MAX_PTS_TEMPS, ts);
   }
   document.getElementById('temps-tab-dot').style.background = anyFault ? 'var(--orange)' : 'var(--green)';
+  updateCalTemp();
 }
 
 function clearTempCharts() {
@@ -1796,6 +1834,8 @@ function connect() {
       if (ev.type === 'CapAdjustEvent')     onCapAdjust(ev);
       if (ev.type === 'OpcStatusEvent')     onOpcStatus(ev);
       if (ev.type === 'TemperatureEvent')   onTemperature(ev);
+      if (ev.type === 'CalibrationPointsEvent') onCalibrationPoints(ev);
+      if (ev.type === 'CalibrationStatusEvent') onCalibrationStatus(ev.status);
       if (ev.type === 'LockFailedEvent')    document.getElementById('modal-lock-failed').style.display = 'flex';
       if (ev.type === 'LockStatusEvent')    onLockStatus(ev);
       if (ev.type === 'StartFreqAutoUpdatedEvent') onStartFreqAutoUpdated(ev);
@@ -1823,7 +1863,7 @@ function showToast(msg, isError = false, isWarning = false) {
 // Preferences are per-browser (two operators on two laptops want their own), so
 // they persist to localStorage rather than to the instrument's settings.json.
 const NOTIF_STORE_KEY = 'qcm.notifications';
-const notifConfig = { enabled: false, sound: true, lockLost: true, sweepComplete: true, opcLost: true, wsLost: true, recFailed: true, storageReclaim: true, targetReached: true };
+const notifConfig = { enabled: false, sound: true, lockLost: true, sweepComplete: true, opcLost: true, wsLost: true, recFailed: true, storageReclaim: true, targetReached: true, calPoint: true };
 let _audioCtx = null;
 
 function setNotifOption(key, value) {
@@ -1850,7 +1890,7 @@ function loadNotifConfig() {
         lockLost: 'notif-lockLost', sweepComplete: 'notif-sweepComplete',
         targetReached: 'notif-targetReached', opcLost: 'notif-opcLost',
         wsLost: 'notif-wsLost', recFailed: 'notif-recFailed',
-        storageReclaim: 'notif-storageReclaim' })) {
+        storageReclaim: 'notif-storageReclaim', calPoint: 'notif-calPoint' })) {
     const el = document.getElementById(id);
     if (el) el.checked = notifConfig[k];
   }
@@ -1915,6 +1955,11 @@ function playNotifSound(eventType) {
       playBeep(660, 0.16);
       playBeep(880, 0.16, 0.25, 0.18);
       playBeep(1180, 0.3, 0.25, 0.36);
+      break;
+    case 'calPoint':
+      // Doorbell: the operator's turn at the Peltier, not a fault.
+      playBeep(880, 0.2);
+      playBeep(660, 0.35, 0.25, 0.24);
       break;
   }
 }
@@ -3142,11 +3187,130 @@ function updateCoeffCharts() {
 }
 
 // ---- Calibration tab ----
-// Points recorded by ADD POINT: each {t, fM, fT}. The latest live frequencies
-// come from onMeasurement (only streamed while a measurement is RUNNING).
-let _lastFm = null, _lastFt = null;
+// The points live on the Pitaya (domain/calibration_recorder.py), which also
+// decides when the crystal has settled and, with AUTO, takes the point itself.
+// This tab only shows them and sends the operator's changes; every change comes
+// back to all open pages as a CalibrationPointsEvent. Each point here is
+// {id, t, fM, fT, source} plus the backend's full record as `raw`.
 let _calPoints = [];
 let _calCoefM = null, _calCoefT = null;  // [c3, c2, c1, c0] each, or null when < 4 points
+let _calSettings = null;                 // as last received from the Pitaya
+let _calStatus = null;                   // latest CalibrationStatusEvent status
+
+// Each sensor's latest reading {temperature, faults}, for the TEMP field.
+let _lastTemps = {};
+
+function calTempSource() {
+  const sel = document.getElementById('cal-temp-source');
+  return { key: sel.value, name: sel.options[sel.selectedIndex].textContent };
+}
+
+function onCalTempSource() {
+  const manual = calTempSource().key === 'manual';
+  document.getElementById('cal-temp-input').readOnly = !manual;
+  updateCalTemp();
+  setCalSetting('source', calTempSource().key);
+}
+
+// Mirror the selected sensor's latest reading into the TEMP field; a fault or
+// a missing reading blanks it and outlines it red, with the reason as tooltip.
+function updateCalTemp(unavailableReason) {
+  const { key } = calTempSource();
+  const input = document.getElementById('cal-temp-input');
+  const wrap = document.getElementById('cal-temp-wrap');
+  if (key === 'manual') { wrap.style.borderColor = ''; wrap.title = ''; return; }
+  const r = _lastTemps[key];
+  const problem = !r ? (unavailableReason || 'no reading yet')
+                : r.faults.length ? r.faults.join(', ') : '';
+  input.value = r && r.temperature != null ? r.temperature.toFixed(2) : '';
+  wrap.style.borderColor = problem ? 'var(--red)' : '';
+  wrap.title = problem;
+}
+
+// Send one setting to the Pitaya. On a refusal the controls go back to what it
+// holds; on success the CalibrationPointsEvent that follows updates them.
+async function setCalSetting(key, value) {
+  try {
+    const r = await fetch(`${API_URL}/calibration/settings?${key}=${encodeURIComponent(value)}`, { method: 'POST' });
+    if (!r.ok) {
+      const d = await r.json().catch(() => ({}));
+      showToast(d.detail || `Setting not changed (HTTP ${r.status})`, true);
+      syncCalControls();
+    }
+  } catch(e) { showToast('Setting not changed: no connection', true); syncCalControls(); }
+}
+
+// Put the Pitaya's settings into the controls, leaving alone a field that is
+// being typed in.
+function syncCalControls() {
+  const s = _calSettings;
+  if (!s) return;
+  const put = (id, v) => { const el = document.getElementById(id); if (el && el !== document.activeElement) el.value = v; };
+  const sel = document.getElementById('cal-temp-source');
+  if (sel.value !== s.source) {
+    sel.value = s.source;
+    document.getElementById('cal-temp-input').readOnly = s.source !== 'manual';
+    updateCalTemp();
+  }
+  document.getElementById('cal-auto').checked = !!s.auto_capture;
+  put('cal-window', +(s.window_s / 60).toFixed(2));
+  put('cal-max-ft', s.max_ft_drift);
+  put('cal-max-temp', s.max_temp_drift);
+  put('cal-hold', +(s.hold_s / 60).toFixed(2));
+}
+
+function onCalibrationPoints(ev) {
+  _calSettings = ev.settings;
+  _calPoints = (ev.points || []).map(p => ({
+    id: p.id, t: p.temperature, fM: p.fM, fT: p.fT,
+    source: p.source_name + (p.auto ? ', auto' : '') + (p.settled ? '' : ', not settled'), raw: p }));
+  syncCalControls();
+  refreshCalCharts();
+  const p = ev.added;
+  if (p && p.auto) {
+    sendNotif('QCM — Calibration point taken',
+              `${p.temperature.toFixed(2)} °C (${p.source_name}): set the next temperature`, 'calPoint');
+  }
+}
+
+const CAL_STATES = {   // state -> [pill text, pill class]
+  no_data:    ['NO DATA',    'idle'],
+  unlocked:   ['UNLOCKED',   'error'],
+  sensor:     ['SENSOR',     'error'],
+  collecting: ['COLLECTING', 'sweeping'],
+  settling:   ['SETTLING',   'locking'],
+  steady:     ['STEADY',     'locking'],
+  settled:    ['SETTLED',    'running'],
+};
+
+function onCalibrationStatus(st) {
+  const prev = _calStatus;
+  _calStatus = st;
+  const [text, cls] = CAL_STATES[st.state] || [String(st.state).toUpperCase(), 'idle'];
+  const pill = document.getElementById('cal-settle-pill');
+  pill.className = 'status-pill ' + cls;
+  pill.textContent = text;
+  setText('cal-settle-reason', (st.reason || '') + (st.save_error ? ` · ${st.save_error}` : ''));
+  document.getElementById('cal-settle-reason').style.color = st.save_error ? 'var(--red)' : '';
+
+  const drift = (id, v, max, digits) => {
+    const el = document.getElementById(id);
+    el.textContent = v == null ? '—' : (v >= 0 ? '+' : '') + v.toFixed(digits);
+    el.style.color = v == null ? '' : Math.abs(v) <= max ? 'var(--green)' : 'var(--orange)';
+  };
+  drift('val-cal-ft-drift', st.fT_drift, st.max_ft_drift, 2);
+  const sensor = st.source !== 'manual';
+  setText('label-cal-temp-drift', sensor ? `${st.source_name} Drift` : 'Sensor Drift');
+  drift('val-cal-temp-drift', sensor ? st.temp_drift : null, st.max_temp_drift, 4);
+
+  // Settled with nothing taken yet: the operator has to add the point (manual
+  // source, or AUTO off). An automatic point announces itself instead.
+  if (st.state === 'settled' && !(prev && prev.state === 'settled') && !st.point_here) {
+    sendNotif('QCM — Crystal settled',
+              st.source === 'manual' ? 'Enter the temperature and press ADD POINT'
+                                     : 'Press ADD POINT (AUTO is off)', 'calPoint');
+  }
+}
 
 // Solve a small dense linear system A x = b by Gauss-Jordan with partial
 // pivoting. Returns the solution vector, or null if A is (near-)singular.
@@ -3190,22 +3354,37 @@ function polyfit3(xs, ys) {
   return cs.map((c, j) => c / scale[j]);
 }
 
-function addCalPoint() {
-  const t = parseFloat(document.getElementById('cal-temp-input').value);
-  if (isNaN(t)) { showToast('Enter a valid temperature', true); return; }
-  if (_lastFm == null || _lastFt == null) {
-    showToast('No live frequency yet — START a measurement so both modes stream', true);
-    return;
+// ADD POINT: the Pitaya averages the last settle window. Taking one before the
+// crystal has settled is allowed, but only on purpose.
+async function addCalPoint() {
+  const { key } = calTempSource();
+  let query = '';
+  if (key === 'manual') {
+    const t = parseFloat(document.getElementById('cal-temp-input').value);
+    if (isNaN(t)) { showToast('Enter a valid temperature', true); return; }
+    query = `?temperature=${t}`;
   }
-  _calPoints.push({ t, fM: _lastFm, fT: _lastFt });
-  refreshCalCharts();
-  showToast(`Point added: ${t} °C  (fM ${_lastFm.toFixed(1)}, fT ${_lastFt.toFixed(1)})`);
+  const st = _calStatus;
+  if (st && st.state !== 'settled') {
+    const span = _calSettings ? `${+(_calSettings.window_s / 60).toFixed(2)} min` : 'window';
+    if (!confirm(`The crystal has not settled: ${st.reason || st.state}.\n\n` +
+                 `Add a point averaged over the last ${span} anyway?`)) return;
+  }
+  try {
+    const r = await fetch(`${API_URL}/calibration/points${query}`, { method: 'POST' });
+    const d = await r.json().catch(() => ({}));
+    if (!r.ok) { showToast(d.detail || `Point not added (HTTP ${r.status})`, true); return; }
+    showToast(`Point added: ${d.temperature.toFixed(3)} °C · ${d.source_name}  ` +
+              `(fM ${d.fM.toFixed(2)}, fT ${d.fT.toFixed(2)}, ${d.seconds} s)`);
+  } catch(e) { showToast('Point not added: no connection', true); }
 }
 
-function clearCalPoints() {
-  if (_calPoints.length && !confirm('Clear all calibration points?')) return;
-  _calPoints = [];
-  refreshCalCharts();
+async function clearCalPoints() {
+  if (_calPoints.length && !confirm('Clear all calibration points?\n\nThey are deleted on the Pitaya too.')) return;
+  try {
+    const r = await fetch(`${API_URL}/calibration/points`, { method: 'DELETE' });
+    if (!r.ok) showToast('Points not cleared', true);
+  } catch(e) { showToast('Points not cleared: no connection', true); }
 }
 
 // Redraw the scatter, recompute the cubic fit (when ≥ 4 points), and refresh
@@ -3258,14 +3437,14 @@ function drawCalChart(chart, coef, key) {
 }
 
 // Click-to-delete: confirm, then drop the point from both charts.
-function promptDeleteCalPoint(i) {
+async function promptDeleteCalPoint(i) {
   const p = _calPoints[i];
   if (!p) return;
-  if (confirm(`Delete this calibration point?\n\nT  = ${p.t} °C\nfM = ${p.fM.toFixed(2)} Hz\nfT = ${p.fT.toFixed(2)} Hz`)) {
-    _calPoints.splice(i, 1);
-    refreshCalCharts();
-    showToast('Point deleted');
-  }
+  if (!confirm(`Delete this calibration point?\n\nT  = ${p.t} °C · ${p.source}\nfM = ${p.fM.toFixed(2)} Hz\nfT = ${p.fT.toFixed(2)} Hz`)) return;
+  try {
+    const r = await fetch(`${API_URL}/calibration/points/${p.id}`, { method: 'DELETE' });
+    showToast(r.ok ? 'Point deleted' : 'Point not deleted', !r.ok);
+  } catch(e) { showToast('Point not deleted: no connection', true); }
 }
 
 // Fitted coefficients minus the constant (temperature-invariant) term, which

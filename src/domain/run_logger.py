@@ -43,8 +43,15 @@ import shutil
 import time
 from datetime import datetime, timezone
 
+from domain.temperature_sensors import SENSORS
+
 # data/runs/ at the repo root (this file is src/domain/run_logger.py).
 RUNS_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..", "data", "runs")
+
+# The LTC2986 sensors' readings in °C, one column per sensor: pt100_c,
+# thermocouple_c, cold_junction_c. temperature_c is something else — the
+# crystal temperature the compensation solves from the two modes.
+TEMPERATURE_COLUMNS = [f"{s.key}_c" for s in SENSORS]
 
 # Read by tools/csv_plotter.py. This file is the only export — the browser keeps
 # no copy of a run, it just downloads this one back via /runs/{name}/download.
@@ -52,10 +59,15 @@ HEADERS = [
     "timestamp_iso", "timestamp_s", "freq_mass_hz", "freq_temp_hz", "comp_mass_freq_hz",
     "thickness_comp_nm", "thickness_uncomp_nm", "temperature_c", "amp_mass", "phase_mass",
     "amp_temp", "phase_temp", "lock_mass", "lock_temp", "quality_mass", "quality_temp",
+    *TEMPERATURE_COLUMNS, "temp_sensor_faults",
     "event_type", "event_detail",
 ]
 
-# A run writes one ~170-byte row per measurement cycle, roughly 1 kB/s or 100 MB
+# A sensor reading older than this is not put beside a measurement. The sensors
+# are read once a second, so it only trips when their worker has stopped.
+TEMPERATURE_MAX_AGE = 5.0  # seconds
+
+# A run writes one ~200-byte row per measurement cycle, roughly 1 kB/s or 100 MB
 # per day. Refuse to open a log below MIN_FREE (about a day of headroom) and warn
 # below WARN_FREE, so a filling card is noticed before it swallows a run.
 MIN_FREE_BYTES = 100 * 1024 ** 2
@@ -122,14 +134,19 @@ class RunLogger:
     stops; on_start(filename) when a run log is successfully opened — including
     each time the run rolls over into a new part; on_reclaim(summary, free_bytes)
     when CSVs were deleted to make room. All three are invoked on the worker
-    thread — keep them to a queue.put()."""
+    thread — keep them to a queue.put().
+
+    temperatures() returns the newest TemperatureEvent from the LTC2986 worker,
+    or None; its readings go into the TEMPERATURE_COLUMNS of every row."""
 
     def __init__(self, directory: str = RUNS_DIR, on_error=None, on_start=None,
-                 on_reclaim=None):
+                 on_reclaim=None, temperatures=None):
         self.directory = directory
         self._on_error = on_error
         self._on_start = on_start
         self._on_reclaim = on_reclaim
+        self._temperatures = temperatures
+        self._temperature_error = None  # last failure reading them, said once
         self._file = None
         self._writer = None
         self.path = None
@@ -409,12 +426,50 @@ class RunLogger:
                 # against the evidence behind it after the fact.
                 "quality_mass": "" if data.quality_mass is None else data.quality_mass,
                 "quality_temp": "" if data.quality_temp is None else data.quality_temp,
+                **self._temperature_columns(ts),
                 "event_type": "", "event_detail": "",
             })
             self._file.flush()
             self._housekeeping()
         except Exception as e:
             self._fail(f"recording stopped after a write error: {e}")
+
+    def _temperature_columns(self, ts: float) -> dict:
+        """The LTC2986 readings to write beside the measurement taken at ts: the
+        newest round of them, repeated on every row until the next one arrives
+        (they are read once a second, the rows come at ~10 Hz).
+
+        All blank when there is no current reading — no board, the chip
+        unavailable, or its worker stalled. A sensor with a hard fault has no
+        temperature and is blank too; every fault, soft ones included, is named
+        in temp_sensor_faults as "key: fault, fault; key: fault".
+
+        A problem in here costs these columns only, never the row: the run log
+        is the one copy of the measurement."""
+        out = dict.fromkeys(TEMPERATURE_COLUMNS, "")
+        out["temp_sensor_faults"] = ""
+        if self._temperatures is None:
+            return out
+        try:
+            reading = self._temperatures()
+            if (reading is None or not reading.available or reading.timestamp is None
+                    or abs(ts - reading.timestamp) > TEMPERATURE_MAX_AGE):
+                return out
+            faults = []
+            for s in reading.sensors:
+                column = f"{s['key']}_c"
+                if column in out and s["temperature"] is not None:
+                    out[column] = round(s["temperature"], 4)
+                if s["faults"]:
+                    faults.append(f"{s['key']}: {', '.join(s['faults'])}")
+            out["temp_sensor_faults"] = "; ".join(faults)
+            self._temperature_error = None
+        except Exception as e:
+            if str(e) != self._temperature_error:
+                print(f"[RunLogger] Could not add the temperature sensor readings: {e}")
+                self._temperature_error = str(e)
+            out = dict.fromkeys(out, "")
+        return out
 
     def _housekeeping(self) -> None:
         """Roll the part over once it is big enough, and keep the partition above

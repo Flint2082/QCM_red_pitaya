@@ -46,17 +46,19 @@ def build_system(enable_opcua: bool = True):
     version = VersionInfo(fpga)
     print(f"INFO: software {version.software.name()}, bitstream {version.fpga['fpg']}")
 
+    # LTC2986 temperature sensors on the SPI bus. A box without them only gets
+    # "unavailable" in the TEMP SENSORS tab; see domain/temperature_sensors.py.
+    temperature_queue = queue.Queue()
+    temperature_worker = TemperatureWorker(event_queue=temperature_queue)
+
     qcm_worker = QCMWorker(
         qcm=qcm,
         command_queue=worker_command_queue,
         event_queue=worker_event_queue,
         version=version,
+        # The run log records the newest sensor readings beside every sample.
+        temperatures=lambda: temperature_worker.latest,
     )
-
-    # LTC2986 temperature sensors on the SPI bus. A box without them only gets
-    # "unavailable" in the TEMP SENSORS tab; see domain/temperature_sensors.py.
-    temperature_queue = queue.Queue()
-    temperature_worker = TemperatureWorker(event_queue=temperature_queue)
 
     # OPC-UA bridge (optional — system works without a PLC)
     opc_worker = None

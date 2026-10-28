@@ -124,6 +124,20 @@ class TemperatureEvent(ApiEvent):
     timestamp: float | None = None
 
 @dataclass
+class CalibrationStatusEvent(ApiEvent):
+    """Once a second: whether the crystal has settled for a calibration point,
+    and why not. See domain/calibration_recorder.py for the fields."""
+    status: dict
+
+@dataclass
+class CalibrationPointsEvent(ApiEvent):
+    """The calibration points and settings, after any change. `added` is the
+    point just taken, when that is what changed them."""
+    points: list[dict]
+    settings: dict
+    added: dict | None = None
+
+@dataclass
 class OpcStatusEvent(ApiEvent):
     connected: bool
     enabled: bool = True  # False = bridge switched off (opc_enabled), not a lost link

@@ -28,6 +28,10 @@ class TemperatureWorker(threading.Thread):
         self._sensors = None
         self._last_error: str | None = None
         self._last_faults: dict[str, list[str]] = {}
+        # The newest TemperatureEvent, for the run logger on the QCM worker's
+        # thread. Replaced whole on every read and never changed after, so it
+        # needs no lock.
+        self.latest: TemperatureEvent | None = None
 
     def stop(self):
         self._stop_event.set()
@@ -58,8 +62,7 @@ class TemperatureWorker(threading.Thread):
         readings = self._sensors.read_all()
         self._last_error = None
         self._log_fault_changes(readings)
-        self.event_queue.put(TemperatureEvent(available=True, sensors=readings,
-                                              timestamp=time.time()))
+        self._publish(TemperatureEvent(available=True, sensors=readings, timestamp=time.time()))
 
     def _fail(self, reason: str):
         if self._sensors:
@@ -74,8 +77,11 @@ class TemperatureWorker(threading.Thread):
             print(f"[TEMP] Temperature sensors unavailable: {reason}")
             self._last_error = reason
         self._last_faults = {}
-        self.event_queue.put(TemperatureEvent(available=False, error=reason,
-                                              timestamp=time.time()))
+        self._publish(TemperatureEvent(available=False, error=reason, timestamp=time.time()))
+
+    def _publish(self, event: TemperatureEvent):
+        self.latest = event
+        self.event_queue.put(event)
 
     def _log_fault_changes(self, readings: list[dict]):
         for r in readings:

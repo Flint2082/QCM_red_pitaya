@@ -118,10 +118,17 @@ def active_analog(table_offset: int, table_rows: int, single_ended: bool = True)
 
 def active_analog_table(points) -> bytes:
     """Encode (millivolts, °C) points for an active analog sensor table: per row
-    the voltage in 1/4096 mV (signed 24 bit), then the temperature in 1/1024 K
-    (24 bit). The points must ascend in voltage."""
+    the voltage in 1/4096 mV (signed 24 bit, so within ±2048 mV), then the
+    temperature in 1/1024 K (24 bit). The points must ascend in voltage.
+
+    The first row is not part of the measured range: readings below the second
+    row are flagged "sensor under range" and extrapolated towards the first
+    (datasheet Table 68, Figure 54). Put it on the sensor's curve below its
+    lowest output."""
     out = bytearray()
     for mv, celsius in points:
+        if not -2048 < mv < 2048:
+            raise ValueError(f"{mv} mV is outside the table's ±2048 mV")
         out += (round(mv * 4096) & 0xFFFFFF).to_bytes(3, "big")
         out += round((celsius + 273.15) * 1024).to_bytes(3, "big")
     return bytes(out)

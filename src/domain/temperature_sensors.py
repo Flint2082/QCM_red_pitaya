@@ -38,7 +38,12 @@ THERMOCOUPLE_TYPE = "K"
 # a larger R22 needs less (ltc2986.rtd() refuses a combination that cannot fit).
 RTD_EXCITATION_UA = 250
 # TSic 501F: 0-1 V output, linear over -10..+60 °C (T = 70 °C/V * V - 10 °C).
-TSIC_501F_TABLE = ((0.0, -10.0), (500.0, 25.0), (1000.0, 60.0))   # (mV, °C)
+# The chip only vouches for readings from the second row up: anything below it
+# is flagged "sensor under range", and the thermocouple then reports a cold-
+# junction soft fault. The first row is just the anchor it extrapolates down to,
+# so it sits on the same line below the sensor's range (the table format stops
+# at about ±2 V).
+TSIC_501F_TABLE = ((-1000.0, -80.0), (0.0, -10.0), (1000.0, 60.0))   # (mV, °C)
 MAINS_HZ = 50
 
 CH_RSENSE = 2

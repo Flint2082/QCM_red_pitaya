@@ -254,7 +254,7 @@ footer { height: 24px; background: var(--surface); border-top: 1px solid var(--b
     <div class="toolbar">
       <span class="toolbar-label">WINDOW</span>
       <div class="num-input-wrap">
-        <input id="input-window-main" type="number" value="3000" min="50" max="50000" step="50" onchange="setWindowMain(this.value)">
+        <input id="input-window-main" type="number" value="3000" min="50" max="50000" step="50" onchange="setWindowMain(this.value); applyChartWindows()">
         <span class="num-input-unit">pts</span>
       </div>
       <div class="toolbar-sep"></div>
@@ -286,7 +286,7 @@ footer { height: 24px; background: var(--surface); border-top: 1px solid var(--b
     <div class="toolbar">
       <span class="toolbar-label">WINDOW</span>
       <div class="num-input-wrap">
-        <input id="input-window-monitor" type="number" value="300" min="50" max="50000" step="50" onchange="setWindowMonitor(this.value)">
+        <input id="input-window-monitor" type="number" value="300" min="50" max="50000" step="50" onchange="setWindowMonitor(this.value); applyChartWindows()">
         <span class="num-input-unit">pts</span>
       </div>
       <div class="toolbar-sep"></div>
@@ -768,6 +768,12 @@ footer { height: 24px; background: var(--surface); border-top: 1px solid var(--b
        Labels and channels are filled in from the backend's TemperatureEvent. -->
   <div class="tab-panel" id="panel-temps">
     <div class="toolbar">
+      <span class="toolbar-label">WINDOW</span>
+      <div class="num-input-wrap" title="Points per chart. The sensors are read once a second, so 3600 pts is an hour.">
+        <input id="input-window-temps" type="number" value="3600" min="50" max="50000" step="50" onchange="setWindowTemps(this.value); applyChartWindows()">
+        <span class="num-input-unit">pts</span>
+      </div>
+      <div class="toolbar-sep"></div>
       <span class="toolbar-label">LTC2986</span>
       <div class="status-pill idle" id="temps-status">WAITING</div>
       <span id="temps-error" style="font-family:'DM Mono',monospace;font-size:10px;color:var(--red)"></span>
@@ -809,6 +815,7 @@ let API_URL = `http://${backendHost}:8000`;
 let WS_URL  = `ws://${backendHost}:8000/ws`;
 let MAX_PTS_MAIN = 3000;
 let MAX_PTS_MONITOR = 300;
+let MAX_PTS_TEMPS = 3600;  // one hour at the temperature worker's 1 s read interval
 
 function setWindowMain(v) {
   MAX_PTS_MAIN = Math.max(50, parseInt(v) || 3000);
@@ -818,6 +825,10 @@ function setWindowMonitor(v) {
   MAX_PTS_MONITOR = Math.max(50, parseInt(v) || 300);
   document.getElementById('input-window-monitor').value = MAX_PTS_MONITOR;
 }
+function setWindowTemps(v) {
+  MAX_PTS_TEMPS = Math.max(50, parseInt(v) || 3600);
+  document.getElementById('input-window-temps').value = MAX_PTS_TEMPS;
+}
 
 // ---- UI preferences ----
 // Chart window lengths and sweep parameters are operator-side view/scan choices,
@@ -825,7 +836,7 @@ function setWindowMonitor(v) {
 // settings.json. Without this every reload silently put back the hard-coded
 // defaults, which is a nuisance when a crystal needs a particular sweep span.
 const UI_STORE_KEY = 'qcm.ui';
-const UI_PREF_IDS = ['input-window-main', 'input-window-monitor',
+const UI_PREF_IDS = ['input-window-main', 'input-window-monitor', 'input-window-temps',
                      'sweep-osc', 'sweep-center', 'sweep-span', 'sweep-step', 'sweep-settle'];
 
 function saveUiPrefs() {
@@ -851,6 +862,7 @@ function loadUiPrefs() {
   // The chart windows are held in JS variables, not read from the DOM per point.
   setWindowMain(document.getElementById('input-window-main').value);
   setWindowMonitor(document.getElementById('input-window-monitor').value);
+  setWindowTemps(document.getElementById('input-window-temps').value);
   for (const id of UI_PREF_IDS) {
     const el = document.getElementById(id);
     if (el) el.addEventListener('change', saveUiPrefs);
@@ -1117,14 +1129,7 @@ function setupZoomGroup(chartList) {
       group.forEach(c => {
         c.resetZoom('none');
         // Trim data that accumulated while frozen, then resume live view
-        const mx = c._maxPts;
-        if (mx != null) {
-          const d = c.data;
-          while (d.labels.length > mx) {
-            d.labels.shift();
-            d.datasets.forEach(ds => { if (ds.data.length > mx) ds.data.shift(); });
-          }
-        }
+        if (c._maxPts != null) trimToWindow(c, c._maxPts);
         c.update('none');
       });
       state.syncing = false;
@@ -1467,14 +1472,33 @@ setInterval(() => {
 
 function push(chart, value, dsIdx = 0, max = MAX_PTS_MAIN, label = '') {
   if (!chart) return;
-  chart._maxPts = max;
   const d = chart.data;
   if (dsIdx === 0) d.labels.push(label);
   d.datasets[dsIdx].data.push(value);
-  if (!(chart._zoomGroupState && chart._zoomGroupState.zoomed)) {
-    if (d.labels.length > max) { d.labels.shift(); d.datasets.forEach(ds => { if (ds.data.length > max) ds.data.shift(); }); }
-    _dirtyCharts.add(chart);
-  }
+  trimToWindow(chart, max);
+}
+
+// Drop a chart's oldest points beyond `max`, however many there are. Dropping
+// just one per new point, as push() used to, left a lowered window with no
+// effect: the chart stayed at its old length for good. A zoomed chart is frozen
+// and keeps everything; it is trimmed when the zoom is reset.
+function trimToWindow(chart, max) {
+  if (!chart) return;
+  chart._maxPts = max;
+  if (chart._zoomGroupState && chart._zoomGroupState.zoomed) return;
+  const d = chart.data;
+  if (d.labels.length > max) d.labels.splice(0, d.labels.length - max);
+  d.datasets.forEach(ds => { if (ds.data.length > max) ds.data.splice(0, ds.data.length - max); });
+  _dirtyCharts.add(chart);
+}
+
+// A changed WINDOW field applies at once, rather than with the next point (which
+// on Main only comes during a run).
+function applyChartWindows() {
+  [charts.mainComp, charts.mainTemp].forEach(c => trimToWindow(c, MAX_PTS_MAIN));
+  [charts.fM, charts.fT, charts.compA, charts.tempA, charts.lpf1, charts.lpf2,
+   charts.calFmLive, charts.calFtLive].forEach(c => trimToWindow(c, MAX_PTS_MONITOR));
+  Object.values(tempCharts).forEach(c => trimToWindow(c, MAX_PTS_TEMPS));
 }
 
 // ---- Measurement mode / parked oscillators ----
@@ -1672,7 +1696,7 @@ function clearCharts() {
 // ---- Temperature sensors (LTC2986) — the temporary TEMP SENSORS tab ----
 // Kept out of `charts` so CLEAR on Main/Monitor leaves them alone. Keyed by the
 // backend's sensor keys (domain/temperature_sensors.py); the element ids follow.
-const TEMP_MAX_PTS = 3600;  // one hour at the backend's 1 s read interval
+// Their window is MAX_PTS_TEMPS, set from the tab's WINDOW field.
 const tempCharts = {
   pt100:         makeChart('chart-temp-pt100',         '#f5a623'),
   thermocouple:  makeChart('chart-temp-thermocouple',  '#e05c5c'),
@@ -1694,7 +1718,7 @@ function onTemperature(ev) {
       setText('meta-temp-' + key, '—');
       setText('unit-temp-' + key, '°C');
       document.getElementById('unit-temp-' + key).style.color = '';
-      if (tempCharts[key] && tempCharts[key].data.labels.length) push(tempCharts[key], null, 0, TEMP_MAX_PTS, ts);
+      if (tempCharts[key] && tempCharts[key].data.labels.length) push(tempCharts[key], null, 0, MAX_PTS_TEMPS, ts);
     }
     return;
   }
@@ -1710,7 +1734,7 @@ function onTemperature(ev) {
     unit.textContent = faults.length ? '°C · ' + faults.join(', ') : '°C';
     unit.style.color = faults.length ? 'var(--red)' : '';
     setMeta('meta-temp-' + s.key, s.temperature, '°C');
-    push(tempCharts[s.key], s.temperature, 0, TEMP_MAX_PTS, ts);
+    push(tempCharts[s.key], s.temperature, 0, MAX_PTS_TEMPS, ts);
   }
   document.getElementById('temps-tab-dot').style.background = anyFault ? 'var(--orange)' : 'var(--green)';
 }

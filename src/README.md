@@ -60,6 +60,22 @@ unit accordingly. It runs as `root` (required for `/dev/mem` and the FPGA
 bitstream load), waits for the network, and restarts automatically if the
 process exits.
 
+### What a start does
+
+On every start the service writes the saved settings to the FPGA, applies the
+active crystal profile, and then locks the PLLs on that profile's start
+frequencies, exactly as GET LOCK does. In uncompensated mode only the mass mode
+is locked, and a mode whose start frequency is 0 Hz stays parked. If the lock
+fails, the instrument waits in IDLE for a GET LOCK, as it did before this
+start-up lock existed.
+
+The start frequencies follow the lock (frequency tracking, and the update at
+the end of a run) only once a lock attempt has aimed the loops. From power-up
+until then, the NCOs run from 0 Hz and their phase can pass the lock test, and
+a fresh start used to overwrite the start frequencies with 0 Hz that way. A
+sweep or a capacitor adjustment also leaves the loops open, so tracking stops
+after either one until the next lock.
+
 ## Front-panel LEDs
 
 The bitstream wires the 4-bit `led_control` register straight to the LEDs, and

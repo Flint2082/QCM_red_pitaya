@@ -104,7 +104,9 @@ qcm = QCMClient("192.168.1.50")
 #    polynomial coefficients come from this profile).
 qcm.activate_crystal("SC_cut_6MHz")
 
-# 2. Lock the two PLLs onto the crystal's resonances.
+# 2. Lock the two PLLs onto the crystal's resonances. The service already
+#    locks once on its own when it starts; this re-locks on the crystal
+#    activated above.
 qcm.get_lock()
 time.sleep(2)                       # give the loops time to settle
 print("state:", qcm.state())        # -> "RUNNING" once locked
@@ -262,8 +264,10 @@ frequencies can sit outside the PLL capture range of where the resonance now
 is — and a re-lock aimed there fails however healthy the crystal is. While both
 modes are locked the start frequencies are re-pointed every `interval` seconds
 at the frequencies the PLLs are actually holding (rounded to 100 Hz), so a
-re-lock starts from the last place the lock was known to be good. This is
-in-memory only: `GET /settings/lock_frequencies`, `get_lock()` and the
+re-lock starts from the last place the lock was known to be good. Tracking
+only starts once a lock attempt (`get_lock()`, the lock the service does when
+it starts, or a re-lock) has aimed the loops, and a sweep or a capacitor
+adjustment stops it until the next one. This is in-memory only: `GET /settings/lock_frequencies`, `get_lock()` and the
 OPC-triggered lock all pick it up, but the crystal profile on disk is untouched
 until you save it yourself.
 

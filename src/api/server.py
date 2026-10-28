@@ -346,6 +346,15 @@ class RestServer:
         if self._opc_worker:
             self._opc_worker.set_enabled(self._opc_enabled)
         self._enqueue_settings("boot")  # push settings to the hardware on startup
+        # Then lock up on the start frequencies the active crystal has just set,
+        # exactly as GET LOCK does. Queued behind the settings, so the lock runs
+        # with this box's saved loop settings and measurement mode: uncompensated
+        # locks the mass mode alone, and a 0 Hz start frequency parks its
+        # oscillator. Without it the NCOs sit at 0 Hz until someone presses GET
+        # LOCK, reporting locks that are not there.
+        self.command_queue.put(StartupPLLCommand(self._lock_freq_mass, self._lock_freq_temp))
+        print(f"[Settings] Queued lock at mass {self._lock_freq_mass:.0f} Hz, "
+              f"temp {self._lock_freq_temp:.0f} Hz (boot)")
         self.app = self._build_app()
         
 

@@ -112,6 +112,14 @@ class QCMWorker(threading.Thread):
         self.freq_tracking = True
         self.freq_track_interval = 10.0  # seconds between updates
         self._last_freq_track = 0.0
+        # Whether a lock attempt has aimed the loops at the start frequencies,
+        # with nothing taking them off since. Not at power-up, where the NCOs
+        # start from 0 Hz with no resonance anywhere near, nor after a sweep or a
+        # capacitor adjustment, which leave them open-loop: the lock detect then
+        # judges a phase that no resonance is holding, and a quiet one passes it.
+        # Nothing read in that state may move the start frequencies — that is
+        # how a fresh start used to overwrite them with 0 Hz.
+        self._loops_aimed = False
         # Automatic gain control. The QCM owns the servo itself; the worker owns
         # when it is allowed to run (see _update_agc) and reports a channel that
         # has run out of drive range.
@@ -176,12 +184,14 @@ class QCMWorker(threading.Thread):
         resume = self._in_run()
         oscs = (1, 2) if self._compensated_now() else (1,)
         self._lock = None
+        self._loops_aimed = False  # until beginLock has set them up
         try:
             active = self.qcm.beginLock(mass, temp, oscs)
         except Exception as e:
             self._abort_lock(e, resume)
             return
         self._lock_active = active
+        self._loops_aimed = bool(active)
         if not active:
             self.qcm.finishLock(active, False)  # says why
             self.event_queue.put(LockFailedEvent())
@@ -326,6 +336,7 @@ class QCMWorker(threading.Thread):
 
         # Capacitor adjustment (open-loop tones for nulling the trim cap)
         elif isinstance(command, StartCapAdjustCommand) and self.state == WorkerState.IDLE:
+            self._loops_aimed = False  # open-loop tones, and standby after them
             self.qcm.startCapAdjust(command.freq_mass, command.freq_temp)
             self._set_state(WorkerState.CAP_ADJUST)
         elif isinstance(command, StopCapAdjustCommand) and self.state == WorkerState.CAP_ADJUST:
@@ -354,8 +365,10 @@ class QCMWorker(threading.Thread):
 
         # Stop measurement
         elif isinstance(command, StopMeasurementCommand) and self._in_run():
-            # Auto-update start frequencies to current locked frequencies (rounded to 100 Hz)
-            if self.state == WorkerState.MEASURING and all(self.qcm.getLockDetect(i) for i in self._lock_active):
+            # Auto-update start frequencies to current locked frequencies (rounded
+            # to 100 Hz) — if a lock attempt aimed the loops; see _loops_aimed.
+            if (self.state == WorkerState.MEASURING and self._loops_aimed
+                    and all(self.qcm.getLockDetect(i) for i in self._lock_active)):
                 freq_mass, freq_temp = self._held_lock_freqs()
                 self.event_queue.put(StartFreqAutoUpdatedEvent(
                     freq_mass=freq_mass, freq_temp=freq_temp, source="run_stop"))
@@ -370,6 +383,7 @@ class QCMWorker(threading.Thread):
 
         # Sweep
         elif isinstance(command, StartSweepCommand) and self.state == WorkerState.IDLE:
+            self._loops_aimed = False  # the sweep leaves both oscillators open-loop
             self._set_state(WorkerState.SWEEPING)
             self._refresh_leds(False, False, time.time())  # loops open for the whole sweep
             self._run_sweep(command)
@@ -485,10 +499,11 @@ class QCMWorker(threading.Thread):
         healthy the crystal is. Following the lock while it is good means a lost
         lock is re-acquired from the last place it was known to be.
 
-        Only sampled while locked, and only in states where the loops are closed:
-        during a sweep or a capacitor adjustment the oscillators are parked
-        open-loop, where the phase readout can sit quiet enough to pass the lock
-        test at a frequency that is not a resonance at all.
+        Only sampled while locked, and only once a lock attempt has aimed the
+        loops (see _loops_aimed): from power-up until the first lock the NCOs
+        run from 0 Hz, and during and after a sweep or a capacitor adjustment
+        they sit open-loop. The phase readout there can be quiet enough to pass
+        the lock test at a frequency that is not a resonance at all.
 
         This does not touch the crystal profile on disk. The profile's start
         frequencies describe the crystal as calibrated; the operator saves a new
@@ -497,7 +512,7 @@ class QCMWorker(threading.Thread):
         Only the modes the last lock locked are followed; a parked one keeps its
         start frequency.
         """
-        if not self.freq_tracking:
+        if not (self.freq_tracking and self._loops_aimed):
             return
         if self.state not in (WorkerState.MEASURING, WorkerState.IDLE):
             return

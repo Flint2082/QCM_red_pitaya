@@ -106,11 +106,17 @@ R22, the thermocouple type), are at the top of
 [`domain/temperature_sensors.py`](domain/temperature_sensors.py). The PT100
 reads in proportion to the sense resistor, so set it to the fitted value.
 
+The same thread reads the Zynq's own die temperature from its XADC
+([`domain/zynq_temperature.py`](domain/zynq_temperature.py)), board or no
+board. It stands in for the Pitaya's 125 MHz reference oscillator: a drift in
+that clock shifts both modes by the same fraction, which the compensation
+cannot tell from mass.
+
 Every run log also carries the newest readings beside each sample, in
-`pt100_c`, `thermocouple_c` and `cold_junction_c` (°C), with any fault named in
-`temp_sensor_faults`. They are blank while there is no current reading.
-`temperature_c` is something else: the crystal temperature the compensation
-solves from the two modes.
+`pt100_c`, `thermocouple_c`, `cold_junction_c` and `zynq_die_c` (°C), with any
+LTC2986 fault named in `temp_sensor_faults`. They are blank while there is no
+current reading. `temperature_c` is something else: the crystal temperature the
+compensation solves from the two modes.
 
 ## Calibration points
 

@@ -37,6 +37,7 @@ CHANNELS = [
     ("pt100_c",             "PT100 (°C)",             "darkorange"),
     ("thermocouple_c",      "Thermocouple (°C)",      "firebrick"),
     ("cold_junction_c",     "Cold Junction (°C)",     "steelblue"),
+    ("zynq_die_c",          "Zynq Die (°C)",          "mediumpurple"),
     ("freq_mass_hz",        "Mass Freq (Hz)",         "tab:blue"),
     ("freq_temp_hz",        "Temp Freq (Hz)",         "tab:cyan"),
     ("comp_mass_freq_hz",   "Comp. Mass Freq (Hz)",   "tab:orange"),

@@ -117,10 +117,13 @@ class TemperatureEvent(ApiEvent):
     """One round of readings from the LTC2986 temperature sensors, from
     workers/temperature_worker.py. `sensors` holds one dict per sensor (key,
     name, channel, temperature in °C or None, faults); it is empty while the
-    chip is unavailable, and `error` then says why."""
+    chip is unavailable, and `error` then says why. `available` is about the
+    LTC2986 only: `zynq_die_c` is the Zynq's die temperature (°C, None when
+    unreadable), reported either way."""
     available: bool
     sensors: list[dict] = field(default_factory=list)
     error: str | None = None
+    zynq_die_c: float | None = None
     timestamp: float | None = None
 
 @dataclass

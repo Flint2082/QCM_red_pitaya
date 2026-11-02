@@ -52,6 +52,9 @@ RUNS_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..", 
 # thermocouple_c, cold_junction_c. temperature_c is something else — the
 # crystal temperature the compensation solves from the two modes.
 TEMPERATURE_COLUMNS = [f"{s.key}_c" for s in SENSORS]
+# The Zynq's die temperature (domain/zynq_temperature.py), a proxy for the
+# Pitaya's reference oscillator; written whether or not the LTC2986 is there.
+DIE_COLUMN = "zynq_die_c"
 
 # Read by tools/csv_plotter.py. This file is the only export — the browser keeps
 # no copy of a run, it just downloads this one back via /runs/{name}/download.
@@ -59,7 +62,7 @@ HEADERS = [
     "timestamp_iso", "timestamp_s", "freq_mass_hz", "freq_temp_hz", "comp_mass_freq_hz",
     "thickness_comp_nm", "thickness_uncomp_nm", "temperature_c", "amp_mass", "phase_mass",
     "amp_temp", "phase_temp", "lock_mass", "lock_temp", "quality_mass", "quality_temp",
-    *TEMPERATURE_COLUMNS, "temp_sensor_faults",
+    *TEMPERATURE_COLUMNS, DIE_COLUMN, "temp_sensor_faults",
     "event_type", "event_detail",
 ]
 
@@ -136,8 +139,9 @@ class RunLogger:
     when CSVs were deleted to make room. All three are invoked on the worker
     thread — keep them to a queue.put().
 
-    temperatures() returns the newest TemperatureEvent from the LTC2986 worker,
-    or None; its readings go into the TEMPERATURE_COLUMNS of every row."""
+    temperatures() returns the newest TemperatureEvent from the temperature
+    worker, or None; its readings go into the TEMPERATURE_COLUMNS and the
+    DIE_COLUMN of every row."""
 
     def __init__(self, directory: str = RUNS_DIR, on_error=None, on_start=None,
                  on_reclaim=None, temperatures=None):
@@ -435,25 +439,32 @@ class RunLogger:
             self._fail(f"recording stopped after a write error: {e}")
 
     def _temperature_columns(self, ts: float) -> dict:
-        """The LTC2986 readings to write beside the measurement taken at ts: the
-        newest round of them, repeated on every row until the next one arrives
-        (they are read once a second, the rows come at ~10 Hz).
+        """The temperature readings to write beside the measurement taken at ts:
+        the newest round of them, repeated on every row until the next one
+        arrives (they are read once a second, the rows come at ~10 Hz).
 
-        All blank when there is no current reading — no board, the chip
-        unavailable, or its worker stalled. A sensor with a hard fault has no
-        temperature and is blank too; every fault, soft ones included, is named
-        in temp_sensor_faults as "key: fault, fault; key: fault".
+        All blank when there is no current reading, i.e. the worker stalled.
+        The LTC2986 columns are also blank without the board or with the chip
+        unavailable; the die temperature does not depend on them. A sensor with
+        a hard fault has no temperature and is blank too; every fault, soft
+        ones included, is named in temp_sensor_faults as "key: fault, fault;
+        key: fault".
 
         A problem in here costs these columns only, never the row: the run log
         is the one copy of the measurement."""
         out = dict.fromkeys(TEMPERATURE_COLUMNS, "")
+        out[DIE_COLUMN] = ""
         out["temp_sensor_faults"] = ""
         if self._temperatures is None:
             return out
         try:
             reading = self._temperatures()
-            if (reading is None or not reading.available or reading.timestamp is None
+            if (reading is None or reading.timestamp is None
                     or abs(ts - reading.timestamp) > TEMPERATURE_MAX_AGE):
+                return out
+            if reading.zynq_die_c is not None:
+                out[DIE_COLUMN] = round(reading.zynq_die_c, 3)
+            if not reading.available:
                 return out
             faults = []
             for s in reading.sensors:

@@ -821,11 +821,13 @@ footer { height: 24px; background: var(--surface); border-top: 1px solid var(--b
       <div class="stat"><div class="stat-label" id="label-temp-pt100">PT100</div><div class="stat-value" id="val-temp-pt100" style="color:var(--orange)">—</div><div class="stat-unit" id="unit-temp-pt100">°C</div></div>
       <div class="stat"><div class="stat-label" id="label-temp-thermocouple">Thermocouple</div><div class="stat-value" id="val-temp-thermocouple" style="color:var(--red)">—</div><div class="stat-unit" id="unit-temp-thermocouple">°C</div></div>
       <div class="stat"><div class="stat-label" id="label-temp-cold_junction">Cold Junction</div><div class="stat-value" id="val-temp-cold_junction" style="color:var(--blue)">—</div><div class="stat-unit" id="unit-temp-cold_junction">°C</div></div>
+      <div class="stat" title="The Zynq's own die temperature, from its XADC — not on the LTC2986. A proxy for the Pitaya's reference oscillator, whose drift shifts both modes alike and reads as mass."><div class="stat-label">Zynq die · XADC</div><div class="stat-value" id="val-temp-zynq_die" style="color:var(--purple)">—</div><div class="stat-unit" id="unit-temp-zynq_die">°C</div></div>
     </div>
-    <div class="chart-grid" style="grid-template-columns:1fr; grid-template-rows:1fr 1fr 1fr;">
+    <div class="chart-grid" style="grid-template-columns:1fr; grid-template-rows:1fr 1fr 1fr 1fr;">
       <div class="chart-card"><div class="chart-card-header"><div class="chart-card-title"><div class="chart-color-bar" style="background:var(--orange)"></div><span id="title-temp-pt100">PT100</span></div><div class="chart-card-meta" id="meta-temp-pt100">—</div></div><div class="chart-body"><canvas id="chart-temp-pt100"></canvas></div></div>
       <div class="chart-card"><div class="chart-card-header"><div class="chart-card-title"><div class="chart-color-bar" style="background:var(--red)"></div><span id="title-temp-thermocouple">THERMOCOUPLE</span></div><div class="chart-card-meta" id="meta-temp-thermocouple">—</div></div><div class="chart-body"><canvas id="chart-temp-thermocouple"></canvas></div></div>
       <div class="chart-card"><div class="chart-card-header"><div class="chart-card-title"><div class="chart-color-bar" style="background:var(--blue)"></div><span id="title-temp-cold_junction">COLD JUNCTION</span></div><div class="chart-card-meta" id="meta-temp-cold_junction">—</div></div><div class="chart-body"><canvas id="chart-temp-cold_junction"></canvas></div></div>
+      <div class="chart-card"><div class="chart-card-header"><div class="chart-card-title"><div class="chart-color-bar" style="background:var(--purple)"></div><span>ZYNQ DIE (XADC)</span></div><div class="chart-card-meta" id="meta-temp-zynq_die">—</div></div><div class="chart-body"><canvas id="chart-temp-zynq_die"></canvas></div></div>
     </div>
   </div>
 
@@ -1730,11 +1732,13 @@ function clearCharts() {
 // ---- Temperature sensors (LTC2986) — the temporary TEMP SENSORS tab ----
 // Kept out of `charts` so CLEAR on Main/Monitor leaves them alone. Keyed by the
 // backend's sensor keys (domain/temperature_sensors.py); the element ids follow.
+// zynq_die is not an LTC2986 sensor: it comes in the event's zynq_die_c field.
 // Their window is MAX_PTS_TEMPS, set from the tab's WINDOW field.
 const tempCharts = {
   pt100:         makeChart('chart-temp-pt100',         '#f5a623'),
   thermocouple:  makeChart('chart-temp-thermocouple',  '#e05c5c'),
   cold_junction: makeChart('chart-temp-cold_junction', '#4a9eff'),
+  zynq_die:      makeChart('chart-temp-zynq_die',      '#a78bfa'),
 };
 setupZoomGroup(Object.values(tempCharts));  // double-click resets the zoom, as on the other tabs
 
@@ -1744,6 +1748,12 @@ function onTemperature(ev) {
   pill.textContent = ev.available ? 'READING' : 'UNAVAILABLE';
   setText('temps-error', ev.available ? '' : (ev.error || ''));
   const ts = ev.timestamp ? new Date(ev.timestamp * 1000).toLocaleTimeString() : '';
+  // The die sensor is reported whether or not the LTC2986 is there.
+  const die = ifNull(ev.zynq_die_c, null);
+  setText('val-temp-zynq_die', fmt(die, 2));
+  setText('unit-temp-zynq_die', die == null ? 'unavailable' : '°C');
+  setMeta('meta-temp-zynq_die', die, '°C');
+  push(tempCharts.zynq_die, die, 0, MAX_PTS_TEMPS, ts);
   if (!ev.available) {
     // Blank the tiles rather than leave the last readings looking live, and
     // break the lines so the outage shows on the charts.
@@ -1751,6 +1761,7 @@ function onTemperature(ev) {
     _lastTemps = {};
     updateCalTemp(ev.error);
     for (const key of Object.keys(tempCharts)) {
+      if (key === 'zynq_die') continue;
       setText('val-temp-' + key, '—');
       setText('meta-temp-' + key, '—');
       setText('unit-temp-' + key, '°C');

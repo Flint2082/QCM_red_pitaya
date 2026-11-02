@@ -140,7 +140,8 @@ class Application(threading.Thread):
         """
         if isinstance(command, ac.StartMeasurementCommand):
             self.worker_command_queue.put(wc.StartMeasurementCommand(
-                ambient_temp=command.ambient_temp, mat_dens=command.mat_dens, z_ratio=command.z_ratio))
+                ambient_temp=command.ambient_temp, mat_dens=command.mat_dens, z_ratio=command.z_ratio,
+                t_start_source=command.t_start_source))
         elif isinstance(command, ac.StopMeasurementCommand):
             self.worker_command_queue.put(wc.StopMeasurementCommand())
         elif isinstance(command, ac.RetryRunLogCommand):

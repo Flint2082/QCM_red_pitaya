@@ -13,14 +13,38 @@ import math
 import time
 import threading
 import queue
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 
 from domain.qcm_interface import QCMInterface
-from domain.run_logger import RunLogger
+from domain.run_logger import RunLogger, TEMPERATURE_MAX_AGE
 from domain.sweep_logger import SweepLogger
 from messaging.defines import WorkerState
 from messaging.worker_event import *
 from messaging.worker_command import *
+
+
+def start_temperature(source: str, typed: float, reading, now: float) -> tuple[float, str]:
+    """A run's T start and where it came from.
+
+    source is "manual" or an LTC2986 sensor key; reading is the newest
+    TemperatureEvent, or None. The sensor's reading is used when it is current
+    and has a temperature (a hard fault leaves none). Otherwise it is the typed-
+    in ambient temperature, with the reason in the description, rather than no
+    run: an OPC-triggered deposition must not be held up by a thermometer."""
+    if source == "manual":
+        return typed, "manual"
+    if (reading is None or not reading.available or reading.timestamp is None
+            or now - reading.timestamp > TEMPERATURE_MAX_AGE):
+        problem = "no current reading"
+    else:
+        sensor = next((s for s in reading.sensors if s["key"] == source), None)
+        if sensor is None:
+            problem = "no such sensor"
+        elif sensor["temperature"] is None:
+            problem = ", ".join(sensor["faults"]) or "no temperature"
+        else:
+            return round(float(sensor["temperature"]), 4), source
+    return typed, f"manual ({source}: {problem})"
 
 
 @dataclass
@@ -64,6 +88,9 @@ class QCMWorker(threading.Thread):
         # to repeat, so it does not warrant its own alarm in the GUI.
         self.sweep_logger = SweepLogger()
         self._run_command = None  # last StartMeasurementCommand, for RetryRunLogCommand
+        # The newest TemperatureEvent, for a run's T start from a thermometer.
+        self._temperatures = temperatures
+        self._t_start_from = "manual"  # where the current run's T start came from
         # Target thickness (nm of compensated thickness; 0 = no target). Checked
         # against every measurement; crossing it raises a flag for the operator,
         # the REST API and the PLC, but never stops the run on its own.
@@ -304,6 +331,7 @@ class QCMWorker(threading.Thread):
         snapshot["measurement"] = {
             "mode":             "compensated" if self._run_compensated else "uncompensated",
             "ambient_temp":     command.ambient_temp,
+            "t_start_source":   self._t_start_from,
             "mat_dens":         command.mat_dens,
             "z_ratio":          command.z_ratio,
             "target_thickness": self.target_thickness,
@@ -320,7 +348,8 @@ class QCMWorker(threading.Thread):
             return False
         self.logger.write_settings(self._settings_snapshot(command))
         mode = "compensated" if self._run_compensated else "uncompensated"
-        self.logger.write_event("RUN_START", f"T={command.ambient_temp} mat_dens={command.mat_dens} z_ratio={command.z_ratio} mode={mode}")
+        self.logger.write_event("RUN_START", f"T={command.ambient_temp} mat_dens={command.mat_dens} z_ratio={command.z_ratio} mode={mode} "
+                                             f"T_source={self._t_start_from}")
         return True
 
     def handle_command(self, command: WorkerCommand):
@@ -348,6 +377,14 @@ class QCMWorker(threading.Thread):
 
         # Start measurement
         elif isinstance(command, StartMeasurementCommand) and self.state == WorkerState.IDLE:
+            # T start from a thermometer is read now, as the run starts. The
+            # command then carries the value used, so a log re-opened mid-run
+            # (RetryRunLogCommand) records the same one.
+            T, self._t_start_from = start_temperature(
+                command.t_start_source, command.ambient_temp,
+                self._temperatures() if self._temperatures else None, time.time())
+            command = replace(command, ambient_temp=T)
+            print(f"[QCM] T start {T:g} degC from {self._t_start_from}")
             self.qcm.setMeasurementReference(T=command.ambient_temp, mat_dens=command.mat_dens,
                                              z_ratio=command.z_ratio, compensated=self.compensated)
             self._run_compensated = self.compensated

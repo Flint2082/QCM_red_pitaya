@@ -495,7 +495,8 @@ footer { height: 24px; background: var(--surface); border-top: 1px solid var(--b
 
           <div class="settings-section-title">TEMPERATURE</div>
           <div class="settings-group">
-            <div class="settings-row"><div><div class="settings-row-label">Ambient Temperature</div><div class="settings-row-desc">Starting reference temperature</div></div><div></div><div style="display:flex;align-items:center;gap:6px"><input class="settings-input" type="number" id="s-amb-temp" value="23" step="0.5"><span class="settings-unit">°C</span></div></div>
+            <div class="settings-row"><div><div class="settings-row-label">T Start Source</div><div class="settings-row-desc">Where a run's starting reference temperature comes from. A thermometer is read the moment the run starts (from the GUI or the PLC); if it has no current reading, the run starts from Ambient Temperature instead and the run log says so</div></div><div></div><div style="display:flex;align-items:center;gap:6px"><span id="s-tstart-live" style="font-family:'DM Mono',monospace;font-size:11px;color:var(--text-dim)"></span><select class="settings-input" id="s-tstart-source" onchange="updateTStartLive()" style="width:150px;text-align:left"><option value="manual">Manual</option><option value="pt100">PT100</option><option value="thermocouple">Thermocouple</option><option value="cold_junction">Cold junction</option></select></div></div>
+            <div class="settings-row"><div><div class="settings-row-label">Ambient Temperature</div><div class="settings-row-desc">Starting reference temperature when T Start Source is Manual, and the fallback for a thermometer</div></div><div></div><div style="display:flex;align-items:center;gap:6px"><input class="settings-input" type="number" id="s-amb-temp" value="23" step="0.5"><span class="settings-unit">°C</span></div></div>
           </div>
 
           <div class="settings-section-title">TARGET</div>
@@ -1762,6 +1763,7 @@ function onTemperature(ev) {
     document.getElementById('temps-tab-dot').style.background = 'var(--red)';
     _lastTemps = {};
     updateCalTemp(ev.error);
+    updateTStartLive(ev.error);
     for (const key of Object.keys(tempCharts)) {
       if (key === 'zynq_die') continue;
       setText('val-temp-' + key, '—');
@@ -1778,8 +1780,8 @@ function onTemperature(ev) {
     const faults = s.faults || [];
     anyFault = anyFault || faults.length > 0;
     _lastTemps[s.key] = { temperature: s.temperature, faults, at: Date.now() };
-    const opt = document.querySelector(`#cal-temp-source option[value="${s.key}"]`);
-    if (opt) opt.textContent = s.name;
+    document.querySelectorAll(`#cal-temp-source option[value="${s.key}"], #s-tstart-source option[value="${s.key}"]`)
+      .forEach(opt => { opt.textContent = s.name; });
     setText('label-temp-' + s.key, `${s.name} · CH${s.channel}`);
     setText('title-temp-' + s.key, s.name);
     setText('val-temp-' + s.key, fmt(s.temperature, 2));
@@ -1791,6 +1793,29 @@ function onTemperature(ev) {
   }
   document.getElementById('temps-tab-dot').style.background = anyFault ? 'var(--orange)' : 'var(--green)';
   updateCalTemp();
+  updateTStartLive();
+}
+
+// The T start source's current reading in °C, or null without a fresh one.
+// The worker allows a reading up to 5 s old (TEMPERATURE_MAX_AGE); so does this.
+function tStartReading(key) {
+  const r = _lastTemps[key];
+  return r && r.temperature != null && Date.now() - r.at <= 5000 ? r.temperature : null;
+}
+
+// Show beside the T Start Source what the selected thermometer reads now, so it
+// is clear what a run started this moment would begin from.
+function updateTStartLive(unavailableReason) {
+  const el = document.getElementById('s-tstart-live');
+  if (!el) return;
+  const key = fieldValue('s-tstart-source');
+  if (!key || key === 'manual') { el.textContent = ''; el.title = ''; return; }
+  const t = tStartReading(key);
+  const r = _lastTemps[key];
+  el.textContent = t != null ? `now ${t.toFixed(2)} °C` : 'no reading';
+  el.style.color = t != null ? 'var(--text-dim)' : 'var(--red)';
+  el.title = t != null ? '' : (r && r.faults.length ? r.faults.join(', ') : (unavailableReason || 'no current reading'))
+             + ' — a run started now would use Ambient Temperature';
 }
 
 function clearTempCharts() {
@@ -2474,6 +2499,10 @@ async function loadInitialSettings() {
         if (!_isRunning) setCompensatedView(_measMode !== 'uncompensated');
       }
       if (s.measurement.ambient_temp != null) document.getElementById('s-amb-temp').value   = s.measurement.ambient_temp;
+      if (s.measurement.t_start_source) {
+        document.getElementById('s-tstart-source').value = s.measurement.t_start_source;
+        updateTStartLive();
+      }
       if (s.measurement.mat_dens != null)     document.getElementById('s-mat-dens').value   = s.measurement.mat_dens;
       if (s.measurement.z_ratio != null)      document.getElementById('s-mat-zratio').value = s.measurement.z_ratio;
       if (s.measurement.target_thickness != null) document.getElementById('s-target-thickness').value = s.measurement.target_thickness;
@@ -2836,11 +2865,18 @@ async function sendCommand(action) {
   if (action === 'start') {
     const t = parseFloat(document.getElementById('s-amb-temp').value);
     if (isNaN(t)) { showToast('Set a valid ambient temperature in Settings.', true); return; }
+    // T start from a thermometer is read by the Pitaya as the run starts; warn
+    // here when it is going to fall back to the typed-in value.
+    const src = fieldValue('s-tstart-source') || 'manual';
+    if (src !== 'manual' && tStartReading(src) == null) {
+      const opt = document.querySelector(`#s-tstart-source option[value="${src}"]`);
+      showToast(`${opt ? opt.textContent : src} has no current reading — the run starts from the typed-in ${t} °C`, false, true);
+    }
     _startRequested = true;  // marks this RUNNING transition as a fresh run (clears the buffer)
     // Film material parameters from the Measurement settings (per-run values)
     const dens = parseFloat(fieldValue('s-mat-dens'));
     const zr   = parseFloat(fieldValue('s-mat-zratio'));
-    url = `${API_URL}/measurement/start?ambient_temp=${t}`
+    url = `${API_URL}/measurement/start?ambient_temp=${t}&t_start_source=${encodeURIComponent(src)}`
         + (isNaN(dens) ? '' : `&mat_dens=${dens}`)
         + (isNaN(zr)   ? '' : `&z_ratio=${zr}`);
   } else if (action === 'stop') {
@@ -3012,7 +3048,9 @@ async function applyMeasurementParams() {
   const zr   = parseFloat(document.getElementById('s-mat-zratio').value);
   if ([t, dens, zr].some(isNaN)) throw new Error('Ambient temp, density and Z-ratio must be numbers');
   const target = parseFloat(document.getElementById('s-target-thickness').value);
+  const src = fieldValue('s-tstart-source') || 'manual';
   await postOrThrow(`${API_URL}/settings/measurement_params?ambient_temp=${t}&mat_dens=${dens}&z_ratio=${zr}`
+            + `&t_start_source=${encodeURIComponent(src)}`
             + (isNaN(target) ? '' : `&target_thickness=${target}`));
   updateTargetStatus();
   const mode = document.getElementById('s-meas-mode').value;
@@ -3047,7 +3085,7 @@ const CRYSTAL_SETTING_IDS = [
 // Every settings input that APPLY commits. OPC fields are excluded (they have
 // their own CONNECT action).
 const SETTING_IDS = [
-  's-meas-mode', 's-mat-dens', 's-mat-zratio', 's-amb-temp', 's-target-thickness',
+  's-meas-mode', 's-mat-dens', 's-mat-zratio', 's-amb-temp', 's-tstart-source', 's-target-thickness',
   's-osc1-int', 's-osc1-lpf', 's-osc1-inv', 's-osc1-agc', 's-osc1-gain', 's-osc1-amp',
   's-osc2-int', 's-osc2-lpf', 's-osc2-inv', 's-osc2-agc', 's-osc2-gain', 's-osc2-amp',
   's-lock-phase', 's-lock-std', 's-auto-relock', 's-temp-hold',
@@ -3100,7 +3138,7 @@ async function restoreDefaults() {
       'Restore the standard settings?\n\n'
     + 'Oscillator gains, LPF cutoffs, feedback inversion, drive gain control (back to '
     + 'manual at 1.0), output mode, lock detection, '
-    + 'auto re-lock, the measurement mode (compensated), the film parameters and the target thickness go back to the values '
+    + 'auto re-lock, the measurement mode (compensated), the film parameters, the T start source (manual) and the target thickness go back to the values '
     + 'that ship with the software, immediately. Unapplied edits in this panel are discarded.\n\n'
     + 'The active crystal and the OPC connection describe this instrument, so they are '
     + 'left as they are.'

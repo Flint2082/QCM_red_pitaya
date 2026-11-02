@@ -30,6 +30,7 @@ class StartMeasurementCommand(ApiCommand):
     ambient_temp: float
     mat_dens: float = 19320.0  # kg/m^3 — deposited film density
     z_ratio: float = 1.0       # quartz/film acoustic impedance ratio
+    t_start_source: str = "manual"  # T start from ambient_temp, or an LTC2986 sensor key
 
 @dataclass
 class StopMeasurementCommand(ApiCommand):

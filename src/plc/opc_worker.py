@@ -188,6 +188,7 @@ class OPCUAWorker(threading.Thread):
             ambient_temp=float(p.get("ambient_temp", 23.0)),
             mat_dens=float(p.get("mat_dens", 19320.0)),
             z_ratio=float(p.get("z_ratio", 1.0)),
+            t_start_source=str(p.get("t_start_source", "manual")),
         )
 
     def make_lock_command(self) -> StartupPLLCommand:

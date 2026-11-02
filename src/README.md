@@ -118,6 +118,15 @@ LTC2986 fault named in `temp_sensor_faults`. They are blank while there is no
 current reading. `temperature_c` is something else: the crystal temperature the
 compensation solves from the two modes.
 
+A run's start temperature (T start, the crystal temperature the compensation
+starts from) can come from one of these sensors instead of the typed-in ambient
+temperature: **Settings → Measurement → T Start Source**, or `t_start_source`
+on `POST /measurement/start` and `/settings/measurement_params`. The QCM worker
+reads the sensor the moment the run starts, so a PLC-triggered start does the
+same. Without a current, fault-free reading it starts from the ambient
+temperature rather than not at all. Either way the run log records the value
+and its origin, in the SETTINGS row and as `T_source=` in `RUN_START`.
+
 ## Calibration points
 
 The **CALIBRATE** tab's points are taken and kept on the Pitaya

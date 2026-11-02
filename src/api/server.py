@@ -31,6 +31,7 @@ from domain.crystal import CrystalManager, CrystalProfile, sanitize_name
 from domain.qcm_interface import OUTPUT_GAIN_MAX, WINDOW_SIZE
 from domain.run_logger import MIN_FREE_BYTES, RUNS_DIR, part_number, run_base
 from domain.sweep_logger import SWEEPS_DIR
+from domain.temperature_sensors import SENSORS
 from plc.opc_worker import _READ_KEYS as OPC_READ_KEYS, _CTRL_KEYS as OPC_CTRL_KEYS
 from messaging.api_command import *
 from messaging.api_event import CalibrationPointsEvent, CalibrationStatusEvent, LogEvent
@@ -133,7 +134,7 @@ _SETTING_KEYS = frozenset({
     "osc_settings", "output_mode", "lock_phase_tolerance", "lock_phase_std",
     "auto_relock", "temp_hold", "freq_tracking", "freq_track_interval", "measurement_mode",
     "prune_old_runs", "trim_current_run",
-    "active_crystal", "ambient_temp", "mat_dens", "z_ratio",
+    "active_crystal", "ambient_temp", "t_start_source", "mat_dens", "z_ratio",
     "target_thickness",
     "opc_enabled", "opc_url", "opc_user", "opc_password", "opc_base_node",
 })
@@ -142,6 +143,11 @@ _SETTING_KEYS = frozenset({
 # from fT; "uncompensated" locks the mass mode alone and parks the temp
 # oscillator, for a crystal with no usable temp mode or no calibration.
 MEASUREMENT_MODES = ("compensated", "uncompensated")
+
+# Where a run's start temperature (T start) comes from: the typed-in ambient
+# temperature, or an LTC2986 sensor's reading at the moment the run starts. The
+# QCM worker falls back to the typed-in value when that sensor has none.
+T_START_SOURCES = ("manual", *(s.key for s in SENSORS))
 
 # OPC keys, kept together because they are carried through verbatim when the
 # bridge is disabled (see _save_settings).
@@ -198,6 +204,7 @@ DEFAULT_SETTINGS = {
     "prune_old_runs": True,         # delete finished runs when the disk runs low
     "trim_current_run": True,       # drop the oldest parts of the run in progress
     "ambient_temp": 23.0,           # degC, room temperature
+    "t_start_source": "manual",     # T start from ambient_temp, or a sensor key (T_START_SOURCES)
     "mat_dens": 19320.0,            # kg/m3, gold
     "z_ratio": 1.0,                 # 1.0 = plain Sauerbrey, no Z-match
     "target_thickness": 0.0,        # nm, 0 = no target
@@ -387,6 +394,7 @@ class RestServer:
             "trim_current_run": self._trim_current_run,
             "active_crystal": self._active_crystal,
             "ambient_temp":   self._ambient_temp,
+            "t_start_source": self._t_start_source,
             "mat_dens":       self._mat_dens,
             "z_ratio":        self._z_ratio,
             "target_thickness": self._target_thickness,
@@ -437,6 +445,8 @@ class RestServer:
             self._active_crystal = d["active_crystal"]
         if "ambient_temp" in d:
             self._ambient_temp = float(d["ambient_temp"])
+        if d.get("t_start_source") in T_START_SOURCES:
+            self._t_start_source = d["t_start_source"]
         if "mat_dens" in d:
             self._mat_dens = float(d["mat_dens"])
         if "z_ratio" in d:
@@ -545,6 +555,7 @@ class RestServer:
         """Current REST-owned parameters used when OPC triggers an action."""
         return {
             "ambient_temp":   self._ambient_temp,
+            "t_start_source": self._t_start_source,
             "mat_dens":       self._mat_dens,
             "z_ratio":        self._z_ratio,
             "lock_freq_mass": self._lock_freq_mass,
@@ -556,6 +567,14 @@ class RestServer:
         it here for GET /settings. Negative values mean "no target", same as 0."""
         self._target_thickness = max(0.0, float(value))
         self.command_queue.put(SetTargetThicknessCommand(self._target_thickness))
+
+    def _set_t_start_source(self, source: str | None):
+        """Where the next run's T start comes from; None leaves it as it is."""
+        if source is None:
+            return
+        if source not in T_START_SOURCES:
+            raise HTTPException(400, f"t_start_source must be one of {', '.join(T_START_SOURCES)}")
+        self._t_start_source = source
 
     def _apply_crystal(self, profile: CrystalProfile):
         """Push a crystal's settings into server state and the command queue.
@@ -899,12 +918,16 @@ class RestServer:
         # ---- Measurement control ----
 
         @app.post("/measurement/start")
-        def start_measurement(ambient_temp: float, mat_dens: float = 19320.0, z_ratio: float = 1.0):
+        def start_measurement(ambient_temp: float, mat_dens: float = 19320.0, z_ratio: float = 1.0,
+                              t_start_source: str | None = None):
             # Remember the params so OPC-triggered starts reuse them, and persist.
+            # Without t_start_source the stored choice stands.
+            self._set_t_start_source(t_start_source)
             self._ambient_temp, self._mat_dens, self._z_ratio = ambient_temp, mat_dens, z_ratio
             self._save_settings()
             self.command_queue.put(StartMeasurementCommand(
-                ambient_temp=ambient_temp, mat_dens=mat_dens, z_ratio=z_ratio))
+                ambient_temp=ambient_temp, mat_dens=mat_dens, z_ratio=z_ratio,
+                t_start_source=self._t_start_source))
             return {"status": "ok"}
 
         @app.post("/cap_adjust/start")
@@ -1103,10 +1126,12 @@ class RestServer:
 
         @app.post("/settings/measurement_params")
         def set_measurement_params(ambient_temp: float, mat_dens: float, z_ratio: float,
-                                   target_thickness: float | None = None):
+                                   target_thickness: float | None = None,
+                                   t_start_source: str | None = None):
             # Film/run parameters shown in the settings panel. /measurement/start
             # also captures these from the live form; persisting them on APPLY too
             # means an edit survives a restart even with no measurement in between.
+            self._set_t_start_source(t_start_source)
             self._ambient_temp, self._mat_dens, self._z_ratio = ambient_temp, mat_dens, z_ratio
             if target_thickness is not None:
                 self._set_target_thickness(target_thickness)
@@ -1161,6 +1186,7 @@ class RestServer:
                 "measurement": {
                     "mode":             self._measurement_mode,
                     "ambient_temp":     self._ambient_temp,
+                    "t_start_source":   self._t_start_source,
                     "mat_dens":         self._mat_dens,
                     "z_ratio":          self._z_ratio,
                     "target_thickness": self._target_thickness,

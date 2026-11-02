@@ -30,6 +30,9 @@ class StartMeasurementCommand(WorkerCommand):
     ambient_temp: float
     mat_dens: float = 19320.0  # kg/m^3 — deposited film density
     z_ratio: float = 1.0       # quartz/film acoustic impedance ratio
+    # "manual": T start is ambient_temp. An LTC2986 sensor key: T start is that
+    # sensor's reading when the run starts, ambient_temp if it has none.
+    t_start_source: str = "manual"
 
 @dataclass
 class StopMeasurementCommand(WorkerCommand):

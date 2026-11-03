@@ -495,8 +495,8 @@ footer { height: 24px; background: var(--surface); border-top: 1px solid var(--b
 
           <div class="settings-section-title">TEMPERATURE</div>
           <div class="settings-group">
-            <div class="settings-row"><div><div class="settings-row-label">T Start Source</div><div class="settings-row-desc">Where a run's starting reference temperature comes from. A thermometer is read the moment the run starts (from the GUI or the PLC); if it has no current reading, the run starts from Ambient Temperature instead and the run log says so</div></div><div></div><div style="display:flex;align-items:center;gap:6px"><span id="s-tstart-live" style="font-family:'DM Mono',monospace;font-size:11px;color:var(--text-dim)"></span><select class="settings-input" id="s-tstart-source" onchange="updateTStartLive()" style="width:150px;text-align:left"><option value="manual">Manual</option><option value="pt100">PT100</option><option value="thermocouple">Thermocouple</option><option value="cold_junction">Cold junction</option></select></div></div>
-            <div class="settings-row"><div><div class="settings-row-label">Ambient Temperature</div><div class="settings-row-desc">Starting reference temperature when T Start Source is Manual, and the fallback for a thermometer</div></div><div></div><div style="display:flex;align-items:center;gap:6px"><input class="settings-input" type="number" id="s-amb-temp" value="23" step="0.5"><span class="settings-unit">°C</span></div></div>
+            <div class="settings-row"><div><div class="settings-row-label">T Start Source</div><div class="settings-row-desc">Where a run's starting reference temperature comes from, read the moment the run starts (from the GUI or the PLC). Crystal solves it from the two locked modes with the active crystal's calibration, constants fM_0/fT_0 included, so it needs a profile calibrated on this crystal. A thermometer is read directly. Without a current reading the run starts from Ambient Temperature instead and the run log says so</div></div><div></div><div style="display:flex;align-items:center;gap:6px"><span id="s-tstart-live" style="font-family:'DM Mono',monospace;font-size:11px;color:var(--text-dim)"></span><select class="settings-input" id="s-tstart-source" onchange="updateTStartLive()" style="width:150px;text-align:left"><option value="manual">Manual</option><option value="crystal">Crystal</option><option value="pt100">PT100</option><option value="thermocouple">Thermocouple</option><option value="cold_junction">Cold junction</option></select></div></div>
+            <div class="settings-row"><div><div class="settings-row-label">Ambient Temperature</div><div class="settings-row-desc">Starting reference temperature when T Start Source is Manual, and the fallback for the other sources</div></div><div></div><div style="display:flex;align-items:center;gap:6px"><input class="settings-input" type="number" id="s-amb-temp" value="23" step="0.5"><span class="settings-unit">°C</span></div></div>
           </div>
 
           <div class="settings-section-title">TARGET</div>
@@ -672,11 +672,11 @@ footer { height: 24px; background: var(--surface); border-top: 1px solid var(--b
             <div class="settings-row"><div><div class="settings-row-label">fM_3</div><div class="settings-row-desc">Mass mode cubic term</div></div><div></div><div style="display:flex;align-items:center;gap:6px"><input class="settings-input" type="number" id="s-coeff-fM3" value="0.00037590534093399105" step="any" style="width:180px" oninput="updateCoeffCharts()"></div></div>
             <div class="settings-row"><div><div class="settings-row-label">fM_2</div><div class="settings-row-desc">Mass mode quadratic term</div></div><div></div><div style="display:flex;align-items:center;gap:6px"><input class="settings-input" type="number" id="s-coeff-fM2" value="-0.10904938259265566" step="any" style="width:180px" oninput="updateCoeffCharts()"></div></div>
             <div class="settings-row"><div><div class="settings-row-label">fM_1</div><div class="settings-row-desc">Mass mode linear term</div></div><div></div><div style="display:flex;align-items:center;gap:6px"><input class="settings-input" type="number" id="s-coeff-fM1" value="9.159340464734298" step="any" style="width:180px" oninput="updateCoeffCharts()"></div></div>
-            <div class="settings-row"><div><div class="settings-row-label">fM_0</div><div class="settings-row-desc">Mass mode constant term</div></div><div></div><div style="display:flex;align-items:center;gap:6px"><input class="settings-input" type="number" id="s-coeff-fM0" value="5982438.448062406" step="any" style="width:180px"></div></div>
+            <div class="settings-row"><div><div class="settings-row-label">fM_0</div><div class="settings-row-desc">Mass mode constant term. Only T start from the crystal reads it, with fT_0</div></div><div></div><div style="display:flex;align-items:center;gap:6px"><input class="settings-input" type="number" id="s-coeff-fM0" value="5982438.448062406" step="any" style="width:180px"></div></div>
             <div class="settings-row"><div><div class="settings-row-label">fT_3</div><div class="settings-row-desc">Temp mode cubic term</div></div><div></div><div style="display:flex;align-items:center;gap:6px"><input class="settings-input" type="number" id="s-coeff-fT3" value="-0.0025499455088113026" step="any" style="width:180px" oninput="updateCoeffCharts()"></div></div>
             <div class="settings-row"><div><div class="settings-row-label">fT_2</div><div class="settings-row-desc">Temp mode quadratic term</div></div><div></div><div style="display:flex;align-items:center;gap:6px"><input class="settings-input" type="number" id="s-coeff-fT2" value="1.2282423071087347" step="any" style="width:180px" oninput="updateCoeffCharts()"></div></div>
             <div class="settings-row"><div><div class="settings-row-label">fT_1</div><div class="settings-row-desc">Temp mode linear term</div></div><div></div><div style="display:flex;align-items:center;gap:6px"><input class="settings-input" type="number" id="s-coeff-fT1" value="-231.43245120384452" step="any" style="width:180px" oninput="updateCoeffCharts()"></div></div>
-            <div class="settings-row"><div><div class="settings-row-label">fT_0</div><div class="settings-row-desc">Temp mode constant term</div></div><div></div><div style="display:flex;align-items:center;gap:6px"><input class="settings-input" type="number" id="s-coeff-fT0" value="6574158.7173102535" step="any" style="width:180px"></div></div>
+            <div class="settings-row"><div><div class="settings-row-label">fT_0</div><div class="settings-row-desc">Temp mode constant term. Only T start from the crystal reads it, with fM_0</div></div><div></div><div style="display:flex;align-items:center;gap:6px"><input class="settings-input" type="number" id="s-coeff-fT0" value="6574158.7173102535" step="any" style="width:180px"></div></div>
           </div>
 
           <!-- Polynomial preview graphs (constant term excluded — shows Δf vs ΔT) -->
@@ -1652,6 +1652,7 @@ function setTempHeld(held) {
 // in progress — the only difference is that the compensated values are absent
 // outside a run, and those are handled by onMeasurement alone.
 function applyTelemetry(e, ts) {
+  noteCrystalTemp(e.crystal_temp);
   setText('val-fM', fmt(e.freq_mass_mode, 2));
   setText('val-fT', fmt(e.freq_temp_mode, 2));
   if (e.lock_mass) updateCrystalUsage(e.freq_mass_mode);
@@ -1796,26 +1797,49 @@ function onTemperature(ev) {
   updateTStartLive();
 }
 
+// The crystal's own absolute temperature, which the server puts on every
+// telemetry sample (crystal_temp: null unless both modes are locked).
+let _crystalTemp = null, _crystalLiveShown = 0;
+
+function noteCrystalTemp(t) {
+  if (t != null) _crystalTemp = { temperature: t, at: Date.now() };
+  // Samples arrive several times a second; the label only needs about one.
+  if (fieldValue('s-tstart-source') === 'crystal' && Date.now() - _crystalLiveShown > 1000) {
+    _crystalLiveShown = Date.now();
+    updateTStartLive();
+  }
+}
+
 // The T start source's current reading in °C, or null without a fresh one.
 // The worker allows a reading up to 5 s old (TEMPERATURE_MAX_AGE); so does this.
 function tStartReading(key) {
-  const r = _lastTemps[key];
+  const r = key === 'crystal' ? _crystalTemp : _lastTemps[key];
   return r && r.temperature != null && Date.now() - r.at <= 5000 ? r.temperature : null;
 }
 
-// Show beside the T Start Source what the selected thermometer reads now, so it
-// is clear what a run started this moment would begin from.
+// Show beside the T Start Source what the selected source reads now, so it is
+// clear what a run started this moment would begin from. For the crystal the
+// PT100 goes alongside: the two disagreeing by more than a few tenths says the
+// profile's constants (fM_0, fT_0) do not belong to this crystal.
 function updateTStartLive(unavailableReason) {
   const el = document.getElementById('s-tstart-live');
   if (!el) return;
   const key = fieldValue('s-tstart-source');
   if (!key || key === 'manual') { el.textContent = ''; el.title = ''; return; }
   const t = tStartReading(key);
-  const r = _lastTemps[key];
-  el.textContent = t != null ? `now ${t.toFixed(2)} °C` : 'no reading';
+  let text = t != null ? `now ${t.toFixed(2)} °C` : 'no reading';
+  let why;
+  if (key === 'crystal') {
+    const pt = tStartReading('pt100');
+    if (t != null && pt != null) text += ` · PT100 ${pt.toFixed(2)}`;
+    why = 'both modes have to be locked, with frequencies the active crystal\'s calibration covers';
+  } else {
+    const r = _lastTemps[key];
+    why = r && r.faults.length ? r.faults.join(', ') : (unavailableReason || 'no current reading');
+  }
+  el.textContent = text;
   el.style.color = t != null ? 'var(--text-dim)' : 'var(--red)';
-  el.title = t != null ? '' : (r && r.faults.length ? r.faults.join(', ') : (unavailableReason || 'no current reading'))
-             + ' — a run started now would use Ambient Temperature';
+  el.title = t != null ? '' : why + ' — a run started now would use Ambient Temperature';
 }
 
 function clearTempCharts() {
@@ -3564,13 +3588,16 @@ function transferCalCoeffs() {
   requestAnimationFrame(() => { _transferCharts.fM && _transferCharts.fM.resize(); _transferCharts.fT && _transferCharts.fT.resize(); });
 }
 
-// Confirmed: copy the fitted (non-constant) coefficients into the Crystal
-// settings form. The user still clicks APPLY there to persist.
+// Confirmed: copy the fitted coefficients into the Crystal settings form. The
+// user still clicks APPLY there to persist. The constants go too: the run-time
+// compensation never reads them, but T start from the crystal does (it solves
+// the temperature from the absolute frequencies), and constants left over from
+// another profile put that reading degrees off.
 function confirmTransferCalCoeffs() {
   if (!_calCoefM || !_calCoefT) return;
   const setVal = (id, v) => { const el = document.getElementById(id); if (el) el.value = v; };
-  setVal('s-coeff-fM3', _calCoefM[0]); setVal('s-coeff-fM2', _calCoefM[1]); setVal('s-coeff-fM1', _calCoefM[2]);
-  setVal('s-coeff-fT3', _calCoefT[0]); setVal('s-coeff-fT2', _calCoefT[1]); setVal('s-coeff-fT1', _calCoefT[2]);
+  setVal('s-coeff-fM3', _calCoefM[0]); setVal('s-coeff-fM2', _calCoefM[1]); setVal('s-coeff-fM1', _calCoefM[2]); setVal('s-coeff-fM0', _calCoefM[3]);
+  setVal('s-coeff-fT3', _calCoefT[0]); setVal('s-coeff-fT2', _calCoefT[1]); setVal('s-coeff-fT1', _calCoefT[2]); setVal('s-coeff-fT0', _calCoefT[3]);
   updateCoeffCharts();   // refresh the preview graphs if the crystal panel is open
   updateDirtyState();    // light up APPLY / UNDO
   document.getElementById('modal-transfer-coeffs').style.display = 'none';
@@ -3658,8 +3685,8 @@ function clearLogs() {
     <div class="modal-body" style="margin-bottom:14px">
       Compare the crystal's current calibration polynomial (grey, dashed) with the
       newly fitted one (coloured) — both shown without their constant term. Confirm
-      to copy the new coefficients into the Crystal settings form; you still click
-      APPLY there to save.
+      to copy the new coefficients, constants included, into the Crystal settings
+      form; you still click APPLY there to save.
     </div>
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:20px">
       <div>

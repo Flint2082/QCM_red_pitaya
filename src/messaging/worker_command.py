@@ -32,6 +32,8 @@ class StartMeasurementCommand(WorkerCommand):
     z_ratio: float = 1.0       # quartz/film acoustic impedance ratio
     # "manual": T start is ambient_temp. An LTC2986 sensor key: T start is that
     # sensor's reading when the run starts, ambient_temp if it has none.
+    # "crystal": the crystal's own absolute temperature from its two modes when
+    # the run starts, ambient_temp if they do not give one.
     t_start_source: str = "manual"
 
 @dataclass

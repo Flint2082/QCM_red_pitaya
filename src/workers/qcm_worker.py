@@ -21,19 +21,27 @@ from domain.sweep_logger import SweepLogger
 from messaging.defines import WorkerState
 from messaging.worker_event import *
 from messaging.worker_command import *
+from processing.TempCompAlgorithm import absolute_temperature
 
 
-def start_temperature(source: str, typed: float, reading, now: float) -> tuple[float, str]:
+def start_temperature(source: str, typed: float, reading, now: float,
+                      crystal: tuple[float | None, str] | None = None) -> tuple[float, str]:
     """A run's T start and where it came from.
 
-    source is "manual" or an LTC2986 sensor key; reading is the newest
-    TemperatureEvent, or None. The sensor's reading is used when it is current
-    and has a temperature (a hard fault leaves none). Otherwise it is the typed-
-    in ambient temperature, with the reason in the description, rather than no
-    run: an OPC-triggered deposition must not be held up by a thermometer."""
+    source is "manual", "crystal" or an LTC2986 sensor key; reading is the newest
+    TemperatureEvent, or None. For "crystal", crystal is the crystal's own
+    absolute temperature as the run starts and, when there is none, why (see
+    QCMWorker._crystal_temperature). A sensor's reading is used when it is
+    current and has a temperature (a hard fault leaves none). Otherwise it is the
+    typed-in ambient temperature, with the reason in the description, rather
+    than no run: an OPC-triggered deposition must not be held up by a thermometer."""
     if source == "manual":
         return typed, "manual"
-    if (reading is None or not reading.available or reading.timestamp is None
+    if source == "crystal":
+        T, problem = crystal if crystal is not None else (None, "not solved")
+        if T is not None:
+            return round(float(T), 4), source
+    elif (reading is None or not reading.available or reading.timestamp is None
             or now - reading.timestamp > TEMPERATURE_MAX_AGE):
         problem = "no current reading"
     else:
@@ -352,6 +360,26 @@ class QCMWorker(threading.Thread):
                                              f"T_source={self._t_start_from}")
         return True
 
+    def _crystal_temperature(self) -> tuple[float | None, str]:
+        """The crystal's absolute temperature from its two modes right now, for
+        T start from the crystal (see absolute_temperature), or None and why not.
+
+        Both modes have to be on resonance, and judged on the newest sample as
+        well as the lock window: the window can still say locked while a loop
+        is pulling in, and a temp mode a few hundred Hz off resonance solves to a
+        plausible but wrong temperature."""
+        if not self.compensated:
+            return None, "uncompensated run"
+        if not all(self.qcm.getLockDetect(i) and self.qcm.isPhaseTrusted(i) for i in (1, 2)):
+            return None, "modes not on resonance"
+        coefficients = self.qcm.getCoefficients()
+        if not (coefficients.get("fM_0", 0) > 0 and coefficients.get("fT_0", 0) > 0):
+            return None, "no fM_0/fT_0 in the crystal profile"
+        T = absolute_temperature(coefficients, self.qcm.getFreq(1), self.qcm.getFreq(2))
+        if T is None:
+            return None, "frequencies outside the calibration"
+        return T, ""
+
     def handle_command(self, command: WorkerCommand):
 
         if self.state == WorkerState.LOCKING and isinstance(command, self._DEFER_WHILE_LOCKING):
@@ -377,12 +405,13 @@ class QCMWorker(threading.Thread):
 
         # Start measurement
         elif isinstance(command, StartMeasurementCommand) and self.state == WorkerState.IDLE:
-            # T start from a thermometer is read now, as the run starts. The
-            # command then carries the value used, so a log re-opened mid-run
-            # (RetryRunLogCommand) records the same one.
+            # T start from a thermometer, or from the crystal itself, is read
+            # now, as the run starts. The command then carries the value used, so
+            # a log re-opened mid-run (RetryRunLogCommand) records the same one.
             T, self._t_start_from = start_temperature(
                 command.t_start_source, command.ambient_temp,
-                self._temperatures() if self._temperatures else None, time.time())
+                self._temperatures() if self._temperatures else None, time.time(),
+                self._crystal_temperature() if command.t_start_source == "crystal" else None)
             command = replace(command, ambient_temp=T)
             print(f"[QCM] T start {T:g} degC from {self._t_start_from}")
             self.qcm.setMeasurementReference(T=command.ambient_temp, mat_dens=command.mat_dens,

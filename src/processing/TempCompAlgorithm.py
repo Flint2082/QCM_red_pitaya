@@ -139,9 +139,60 @@ class TempCompAlgorithm:
         except Exception as e:
             print(f"Error in FreqToTemp: {e}")
             return None, None, None, None
-        
-        
-    
+
+
+# The crystal's absolute temperature is looked for in this range. Outside it the
+# calibration cubics have extrapolated too far to be believed, and the mass-free
+# combination below can turn over, giving a second root: for infi2439_SC_1 it
+# does near -12 degC.
+ABSOLUTE_T_RANGE = (-10.0, 120.0)
+
+
+def absolute_temperature(coefficients, fM, fT, near=25.0):
+    """The crystal's temperature (degC) from its two mode frequencies alone: no
+    T start, no thermometer. None when the frequencies do not give one.
+
+    FreqToTemp works from changes since the run start and needs T start for
+    that. The calibration fit, though, gives both modes' whole curves,
+    f(T) = f_0 + f_1*T + f_2*T^2 + f_3*T^3, so with the constants fM_0 and fT_0
+    the frequencies say the temperature by themselves.
+
+    fT alone would do on a clean crystal, but deposited film lowers fT too (by
+    about fT/fM times what it lowers fM), and 1 nm of gold would read 1-1.5 degC
+    hot. The combination fT - rho*fM is the mass-free one FreqToTemp solves, and
+    with rho = fT_0/fM_0:
+      - film shifts both modes in that ratio, so it cancels;
+      - the constants cancel by the choice of rho, leaving
+        fT - rho*fM = pT(T) - rho*pM(T), with pT, pM the cubics without constants;
+      - a reference-clock error scales both modes alike. That scales the
+        combination, which is only a few kHz, so it drops out as well.
+    What does not cancel is a shift of one mode alone: 1 Hz on fM moves the
+    answer by about 0.01 degC.
+
+    The constants have to come from a calibration of this crystal; the defaults
+    of a new profile describe a different one. near picks between roots if the
+    range holds more than one."""
+    try:
+        fM_0, fT_0 = float(coefficients["fM_0"]), float(coefficients["fT_0"])
+        fM, fT = float(fM), float(fT)
+    except (KeyError, TypeError, ValueError):
+        return None
+    if not (fM_0 > 0 and fT_0 > 0 and fM > 0 and fT > 0 and np.isfinite(fM) and np.isfinite(fT)):
+        return None
+    rho = fT_0 / fM_0
+    roots = np.roots([coefficients["fT_3"] - rho * coefficients["fM_3"],
+                      coefficients["fT_2"] - rho * coefficients["fM_2"],
+                      coefficients["fT_1"] - rho * coefficients["fM_1"],
+                      -(fT - rho * fM)])
+    lo, hi = ABSOLUTE_T_RANGE
+    T = roots[np.isclose(roots.imag, 0)].real
+    T = T[(T >= lo) & (T <= hi)]
+    if T.size == 0:
+        return None
+    return float(T[np.argmin(np.abs(T - near))])
+
+
+
 def calculateCoeffecients(calibration_file, coeffecient_file):
     # matplotlib is imported here rather than at the top of the module because
     # this is the only thing in src/ that needs it, and it is an interactive

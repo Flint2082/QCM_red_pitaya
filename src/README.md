@@ -127,6 +127,20 @@ same. Without a current, fault-free reading it starts from the ambient
 temperature rather than not at all. Either way the run log records the value
 and its origin, in the SETTINGS row and as `T_source=` in `RUN_START`.
 
+T start can also come from the crystal itself (`crystal`). The calibration fit
+gives both modes' whole curves, constants `fM_0`/`fT_0` included, so the two
+frequencies say the temperature without a thermometer and without its lag.
+`absolute_temperature` in `processing/TempCompAlgorithm.py` solves it from
+fT − ρ·fM with ρ = fT_0/fM_0: deposited film and reference-clock errors
+cancel in that combination. A shift of one mode alone does not (1 Hz on fM is
+about 0.01 °C). The worker takes it only with both modes locked and on
+resonance in the newest sample, and falls back like a thermometer otherwise.
+It needs a profile whose constants come from a calibration of this crystal;
+TRANSFER TO CRYSTAL in the CALIBRATE tab copies them along with the slopes.
+Every telemetry and measurement message on `/ws` carries the current reading as
+`crystal_temp` (null unless both modes are locked), and the Settings row shows
+it next to the PT100.
+
 ## Calibration points
 
 The **CALIBRATE** tab's points are taken and kept on the Pitaya

@@ -36,6 +36,7 @@ from plc.opc_worker import _READ_KEYS as OPC_READ_KEYS, _CTRL_KEYS as OPC_CTRL_K
 from messaging.api_command import *
 from messaging.api_event import CalibrationPointsEvent, CalibrationStatusEvent, LogEvent
 from messaging.defines import OutputMode
+from processing.TempCompAlgorithm import absolute_temperature
 
 
 # ==================================================
@@ -145,9 +146,10 @@ _SETTING_KEYS = frozenset({
 MEASUREMENT_MODES = ("compensated", "uncompensated")
 
 # Where a run's start temperature (T start) comes from: the typed-in ambient
-# temperature, or an LTC2986 sensor's reading at the moment the run starts. The
-# QCM worker falls back to the typed-in value when that sensor has none.
-T_START_SOURCES = ("manual", *(s.key for s in SENSORS))
+# temperature, the crystal's own absolute temperature from its two modes, or an
+# LTC2986 sensor's reading, each taken at the moment the run starts. The QCM
+# worker falls back to the typed-in value when the source has none.
+T_START_SOURCES = ("manual", "crystal", *(s.key for s in SENSORS))
 
 # OPC keys, kept together because they are carried through verbatim when the
 # bridge is disabled (see _save_settings).
@@ -204,7 +206,7 @@ DEFAULT_SETTINGS = {
     "prune_old_runs": True,         # delete finished runs when the disk runs low
     "trim_current_run": True,       # drop the oldest parts of the run in progress
     "ambient_temp": 23.0,           # degC, room temperature
-    "t_start_source": "manual",     # T start from ambient_temp, or a sensor key (T_START_SOURCES)
+    "t_start_source": "manual",     # T start from ambient_temp, "crystal", or a sensor key (T_START_SOURCES)
     "mat_dens": 19320.0,            # kg/m3, gold
     "z_ratio": 1.0,                 # 1.0 = plain Sauerbrey, no Z-match
     "target_thickness": 0.0,        # nm, 0 = no target
@@ -751,6 +753,8 @@ class RestServer:
             try:
                 event = self.event_queue.get_nowait()
                 msg = self._serialise_event(event)
+                if msg.get("type") in ("TelemetryEvent", "MeasurementEvent"):
+                    msg["crystal_temp"] = self._crystal_temp(msg)
                 self._calibration_feed(msg)
 
                 if msg.get("type") == "StateEvent":
@@ -824,6 +828,18 @@ class RestServer:
                 await self.manager.broadcast(msg)
             except queue.Empty:
                 await asyncio.sleep(0.01)
+
+    def _crystal_temp(self, msg: dict):
+        """The crystal's absolute temperature (degC) from this sample's two
+        modes with the active crystal's calibration, the reading T start from
+        the crystal would take now. None unless both modes are locked. See
+        absolute_temperature."""
+        if not (msg.get("lock_mass") and msg.get("lock_temp") and self._coefficients):
+            return None
+        try:
+            return absolute_temperature(self._coefficients, msg.get("freq_mass_mode"), msg.get("freq_temp_mode"))
+        except Exception:
+            return None
 
     # ---- Calibration points: driven from the broadcaster ----
     # A failure in here is printed and dropped: it must never take the

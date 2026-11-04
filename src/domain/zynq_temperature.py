@@ -13,14 +13,20 @@ both modes moved by ~0.3 ppm per °C of the V2 board's temperature, and this
 reading may track the oscillator more closely.
 """
 
+import collections
 import glob
 import os
 
 IIO_DEVICES = "/sys/bus/iio/devices"
 
-# One conversion resolves 0.12 °C and the reading jitters by about ±2 counts,
-# so a reading averages this many: ~45 ms on the Pitaya, ±0.025 °C.
-SAMPLES = 128
+# A reading is the mean of the last WINDOW conversions, one taken per read():
+# at the temperature worker's 1 s cadence, the last minute. One conversion
+# resolves 0.12 °C and scatters by about a count, which dithers it, so the mean
+# of 60 is good to ~0.02 °C. Not a burst of conversions per read: 128 back to
+# back took ~56 ms, and every frequency sample taken during them dipped by up
+# to 30 mHz (4 ppb) in both modes (3 Nov 2026). A single one takes 0.6 ms and
+# leaves them alone.
+WINDOW = 60
 
 
 def _read(path: str) -> str:
@@ -34,6 +40,7 @@ class ZynqDieTemperature:
         self._raw_path = os.path.join(device_dir, "in_temp0_raw")
         self.offset = float(_read(os.path.join(device_dir, "in_temp0_offset")))  # counts
         self.scale = float(_read(os.path.join(device_dir, "in_temp0_scale")))    # m°C per count
+        self._conversions = collections.deque(maxlen=WINDOW)                   # counts
 
     @classmethod
     def open(cls, root: str = IIO_DEVICES) -> "ZynqDieTemperature":
@@ -47,7 +54,9 @@ class ZynqDieTemperature:
         raise RuntimeError(f"no XADC under {root}")
 
     def read(self) -> float:
-        """Die temperature in °C, the mean of SAMPLES conversions. Each read of
-        the raw file is a fresh conversion."""
-        total = sum(int(_read(self._raw_path)) for _ in range(SAMPLES))
-        return (total / SAMPLES + self.offset) * self.scale / 1000.0
+        """Die temperature in °C: takes one conversion (each read of the raw
+        file is a fresh one) and returns the mean of the last WINDOW, or of
+        all of them until there are that many."""
+        self._conversions.append(int(_read(self._raw_path)))
+        mean = sum(self._conversions) / len(self._conversions)
+        return (mean + self.offset) * self.scale / 1000.0

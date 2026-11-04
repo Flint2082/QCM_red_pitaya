@@ -110,7 +110,9 @@ The same thread reads the Zynq's own die temperature from its XADC
 ([`domain/zynq_temperature.py`](domain/zynq_temperature.py)), board or no
 board. It stands in for the Pitaya's 125 MHz reference oscillator: a drift in
 that clock shifts both modes by the same fraction, which the compensation
-cannot tell from mass.
+cannot tell from mass. It takes one conversion a second and reports the mean
+of the last minute; a burst of conversions dips both mode frequencies for as
+long as it lasts.
 
 Every run log also carries the newest readings beside each sample, in
 `pt100_c`, `thermocouple_c`, `cold_junction_c` and `zynq_die_c` (°C), with any

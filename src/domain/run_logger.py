@@ -60,7 +60,8 @@ DIE_COLUMN = "zynq_die_c"
 # no copy of a run, it just downloads this one back via /runs/{name}/download.
 HEADERS = [
     "timestamp_iso", "timestamp_s", "freq_mass_hz", "freq_temp_hz", "comp_mass_freq_hz",
-    "thickness_comp_nm", "thickness_uncomp_nm", "temperature_c", "amp_mass", "phase_mass",
+    "thickness_comp_nm", "thickness_uncomp_nm", "rate_comp_nm_s", "rate_uncomp_nm_s",
+    "temperature_c", "amp_mass", "phase_mass",
     "amp_temp", "phase_temp", "lock_mass", "lock_temp", "quality_mass", "quality_temp",
     *TEMPERATURE_COLUMNS, DIE_COLUMN, "temp_sensor_faults",
     "event_type", "event_detail",
@@ -420,6 +421,9 @@ class RunLogger:
                 "comp_mass_freq_hz": data.compensated_freq,
                 "thickness_comp_nm": data.calculated_thickness,
                 "thickness_uncomp_nm": data.uncompensated_thickness,
+                # Deposition rate over the rate window; blank while it fills.
+                "rate_comp_nm_s": "" if data.calculated_rate is None else data.calculated_rate,
+                "rate_uncomp_nm_s": "" if data.uncompensated_rate is None else data.uncompensated_rate,
                 "temperature_c": data.calculated_temp,
                 "amp_mass": data.amp_mass, "phase_mass": data.phase_mass,
                 "amp_temp": data.amp_temp, "phase_temp": data.phase_temp,

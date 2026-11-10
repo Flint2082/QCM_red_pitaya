@@ -37,6 +37,8 @@ from messaging.api_command import *
 from messaging.api_event import CalibrationPointsEvent, CalibrationStatusEvent, LogEvent
 from messaging.defines import OutputMode
 from processing.TempCompAlgorithm import absolute_temperature
+from processing.deposition_rate import (DEFAULT_WINDOW as RATE_WINDOW, MAX_WINDOW as RATE_WINDOW_MAX,
+                                        MIN_WINDOW as RATE_WINDOW_MIN)
 
 
 # ==================================================
@@ -136,7 +138,7 @@ _SETTING_KEYS = frozenset({
     "auto_relock", "temp_hold", "freq_tracking", "freq_track_interval", "measurement_mode",
     "prune_old_runs", "trim_current_run",
     "active_crystal", "ambient_temp", "t_start_source", "mat_dens", "z_ratio",
-    "target_thickness",
+    "target_thickness", "rate_window",
     "opc_enabled", "opc_url", "opc_user", "opc_password", "opc_base_node",
 })
 
@@ -210,6 +212,7 @@ DEFAULT_SETTINGS = {
     "mat_dens": 19320.0,            # kg/m3, gold
     "z_ratio": 1.0,                 # 1.0 = plain Sauerbrey, no Z-match
     "target_thickness": 0.0,        # nm, 0 = no target
+    "rate_window": RATE_WINDOW,     # s of thickness the deposition rate is fitted over
 }
 
 
@@ -400,6 +403,7 @@ class RestServer:
             "mat_dens":       self._mat_dens,
             "z_ratio":        self._z_ratio,
             "target_thickness": self._target_thickness,
+            "rate_window":    self._rate_window,
         }
 
     def _apply_settings(self, d: dict):
@@ -455,6 +459,8 @@ class RestServer:
             self._z_ratio = float(d["z_ratio"])
         if "target_thickness" in d:
             self._target_thickness = float(d["target_thickness"])
+        if "rate_window" in d:
+            self._rate_window = min(max(float(d["rate_window"]), RATE_WINDOW_MIN), RATE_WINDOW_MAX)
 
     def _load_settings(self):
         try:
@@ -641,6 +647,7 @@ class RestServer:
         self.command_queue.put(SetFreqTrackingCommand(self._freq_tracking, self._freq_track_interval))
         self.command_queue.put(SetStorageReclaimCommand(self._prune_old_runs, self._trim_current_run))
         self.command_queue.put(SetTargetThicknessCommand(self._target_thickness))
+        self.command_queue.put(SetRateWindowCommand(self._rate_window))
 
         # Apply the active crystal's coefficients + lock frequencies, if any.
         if self._active_crystal:
@@ -1162,6 +1169,18 @@ class RestServer:
             self._save_settings()
             return {"status": "ok", "target_thickness": self._target_thickness}
 
+        @app.post("/settings/rate_window")
+        def set_rate_window(seconds: float):
+            """Seconds of thickness the deposition rate is fitted over: a longer
+            window gives a quieter rate that follows a change more slowly. Takes
+            effect immediately, mid-run included."""
+            if not RATE_WINDOW_MIN <= seconds <= RATE_WINDOW_MAX:
+                raise HTTPException(400, f"rate window must be {RATE_WINDOW_MIN:g} to {RATE_WINDOW_MAX:g} s")
+            self._rate_window = seconds
+            self.command_queue.put(SetRateWindowCommand(seconds))
+            self._save_settings()
+            return {"status": "ok", "rate_window": self._rate_window}
+
         @app.get("/measurement/target")
         def get_target():
             """The target-thickness flag, for clients that poll instead of
@@ -1206,6 +1225,7 @@ class RestServer:
                     "mat_dens":         self._mat_dens,
                     "z_ratio":          self._z_ratio,
                     "target_thickness": self._target_thickness,
+                    "rate_window":      self._rate_window,
                 },
                 # Derived from the PLL capture window so the UI never hard-codes it.
                 "pll": {

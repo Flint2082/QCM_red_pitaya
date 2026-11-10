@@ -177,6 +177,8 @@ class Application(threading.Thread):
             self.worker_command_queue.put(wc.SetFreqTrackingCommand(command.enabled, command.interval))
         elif isinstance(command, ac.SetTargetThicknessCommand):
             self.worker_command_queue.put(wc.SetTargetThicknessCommand(command.target))
+        elif isinstance(command, ac.SetRateWindowCommand):
+            self.worker_command_queue.put(wc.SetRateWindowCommand(command.window))
         elif isinstance(command, ac.SetStorageReclaimCommand):
             self.worker_command_queue.put(wc.SetStorageReclaimCommand(
                 command.prune_old_runs, command.trim_current_run))

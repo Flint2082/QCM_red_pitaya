@@ -143,6 +143,24 @@ Every telemetry and measurement message on `/ws` carries the current reading as
 `crystal_temp` (null unless both modes are locked), and the Settings row shows
 it next to the PT100.
 
+## Deposition rate
+
+The MAIN tab shows the deposition rate of both thicknesses, in nm/s, beside the
+thicknesses themselves. A difference between successive samples is mostly
+noise, so the worker fits a straight line through the last **Rate Window**
+seconds of each thickness and takes its slope
+([`processing/deposition_rate.py`](processing/deposition_rate.py)). The window
+is set under **Settings → Measurement → Rate Window** (default 1 s, or
+`POST /settings/rate_window`). A longer window gives a quieter rate that lags a
+change by about half the window. The rate stays blank until half a window of
+the run has been taken, and again for half the new window when the window is
+lengthened mid-run.
+
+Every run log carries it in `rate_comp_nm_s` and `rate_uncomp_nm_s`, beside the
+thickness columns, and records the window in its SETTINGS row.
+`tools/csv_plotter.py` works the rate out from the thickness for a log written
+before these columns existed, by the same rule.
+
 ## Calibration points
 
 The **CALIBRATE** tab's points are taken and kept on the Pitaya

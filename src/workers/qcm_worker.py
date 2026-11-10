@@ -22,6 +22,7 @@ from messaging.defines import WorkerState
 from messaging.worker_event import *
 from messaging.worker_command import *
 from processing.TempCompAlgorithm import absolute_temperature
+from processing.deposition_rate import RateEstimator
 
 
 def start_temperature(source: str, typed: float, reading, now: float,
@@ -105,6 +106,10 @@ class QCMWorker(threading.Thread):
         self.target_thickness = 0.0
         self._target_reached = False
         self._last_thickness = 0.0  # most recent compensated thickness, for target changes
+        # Deposition rate of each thickness, fitted over the last rate window of
+        # the run (processing/deposition_rate.py); emptied at every run start.
+        self._rate_comp = RateEstimator()
+        self._rate_uncomp = RateEstimator()
         # Lock-status emission throttle: send on change, plus a periodic
         # heartbeat so new WS clients converge. Unthrottled this produced
         # ~10 events/sec of WS traffic even when idle.
@@ -343,6 +348,7 @@ class QCMWorker(threading.Thread):
             "mat_dens":         command.mat_dens,
             "z_ratio":          command.z_ratio,
             "target_thickness": self.target_thickness,
+            "rate_window":      self._rate_comp.window,
         }
         # Which software and bitstream took the run.
         if self.version is not None:
@@ -421,6 +427,8 @@ class QCMWorker(threading.Thread):
             self._set_target_reached(False)  # a fresh run starts below its target again
             self._temp_held = False          # nothing to hold over from the previous run
             self._comp_ok = True
+            self._rate_comp.reset()          # the thickness starts again from 0
+            self._rate_uncomp.reset()
             self._start_run_log(command)
             self._set_state(WorkerState.MEASURING)
 
@@ -493,6 +501,11 @@ class QCMWorker(threading.Thread):
             # the acquisition loop itself for no benefit: the resonances move over
             # minutes, not milliseconds.
             self.freq_track_interval = max(1.0, float(command.interval))
+        elif isinstance(command, SetRateWindowCommand):
+            # Mid-run too: a longer window fills from the samples to come, a
+            # shorter one drops the oldest at the next sample.
+            self._rate_comp.window = command.window
+            self._rate_uncomp.window = command.window
         elif isinstance(command, SetTargetThicknessCommand):
             self.target_thickness = max(0.0, float(command.target))
             # Raising the target mid-run means the film is below it again, so the
@@ -766,6 +779,8 @@ class QCMWorker(threading.Thread):
         # temperature held is the last one solved on it.
         hold_temp = compensated and self.temp_hold and not (lock_temp and self.qcm.isPhaseTrusted(2))
         data = self.qcm.getMeasurement(hold_temp=hold_temp)
+        data.calculated_rate = self._rate_comp.update(data.timestamp, data.calculated_thickness)
+        data.uncompensated_rate = self._rate_uncomp.update(data.timestamp, data.uncompensated_thickness)
         thickness = data.calculated_thickness
         self._comp_ok = thickness is not None and math.isfinite(thickness)
         self.logger.write_measurement(data)  # durable on-disk record (WS-independent)

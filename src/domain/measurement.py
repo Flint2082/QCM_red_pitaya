@@ -39,3 +39,8 @@ class MeasurementData(TelemetryData):
     # mode): calculated_thickness is then the uncompensated thickness, and
     # calculated_temp is None because no temperature is measured.
     compensated: bool = True
+    # Deposition rate (nm/s) of calculated_thickness and of
+    # uncompensated_thickness, over the worker's rate window (see
+    # processing/deposition_rate.py). None until the window has filled.
+    calculated_rate: float | None = None
+    uncompensated_rate: float | None = None

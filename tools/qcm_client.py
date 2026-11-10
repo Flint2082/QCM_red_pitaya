@@ -71,6 +71,12 @@ class QCMClient:
         """{target_thickness, enabled, reached, reached_at, thickness_at_target}."""
         return self._get("/measurement/target")
 
+    def set_rate_window(self, seconds: float):
+        """Seconds of thickness the deposition rate is fitted over (0.5-300,
+        default 1). Longer is quieter but follows a change more slowly. Takes
+        effect immediately, mid-run included."""
+        return self._post("/settings/rate_window", seconds=seconds)
+
     # -------------------------------------------------- oscillator / lock settings
     def set_frequency(self, oscillator_idx: int, frequency: float):
         return self._post("/settings/frequency", oscillator_idx=oscillator_idx, frequency=frequency)

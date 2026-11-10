@@ -159,6 +159,7 @@ access to the fields of `MeasurementData`:
 | `compensated_freq`       | temperature-compensated mass frequency   |
 | `uncompensated_thickness`| raw Sauerbrey thickness (nm)             |
 | `calculated_thickness`   | temperature-compensated thickness (nm)   |
+| `uncompensated_rate`, `calculated_rate` | deposition rate of each thickness (nm/s) over the rate window; `None` until it fills |
 | `calculated_temp`        | crystal temperature from the model (°C)  |
 | `amp_mass`, `amp_temp`   | demodulated amplitudes                   |
 | `phase_mass`, `phase_temp`| demodulated phases                      |
@@ -200,6 +201,7 @@ All methods are on `QCMClient`. Frequencies are in Hz unless noted.
 | `state()` | `GET /state` | returns the state string |
 | `set_target_thickness(value)` | `POST /settings/target_thickness` | nm; 0 = no target |
 | `target()` | `GET /measurement/target` | current target + whether it has been reached |
+| `set_rate_window(seconds)` | `POST /settings/rate_window` | s of thickness the rate is fitted over, 0.5–300; default 1 |
 
 ### Target thickness
 

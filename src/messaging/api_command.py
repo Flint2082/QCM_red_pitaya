@@ -140,6 +140,11 @@ class SetSensorParamsCommand(ApiCommand):
     tooling_ratio: float = 1.0  # proportional scaling of reported thickness
 
 @dataclass
+class SetRateWindowCommand(ApiCommand):
+    """Seconds of thickness the deposition rate is fitted over."""
+    window: float
+
+@dataclass
 class SetTargetThicknessCommand(ApiCommand):
     target: float  # nm of compensated thickness; 0 disables the target
 

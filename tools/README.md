@@ -201,7 +201,8 @@ All methods are on `QCMClient`. Frequencies are in Hz unless noted.
 | `state()` | `GET /state` | returns the state string |
 | `set_target_thickness(value)` | `POST /settings/target_thickness` | nm; 0 = no target |
 | `target()` | `GET /measurement/target` | current target + whether it has been reached |
-| `set_rate_window(seconds)` | `POST /settings/rate_window` | s of thickness the rate is fitted over, 0.5–300; default 1 |
+| `set_rate_window(seconds)` | `POST /settings/rate_window` | s of thickness the rate is fitted over, 0.1–300; default 1 |
+| `set_acquisition(sample_rate, publish_rate=10, log_rate=10)` | `POST /settings/acquisition` | Hz: how often the instrument samples (1-100), how often the GUI, the stream and the PLC get a sample (1-25), how often the run log takes one (0 = every sample); defaults 100, 10, 10 |
 
 ### Target thickness
 

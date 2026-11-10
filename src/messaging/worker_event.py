@@ -55,6 +55,9 @@ class LockStatusEvent(Event):
     # not expected to be.
     parked_mass: bool = False
     parked_temp: bool = False
+    # Samples a second the acquisition loop actually took over the last second,
+    # None until it has run for one.
+    sample_rate: float | None = None
 
 @dataclass
 class CapAdjustEvent(Event):

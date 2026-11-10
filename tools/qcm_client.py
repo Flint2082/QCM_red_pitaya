@@ -72,10 +72,18 @@ class QCMClient:
         return self._get("/measurement/target")
 
     def set_rate_window(self, seconds: float):
-        """Seconds of thickness the deposition rate is fitted over (0.5-300,
+        """Seconds of thickness the deposition rate is fitted over (0.1-300,
         default 1). Longer is quieter but follows a change more slowly. Takes
         effect immediately, mid-run included."""
         return self._post("/settings/rate_window", seconds=seconds)
+
+    def set_acquisition(self, sample_rate: float, publish_rate: float = 10.0, log_rate: float = 10.0):
+        """How often the instrument samples (1-100 Hz), how often the GUI, this
+        stream and the PLC get a sample (1-25 Hz), and how often the run log
+        takes one (Hz, 0 = every sample). A new sample rate waits for a run in
+        progress to end."""
+        return self._post("/settings/acquisition", sample_rate=sample_rate,
+                          publish_rate=publish_rate, log_rate=log_rate)
 
     # -------------------------------------------------- oscillator / lock settings
     def set_frequency(self, oscillator_idx: int, frequency: float):

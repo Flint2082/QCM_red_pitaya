@@ -161,6 +161,53 @@ thickness columns, and records the window in its SETTINGS row.
 `tools/csv_plotter.py` works the rate out from the thickness for a log written
 before these columns existed, by the same rule.
 
+## Sampling
+
+The FPGA updates its frequency registers far faster than the software reads
+them, so how often the instrument samples is a software setting:
+**Settings → Measurement → Sample Rate**, 1–100 Hz (default 100). Every sample
+goes into the deposition rate, the target check and the lock automation. Two
+slower streams take a subset of them, each on its own schedule
+([`domain/acquisition.py`](domain/acquisition.py)):
+
+- **Display / PLC Rate** (1–25 Hz, default 10): the samples sent to the
+  browsers over `/ws` and written to the PLC. Each is the newest sample, its
+  rate fitted to every sample before it.
+- **Log Rate** (0–100 Hz, default 10; 0 = every sample): the samples written
+  to the run log, each with the rate fitted to every sample. A row is about 300
+  bytes: about 250 MB a day at 10 Hz, 2.6 GB if every sample at 100 Hz is
+  logged.
+
+The same is `POST /settings/acquisition`. A new sample rate waits for a run in
+progress to end, so a run log has one rate throughout; the other two take
+effect at once, and a change during a run is written to the log as an
+`ACQUISITION` row. Every run's SETTINGS row records all three.
+
+What a higher rate buys is a short Rate Window that still holds enough samples:
+a 0.2 s window needs about 25 Hz. It does little for the noise at a given
+window. A 30 kHz capture of the frequency registers (rp-f0ea58, idle and
+locked, 10 Nov 2026) shows the noise is mostly slow wander below 5 Hz, and the
+rate noise for gold came out at 1.6e-4, 8e-5, 4.3e-5 and 7e-6 nm/s for 0.2, 0.5,
+1 and 5 s windows, the same at 25, 50 and 100 Hz.
+
+On the Pitaya's own CPU (10 Nov 2026, against a fake FPGA, logging every sample,
+one browser at 10 Hz) the service held 10, 50 and 100 Hz exactly, using 18 %,
+34 % and 52 % of one core; at 100 Hz the samples came 10.0 ms apart, 12.7 ms at
+the 99th percentile.
+
+That extra load warms the board, and the reference clock with it: the minute of
+that test warmed the Zynq die by 0.5 degC and moved both modes of a live run up
+by ~35 ppb, a ~2 pm dip in its compensated thickness. A steady rate is a steady
+load and does no harm, but change the sample rate a few minutes before a run
+rather than just before it.
+
+Lock detection and the drive-gain servo keep their timing at any rate: the lock
+window spans 1.2 s and a loss is called after 0.2 s of out-of-limit samples
+(`LOCK_WINDOW_S`, `LOCK_LOSS_S` in `domain/qcm_interface.py`), and the AGC steps
+10 times a second. The footer of the page shows the rate actually achieved. A
+run that falls more than 10 % behind the set rate says so in its log
+(`SAMPLE_RATE_LOW`, then `SAMPLE_RATE_OK`).
+
 ## Calibration points
 
 The **CALIBRATE** tab's points are taken and kept on the Pitaya

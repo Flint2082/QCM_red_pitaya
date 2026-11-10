@@ -512,8 +512,15 @@ footer { height: 24px; background: var(--surface); border-top: 1px solid var(--b
           <div class="settings-section-title">TARGET</div>
           <div class="settings-group">
             <div class="settings-row"><div><div class="settings-row-label">Target Thickness</div><div class="settings-row-desc">Compensated thickness at which the target flag is raised — shows a popup and sets the flag on the OPC server and the REST API. The measurement keeps running. 0 = no target.</div></div><div></div><div style="display:flex;align-items:center;gap:6px"><input class="settings-input" type="number" id="s-target-thickness" value="0" step="1" min="0"><span class="settings-unit">nm</span></div></div>
-            <div class="settings-row"><div><div class="settings-row-label">Rate Window</div><div class="settings-row-desc">The deposition rate is the slope of a straight line fitted through this much of the latest thickness, for both the compensated and the uncompensated rate. A longer window gives a quieter rate that follows a change more slowly, lagging it by about half the window. The rate stays blank until half a window of the run has been taken. Takes effect immediately, a run in progress included, where a longer window blanks the rate again until half of it has been taken; the run log records the window in its SETTINGS row. 0.5–300 s</div></div><div></div><div style="display:flex;align-items:center;gap:6px"><input class="settings-input" type="number" id="s-rate-window" value="1" step="0.5" min="0.5" max="300"><span class="settings-unit">s</span></div></div>
             <div class="settings-row"><div><div class="settings-row-label">Target Status</div><div class="settings-row-desc">Live state of the flag for the current run</div></div><div></div><div style="display:flex;align-items:center;gap:6px"><span id="s-target-status" style="font-family:'DM Mono',monospace;font-size:12px;color:var(--text-dim)">NO TARGET</span></div></div>
+          </div>
+
+          <div class="settings-section-title">SAMPLING &amp; RATE</div>
+          <div class="settings-group">
+            <div class="settings-row"><div><div class="settings-row-label">Sample Rate</div><div class="settings-row-desc">How often the frequencies are read and the thickness and deposition rate worked out. The FPGA updates its frequency registers far faster, so this is the software's pace only. A higher rate puts more samples into each rate window, which is what keeps a short, quick-reacting window usable; for a given window it hardly changes the noise, which comes from slow frequency wander. Lock detection and the drive-gain servo keep the same timing at any rate. 100 Hz takes about half of one CPU core; that load warms the board and shifts its reference clock by a few tens of ppb, which reads as thickness, so change the rate a few minutes before a run rather than just before. A change waits for a run in progress to end. The rate actually achieved shows at the bottom of the page, and a run that falls behind says so in its log. 1–100 Hz</div></div><div></div><div style="display:flex;align-items:center;gap:6px"><input class="settings-input" type="number" id="s-sample-rate" value="100" step="1" min="1" max="100"><span class="settings-unit">Hz</span></div></div>
+            <div class="settings-row"><div><div class="settings-row-label">Rate Window</div><div class="settings-row-desc">The deposition rate is the slope of a straight line fitted through this much of the latest thickness, every sample of it, for both the compensated and the uncompensated rate. A longer window gives a quieter rate that follows a change more slowly, lagging it by about half the window. It needs two samples in half a window, so at 10 Hz keep it at 0.2 s or more. The rate stays blank until half a window of the run has been taken. Takes effect immediately, a run in progress included, where a longer window blanks the rate again until half of it has been taken; the run log records the window in its SETTINGS row. 0.1–300 s</div></div><div></div><div style="display:flex;align-items:center;gap:6px"><input class="settings-input" type="number" id="s-rate-window" value="1" step="0.1" min="0.1" max="300"><span class="settings-unit">s</span></div></div>
+            <div class="settings-row"><div><div class="settings-row-label">Display / PLC Rate</div><div class="settings-row-desc">How often a sample is sent to this page, and every other open browser, and written to the PLC. Each one is the newest sample, its rate fitted to every sample before it. Old lab PCs draw 10 Hz comfortably. Takes effect immediately. 1–25 Hz</div></div><div></div><div style="display:flex;align-items:center;gap:6px"><input class="settings-input" type="number" id="s-publish-rate" value="10" step="1" min="1" max="25"><span class="settings-unit">Hz</span></div></div>
+            <div class="settings-row"><div><div class="settings-row-label">Log Rate</div><div class="settings-row-desc">How often the run log takes a sample; 0 logs every sample. Each row carries the deposition rate fitted to every sample, whatever this is set to. A row is about 300 bytes: about 250 MB a day at 10 Hz, 2.6 GB if every sample at 100 Hz is logged, so mind the free space on the SD card (System → Storage) before a long run. Takes effect immediately; a change during a run is noted in its log. 0–100 Hz</div></div><div></div><div style="display:flex;align-items:center;gap:6px"><input class="settings-input" type="number" id="s-log-rate" value="10" step="1" min="0" max="100"><span class="settings-unit">Hz</span></div></div>
           </div>
         </div>
 
@@ -849,6 +856,7 @@ footer { height: 24px; background: var(--surface); border-top: 1px solid var(--b
 
 <footer>
   <span class="footer-text" id="footer-left">n = 0</span>
+  <span class="footer-text" id="footer-rate" title="Samples a second the instrument actually takes, against the Sample Rate set (Settings → Measurement)"></span>
   <span class="footer-text" id="footer-right">—</span>
 </footer>
 
@@ -2553,6 +2561,14 @@ async function loadInitialSettings() {
       if (s.measurement.target_thickness != null) document.getElementById('s-target-thickness').value = s.measurement.target_thickness;
       if (s.measurement.rate_window != null)      document.getElementById('s-rate-window').value = s.measurement.rate_window;
     }
+    if (s.acquisition) {
+      if (s.acquisition.sample_rate != null) {
+        document.getElementById('s-sample-rate').value = s.acquisition.sample_rate;
+        _sampleRateSet = s.acquisition.sample_rate;
+      }
+      if (s.acquisition.publish_rate != null) document.getElementById('s-publish-rate').value = s.acquisition.publish_rate;
+      if (s.acquisition.log_rate != null)     document.getElementById('s-log-rate').value     = s.acquisition.log_rate;
+    }
     // Lock-failed hint tracks the PLL capture window rather than a fixed number.
     if (s.pll && s.pll.capture_range != null) {
       const el = document.getElementById('lock-capture-range');
@@ -2845,6 +2861,20 @@ function onLockStatus(ev) {
   setLockQuality('mass', ev.quality_mass);
   setLockQuality('temp', ev.quality_temp);
   checkLockLost(ev.lock_mass, ev.lock_temp);
+  showSampleRate(ev.sample_rate);
+}
+
+// Sample rate set (as last loaded or applied) and achieved (from the lock
+// status heartbeat, once a second). Orange when the instrument falls more than
+// 10 % short — a cycle then takes longer than the sample period.
+let _sampleRateSet = null;
+function showSampleRate(achieved) {
+  const el = document.getElementById('footer-rate');
+  if (!el) return;
+  if (achieved == null) { el.textContent = ''; return; }
+  const set = _sampleRateSet;
+  el.textContent = `sampling ${achieved.toFixed(1)} Hz` + (set != null ? ` of ${set}` : '');
+  el.style.color = (set != null && achieved < 0.9 * set) ? 'var(--orange)' : '';
 }
 
 function onStartFreqAutoUpdated(ev) {
@@ -3094,7 +3124,7 @@ async function applyMeasurementParams() {
   const zr   = parseFloat(document.getElementById('s-mat-zratio').value);
   if ([t, dens, zr].some(isNaN)) throw new Error('Ambient temp, density and Z-ratio must be numbers');
   const rateWindow = parseFloat(document.getElementById('s-rate-window').value);
-  if (!(rateWindow >= 0.5 && rateWindow <= 300)) throw new Error('Rate window must be 0.5 to 300 s');
+  if (!(rateWindow >= 0.1 && rateWindow <= 300)) throw new Error('Rate window must be 0.1 to 300 s');
   const target = parseFloat(document.getElementById('s-target-thickness').value);
   const src = fieldValue('s-tstart-source') || 'manual';
   await postOrThrow(`${API_URL}/settings/measurement_params?ambient_temp=${t}&mat_dens=${dens}&z_ratio=${zr}`
@@ -3108,10 +3138,25 @@ async function applyMeasurementParams() {
   if (!_isRunning) setCompensatedView(mode !== 'uncompensated');
 }
 
+async function applyAcquisition() {
+  const sample  = parseFloat(document.getElementById('s-sample-rate').value);
+  const publish = parseFloat(document.getElementById('s-publish-rate').value);
+  const log     = parseFloat(document.getElementById('s-log-rate').value);
+  if (!(sample >= 1 && sample <= 100))   throw new Error('Sample rate must be 1 to 100 Hz');
+  if (!(publish >= 1 && publish <= 25))  throw new Error('Display / PLC rate must be 1 to 25 Hz');
+  if (!(log >= 0 && log <= 100))         throw new Error('Log rate must be 0 (every sample) to 100 Hz');
+  await postOrThrow(`${API_URL}/settings/acquisition?sample_rate=${sample}&publish_rate=${publish}&log_rate=${log}`);
+  if (sample !== _sampleRateSet && _isRunning) _applyNote = 'Settings applied; the new sample rate takes effect when this run ends';
+  _sampleRateSet = sample;
+}
+
+let _applyNote = '';  // said in place of "Settings applied" when something waits
 async function applyAllSettings() {
+  _applyNote = '';
   await applyOscSettings(1);
   await applyOscSettings(2);
   await applyMeasurementParams();
+  await applyAcquisition();
   await applyOutputMode();
   await applyLockSettings();
   await applyStorageReclaim();
@@ -3135,7 +3180,7 @@ const CRYSTAL_SETTING_IDS = [
 // their own CONNECT action).
 const SETTING_IDS = [
   's-meas-mode', 's-mat-dens', 's-mat-zratio', 's-amb-temp', 's-tstart-source', 's-target-thickness',
-  's-rate-window',
+  's-rate-window', 's-sample-rate', 's-publish-rate', 's-log-rate',
   's-osc1-int', 's-osc1-lpf', 's-osc1-inv', 's-osc1-agc', 's-osc1-gain', 's-osc1-amp',
   's-osc2-int', 's-osc2-lpf', 's-osc2-inv', 's-osc2-agc', 's-osc2-gain', 's-osc2-amp',
   's-lock-phase', 's-lock-std', 's-auto-relock', 's-temp-hold',
@@ -3205,7 +3250,7 @@ async function commitSettings() {
   try {
     await applyAllSettings();
     snapshotBaseline();
-    showToast('Settings applied');
+    showToast(_applyNote || 'Settings applied');
   } catch (e) {
     updateDirtyState();   // re-enable so the change can be retried
     // Name what failed: a silent "Apply failed" left no way to tell a rejected

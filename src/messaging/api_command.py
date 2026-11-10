@@ -140,6 +140,13 @@ class SetSensorParamsCommand(ApiCommand):
     tooling_ratio: float = 1.0  # proportional scaling of reported thickness
 
 @dataclass
+class SetAcquisitionCommand(ApiCommand):
+    """Acquisition timing: sample, publish and log rates in Hz (log 0 = every sample)."""
+    sample_rate: float
+    publish_rate: float
+    log_rate: float
+
+@dataclass
 class SetRateWindowCommand(ApiCommand):
     """Seconds of thickness the deposition rate is fitted over."""
     window: float

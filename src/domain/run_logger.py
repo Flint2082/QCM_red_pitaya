@@ -71,14 +71,15 @@ HEADERS = [
 # are read once a second, so it only trips when their worker has stopped.
 TEMPERATURE_MAX_AGE = 5.0  # seconds
 
-# A run writes one ~200-byte row per measurement cycle, roughly 1 kB/s or 100 MB
-# per day. Refuse to open a log below MIN_FREE (about a day of headroom) and warn
-# below WARN_FREE, so a filling card is noticed before it swallows a run.
+# A run writes one ~300-byte row per logged sample (the Log Rate, 10 Hz
+# by default; see domain/acquisition.py): ~3 kB/s or 250 MB a day at 10 Hz, ten
+# times that at 100 Hz. Refuse to open a log below MIN_FREE and warn below
+# WARN_FREE, so a filling card is noticed before it swallows a run.
 MIN_FREE_BYTES = 100 * 1024 ** 2
 WARN_FREE_BYTES = 500 * 1024 ** 2
 
-# Size at which a run rolls over into its next part: ~18 hours of data, so an
-# ordinary run is still a single file and only the multi-day ones are split.
+# Size at which a run rolls over into its next part: ~6 hours of data at 10 Hz
+# (35 minutes at 100 Hz), so an ordinary run is still a single file.
 # It is also the granularity of the reclaim — the oldest part of a run in
 # progress is what gets dropped — so it doubles as the amount of history such a
 # run is guaranteed to keep (the open part is never deleted).
@@ -91,10 +92,10 @@ RECLAIM_BELOW_BYTES = MIN_FREE_BYTES
 RECLAIM_TARGET_BYTES = 2 * MIN_FREE_BYTES
 
 # How often the housekeeping actually looks at the disk and the file size. A
-# disk_usage() and a stat() per sample would be pure overhead at 10 Hz, and
-# neither the free space nor the file size moves anywhere near that fast.
+# disk_usage() and a stat() per sample would be pure overhead, and neither the
+# free space nor the file size moves anywhere near that fast.
 SPACE_CHECK_INTERVAL = 10.0   # seconds
-_SIZE_CHECK_ROWS = 200        # samples between file-size checks (~20 s at 10 Hz)
+_SIZE_CHECK_ROWS = 200        # rows between file-size checks (20 s at 10 Hz, 2 s at 100 Hz)
 
 # Upper bound on a run file that contains nothing but its header row.
 _HEADER_BYTES = len(",".join(HEADERS)) + 2  # + CRLF

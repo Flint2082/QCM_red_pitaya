@@ -39,6 +39,7 @@ from messaging.defines import OutputMode
 from processing.TempCompAlgorithm import absolute_temperature
 from processing.deposition_rate import (DEFAULT_WINDOW as RATE_WINDOW, MAX_WINDOW as RATE_WINDOW_MAX,
                                         MIN_WINDOW as RATE_WINDOW_MIN)
+from domain import acquisition as acq
 
 
 # ==================================================
@@ -138,7 +139,7 @@ _SETTING_KEYS = frozenset({
     "auto_relock", "temp_hold", "freq_tracking", "freq_track_interval", "measurement_mode",
     "prune_old_runs", "trim_current_run",
     "active_crystal", "ambient_temp", "t_start_source", "mat_dens", "z_ratio",
-    "target_thickness", "rate_window",
+    "target_thickness", "rate_window", "sample_rate", "publish_rate", "log_rate",
     "opc_enabled", "opc_url", "opc_user", "opc_password", "opc_base_node",
 })
 
@@ -213,7 +214,17 @@ DEFAULT_SETTINGS = {
     "z_ratio": 1.0,                 # 1.0 = plain Sauerbrey, no Z-match
     "target_thickness": 0.0,        # nm, 0 = no target
     "rate_window": RATE_WINDOW,     # s of thickness the deposition rate is fitted over
+    # Acquisition timing (domain/acquisition.py): the worker samples at
+    # sample_rate, the GUI and the PLC get publish_rate of those samples a
+    # second, and the run log log_rate (0 = every sample).
+    "sample_rate": acq.DEFAULT_SAMPLE_RATE,    # Hz
+    "publish_rate": acq.DEFAULT_PUBLISH_RATE,  # Hz
+    "log_rate": acq.DEFAULT_LOG_RATE,          # Hz, 0 = every sample
 }
+
+
+def _clamp(value, lo, hi) -> float:
+    return min(max(float(value), lo), hi)
 
 
 # ==================================================
@@ -404,6 +415,9 @@ class RestServer:
             "z_ratio":        self._z_ratio,
             "target_thickness": self._target_thickness,
             "rate_window":    self._rate_window,
+            "sample_rate":    self._sample_rate,
+            "publish_rate":   self._publish_rate,
+            "log_rate":       self._log_rate,
         }
 
     def _apply_settings(self, d: dict):
@@ -460,7 +474,13 @@ class RestServer:
         if "target_thickness" in d:
             self._target_thickness = float(d["target_thickness"])
         if "rate_window" in d:
-            self._rate_window = min(max(float(d["rate_window"]), RATE_WINDOW_MIN), RATE_WINDOW_MAX)
+            self._rate_window = _clamp(d["rate_window"], RATE_WINDOW_MIN, RATE_WINDOW_MAX)
+        if "sample_rate" in d:
+            self._sample_rate = _clamp(d["sample_rate"], acq.MIN_SAMPLE_RATE, acq.MAX_SAMPLE_RATE)
+        if "publish_rate" in d:
+            self._publish_rate = _clamp(d["publish_rate"], acq.MIN_PUBLISH_RATE, acq.MAX_PUBLISH_RATE)
+        if "log_rate" in d:
+            self._log_rate = _clamp(d["log_rate"], 0.0, acq.MAX_LOG_RATE)
 
     def _load_settings(self):
         try:
@@ -648,6 +668,7 @@ class RestServer:
         self.command_queue.put(SetStorageReclaimCommand(self._prune_old_runs, self._trim_current_run))
         self.command_queue.put(SetTargetThicknessCommand(self._target_thickness))
         self.command_queue.put(SetRateWindowCommand(self._rate_window))
+        self.command_queue.put(SetAcquisitionCommand(self._sample_rate, self._publish_rate, self._log_rate))
 
         # Apply the active crystal's coefficients + lock frequencies, if any.
         if self._active_crystal:
@@ -1181,6 +1202,26 @@ class RestServer:
             self._save_settings()
             return {"status": "ok", "rate_window": self._rate_window}
 
+        @app.post("/settings/acquisition")
+        def set_acquisition(sample_rate: float, publish_rate: float,
+                            log_rate: float = acq.DEFAULT_LOG_RATE):
+            """How often the worker samples (Hz), how often the GUI and the PLC
+            are sent a sample (Hz), and how often the run log takes one (Hz,
+            0 = every sample). The deposition rate is fitted to every sample.
+            A new sample rate waits for a run in progress to end; the other two
+            take effect at once."""
+            limits = (("sample_rate", sample_rate, acq.MIN_SAMPLE_RATE, acq.MAX_SAMPLE_RATE),
+                      ("publish_rate", publish_rate, acq.MIN_PUBLISH_RATE, acq.MAX_PUBLISH_RATE),
+                      ("log_rate", log_rate, 0.0, acq.MAX_LOG_RATE))
+            for name, value, lo, hi in limits:
+                if not lo <= value <= hi:
+                    raise HTTPException(400, f"{name} must be {lo:g} to {hi:g} Hz")
+            self._sample_rate, self._publish_rate, self._log_rate = sample_rate, publish_rate, log_rate
+            self.command_queue.put(SetAcquisitionCommand(sample_rate, publish_rate, log_rate))
+            self._save_settings()
+            return {"status": "ok", "acquisition": {
+                "sample_rate": sample_rate, "publish_rate": publish_rate, "log_rate": log_rate}}
+
         @app.get("/measurement/target")
         def get_target():
             """The target-thickness flag, for clients that poll instead of
@@ -1226,6 +1267,16 @@ class RestServer:
                     "z_ratio":          self._z_ratio,
                     "target_thickness": self._target_thickness,
                     "rate_window":      self._rate_window,
+                },
+                "acquisition": {
+                    "sample_rate":  self._sample_rate,
+                    "publish_rate": self._publish_rate,
+                    "log_rate":     self._log_rate,
+                    "limits": {
+                        "sample_rate":  [acq.MIN_SAMPLE_RATE, acq.MAX_SAMPLE_RATE],
+                        "publish_rate": [acq.MIN_PUBLISH_RATE, acq.MAX_PUBLISH_RATE],
+                        "log_rate":     [0.0, acq.MAX_LOG_RATE],
+                    },
                 },
                 # Derived from the PLL capture window so the UI never hard-codes it.
                 "pll": {

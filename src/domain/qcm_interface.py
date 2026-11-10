@@ -1,5 +1,6 @@
 ### Class to interface with the QCM Red Pitaya firmware, and to run measurements and calibrations.
 
+import itertools
 import math
 import os
 import time
@@ -29,6 +30,70 @@ def is_parked(freq) -> bool:
     except (TypeError, ValueError):
         return True
     return not math.isfinite(freq) or freq < WINDOW_SIZE
+
+
+class PhaseWindow:
+    """Rolling window of phase-error samples whose mean and standard deviation
+    are kept as running sums, so judging a lock costs the same over 120 samples
+    as over 12. np.mean and np.std on the deque cost ~0.3 ms each on the
+    Pitaya's A9, and the lock test took three of them per channel per sample.
+    The sums are recomputed exactly each time the window has turned over, which
+    bounds the rounding they collect. std() is the population deviation, as
+    np.std gives by default."""
+
+    def __init__(self, maxlen: int):
+        self._buf = deque(maxlen=maxlen)
+        self._sum = self._sumsq = 0.0
+        self._appends = 0  # since the sums were last recomputed
+        # Samples carried over a resize that were enough to judge by at the old
+        # size; see QCMInterface.setSampleRate.
+        self.carried = False
+
+    def __len__(self):
+        return len(self._buf)
+
+    def __getitem__(self, i):
+        return self._buf[i]
+
+    def append(self, x: float):
+        buf = self._buf
+        if len(buf) == buf.maxlen:
+            old = buf[0]
+            self._sum -= old
+            self._sumsq -= old * old
+        buf.append(x)
+        self._sum += x
+        self._sumsq += x * x
+        self._appends += 1
+        if self._appends >= buf.maxlen:
+            self._recompute()
+
+    def _recompute(self):
+        self._sum = math.fsum(self._buf)
+        self._sumsq = math.fsum(x * x for x in self._buf)
+        self._appends = 0
+
+    def clear(self):
+        self._buf.clear()
+        self._recompute()
+        self.carried = False
+
+    def resize(self, maxlen: int):
+        """Keep the newest samples that fit."""
+        self._buf = deque(self._buf, maxlen=maxlen)
+        self._recompute()
+
+    def mean(self) -> float:
+        return self._sum / len(self._buf)
+
+    def std(self) -> float:
+        n = len(self._buf)
+        m = self._sum / n
+        return math.sqrt(max(0.0, self._sumsq / n - m * m))
+
+    def newest(self, k: int):
+        """The newest k samples, newest first."""
+        return itertools.islice(reversed(self._buf), k)
 
 # Drive gain, written to output_gain_1/2 in Fixed 32.32: the FPGA multiplies the
 # excitation sinewave by it. 1.0 is the undivided drive — what the hardware put
@@ -82,7 +147,14 @@ class QCMInterface:
         # to flag a perfectly good hot lock as lost.
         self.LOCK_PHASE_TOLERANCE = 0.05  # rad — max |mean phase error|
         self.LOCK_PHASE_STD = 0.05        # rad — max phase-error std ("lock quality")
-        self.LOCK_WINDOW = 12             # samples in the rolling estimate (~1.2 s at 10 Hz)
+        # The window and the counts below are in samples, but they are set from
+        # these times and the acquisition loop's sample rate (setSampleRate), so
+        # a lock is judged on the same stretch of time at 10 Hz as at 100 Hz.
+        # The counts here are the ones for 10 Hz.
+        self.LOCK_WINDOW_S = 1.2          # s of samples in the rolling estimate
+        self.LOCK_MIN_S = 0.4             # s; less than this says nothing either way
+        self.LOCK_LOSS_S = 0.2            # s of out-of-limit samples that drop the flag
+        self.LOCK_WINDOW = 12             # samples in the rolling estimate
         self.LOCK_MIN_SAMPLES = 4         # fewer than this says nothing either way
         # Single-sample limit, as a multiple of the phase-noise limit (never
         # tighter than the mean tolerance). The window above judges a lock well
@@ -92,7 +164,8 @@ class QCMInterface:
         # immediate measure of that — near resonance the phase moves ~0.04 rad
         # per Hz on a ~50 Hz-wide mode, so 0.3 rad is ~7 Hz of fT, ~0.03 K — so
         # it is what the temperature hold acts on (isPhaseTrusted), and
-        # LOCK_LOSS_SAMPLES of them in a row drop the lock flag straight away.
+        # LOCK_LOSS_SAMPLES of them in a row (LOCK_LOSS_S) drop the lock flag
+        # straight away.
         self.LOCK_SAMPLE_SIGMAS = 3.0
         self.LOCK_LOSS_SAMPLES = 2
         # Phase (radians) the loop settles at once locked, for the default
@@ -168,7 +241,8 @@ class QCMInterface:
         # a fraction of that correction and AGC_MAX_STEP caps a single move.
         # Deliberately slow: drive level pulls the quartz resonance slightly, so
         # a gain that chases every amplitude wobble writes that wobble straight
-        # into the frequency being measured. At ~10 Hz these let the drive cover
+        # into the frequency being measured. At 10 steps a second (the worker
+        # steps it at that rate whatever the sample rate) these let the drive cover
         # a factor of ten in a few seconds, far faster than a deposition changes
         # the crystal and far slower than the measurement it must not disturb.
         #
@@ -196,8 +270,8 @@ class QCMInterface:
         # Rolling phase-error history per oscillator, fed one sample per
         # acquisition cycle by sampleLock. Lock state and lock quality are both
         # read back out of these, so every consumer judges lock the same way.
-        self._phase_err = {1: deque(maxlen=self.LOCK_WINDOW),
-                           2: deque(maxlen=self.LOCK_WINDOW)}
+        self._phase_err = {1: PhaseWindow(self.LOCK_WINDOW),
+                           2: PhaseWindow(self.LOCK_WINDOW)}
 
         self.fpga = fpga
 
@@ -432,9 +506,18 @@ class QCMInterface:
         weak signal shows up here without anyone having to know what amplitude to
         expect at this temperature, on this crystal, under this much film."""
         buf = self._phase_err[osc_index]
-        if osc_index in self._parked or len(buf) < self.LOCK_MIN_SAMPLES:
+        if osc_index in self._parked or not self._judgeable(buf):
             return None
-        return float(np.std(buf))
+        return buf.std()
+
+    def _judgeable(self, buf: PhaseWindow) -> bool:
+        """Enough samples to judge a lock by: LOCK_MIN_SAMPLES of them, or, just
+        after a higher sample rate grew the window, as many as were enough
+        before it did."""
+        if len(buf) >= self.LOCK_MIN_SAMPLES:
+            buf.carried = False
+            return True
+        return buf.carried
 
     def getSampleLimit(self):
         """Largest phase error (rad) a single sample may have and still be
@@ -464,14 +547,29 @@ class QCMInterface:
         std of the whole window back inside their limits. Fast to distrust, slow
         to trust. A parked channel is never locked."""
         buf = self._phase_err[osc_index]
-        if osc_index in self._parked or len(buf) < self.LOCK_MIN_SAMPLES:
+        if osc_index in self._parked or not self._judgeable(buf):
             return False
         limit = self.getSampleLimit()
-        recent = list(buf)[-self.LOCK_LOSS_SAMPLES:]
-        if all(abs(e) > limit for e in recent):
+        if all(abs(e) > limit for e in buf.newest(self.LOCK_LOSS_SAMPLES)):
             return False
-        return (abs(float(np.mean(buf))) < self.LOCK_PHASE_TOLERANCE
-                and float(np.std(buf)) < self.LOCK_PHASE_STD)
+        return (abs(buf.mean()) < self.LOCK_PHASE_TOLERANCE
+                and buf.std() < self.LOCK_PHASE_STD)
+
+    def setSampleRate(self, rate: float):
+        """Size the lock windows for an acquisition loop sampling at `rate` Hz,
+        from LOCK_WINDOW_S, LOCK_MIN_S and LOCK_LOSS_S. The samples already taken
+        are kept, the newest first. A window that grows goes on being judged on
+        them until it holds LOCK_MIN_SAMPLES of the new ones, if they were
+        enough before: otherwise a lock that was up reads as lost for the
+        LOCK_MIN_S it takes to collect them, popping a lock-lost notice."""
+        old_min = self.LOCK_MIN_SAMPLES
+        self.LOCK_WINDOW = max(4, round(self.LOCK_WINDOW_S * rate))
+        self.LOCK_MIN_SAMPLES = min(self.LOCK_WINDOW, max(2, round(self.LOCK_MIN_S * rate)))
+        self.LOCK_LOSS_SAMPLES = max(2, round(self.LOCK_LOSS_S * rate))
+        for buf in self._phase_err.values():
+            enough = len(buf) >= old_min
+            buf.resize(self.LOCK_WINDOW)
+            buf.carried = enough and len(buf) < self.LOCK_MIN_SAMPLES
 
     def _fillLockWindows(self, osc_indices=(1, 2), interval=0.02):
         """Take a fresh burst of phase samples and report {osc: locked}. Used
@@ -479,8 +577,8 @@ class QCMInterface:
         startupPLL of the dev shell.
 
         Channels are interleaved rather than filled one after the other, so the
-        burst costs one settling period instead of one per channel. The burst is
-        faster than the acquisition loop's ~10 Hz, but the demodulator LPF
+        burst costs one settling period instead of one per channel. The burst may
+        be faster than the acquisition loop, but the demodulator LPF
         (LPF_FREQ, 200 Hz by default) settles in far less than `interval`, so
         samples are independent either way and the two paths produce comparable
         standard deviations."""
@@ -702,7 +800,7 @@ class QCMInterface:
             if not buf:
                 print(f"  Oscillator {i}: no phase samples taken")
                 continue
-            mean, std = abs(float(np.mean(buf))), float(np.std(buf))
+            mean, std = abs(buf.mean()), buf.std()
             print(f"  Oscillator {i}: "
                   f"|mean err| {mean:.4f} / {self.LOCK_PHASE_TOLERANCE} "
                   f"{'ok' if mean < self.LOCK_PHASE_TOLERANCE else 'FAIL'}   "
@@ -751,6 +849,7 @@ class QCMInterface:
                 "phase_tolerance": self.LOCK_PHASE_TOLERANCE,
                 "phase_std":       self.LOCK_PHASE_STD,
                 "window":          self.LOCK_WINDOW,
+                "min_samples":     self.LOCK_MIN_SAMPLES,
                 "sample_limit":    self.getSampleLimit(),
                 "loss_samples":    self.LOCK_LOSS_SAMPLES,
             },

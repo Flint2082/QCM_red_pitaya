@@ -9,6 +9,7 @@
 # Listens for commands from application, executes them
 # Sends events back to application (e.g. measurement complete, sweep step done, etc.)
 
+import json
 import math
 import time
 import threading
@@ -21,6 +22,8 @@ from domain.sweep_logger import SweepLogger
 from messaging.defines import WorkerState
 from messaging.worker_event import *
 from messaging.worker_command import *
+from domain.acquisition import (DEFAULT_LOG_RATE, DEFAULT_PUBLISH_RATE, DEFAULT_SAMPLE_RATE,
+                                Decimator)
 from processing.TempCompAlgorithm import absolute_temperature
 from processing.deposition_rate import RateEstimator
 
@@ -166,7 +169,28 @@ class QCMWorker(threading.Thread):
         # when it is allowed to run (see _update_agc) and reports a channel that
         # has run out of drive range.
         self._agc_railed = {1: False, 2: False}
-        
+        # The servo is tuned per step at 10 steps a second (see
+        # QCMInterface.AGC_LOOP_GAIN), so it steps at that rate whatever the
+        # sample rate.
+        self.AGC_INTERVAL = 0.1  # s
+        self._agc_steps = Decimator(1.0 / self.AGC_INTERVAL)
+        # Acquisition timing (domain/acquisition.py). update() takes one sample
+        # every 1/sample_rate s; the GUI and the PLC, and the run log, each take
+        # a subset of them. A new sample rate waits for a run in progress to end,
+        # so a run is one rate throughout and its lock windows never change size
+        # under it.
+        self.sample_rate = DEFAULT_SAMPLE_RATE
+        self._pending_sample_rate: float | None = None
+        self._publish = Decimator(DEFAULT_PUBLISH_RATE)
+        self._log = Decimator(DEFAULT_LOG_RATE)
+        self.qcm.setSampleRate(self.sample_rate)
+        # Samples actually taken: counted over a second, reported on the lock
+        # status heartbeat, and said once when a run falls behind the set rate.
+        self._samples = 0
+        self._samples_since = time.monotonic()
+        self.achieved_rate: float | None = None
+        self._rate_low = False
+
     def stop(self):
         self.running = False
         self.command_queue.put(None) # unblock queue.get()
@@ -174,17 +198,29 @@ class QCMWorker(threading.Thread):
     def run(self):
         print("QCM worker started")
 
+        next_sample = time.monotonic()
         while self.running:
             try:
-                try:
-                    command = self.command_queue.get(timeout=0.1) # non-blocking with timeout
-
-                    if command is not None:
-                        self.handle_command(command)
-
-                except queue.Empty:
-                    pass
-
+                # Samples are taken on a fixed schedule, commands in between as
+                # they arrive. (A command used to bring the next sample forward:
+                # the loop was a 100 ms wait for one, and the rate came out at
+                # 100 ms plus however long a cycle took.)
+                wait = next_sample - time.monotonic()
+                if wait > 0:
+                    try:
+                        command = self.command_queue.get(timeout=wait)
+                    except queue.Empty:
+                        pass
+                    else:
+                        if command is not None:
+                            self.handle_command(command)
+                        continue
+                # More than a period late (a sweep, a slow cycle): start the
+                # schedule again from now rather than take the missed samples
+                # back to back.
+                period = 1.0 / self.sample_rate
+                now = time.monotonic()
+                next_sample = next_sample + period if now - next_sample < period else now + period
                 self.update()
 
             except Exception as e:
@@ -341,6 +377,7 @@ class QCMWorker(threading.Thread):
             "enabled":  self.freq_tracking,
             "interval": self.freq_track_interval,
         }
+        snapshot["acquisition"] = self._acquisition_settings()
         snapshot["measurement"] = {
             "mode":             "compensated" if self._run_compensated else "uncompensated",
             "ambient_temp":     command.ambient_temp,
@@ -354,6 +391,23 @@ class QCMWorker(threading.Thread):
         if self.version is not None:
             snapshot["version"] = self.version.as_dict()
         return snapshot
+
+    def _acquisition_settings(self) -> dict:
+        return {
+            "sample_rate":  self.sample_rate,
+            "publish_rate": self._publish.rate,
+            "log_rate":     self._log.rate,  # 0 = every sample
+        }
+
+    def _set_sample_rate(self, rate: float):
+        self._pending_sample_rate = None
+        if rate == self.sample_rate:
+            return
+        self.sample_rate = rate
+        self.qcm.setSampleRate(rate)
+        self._samples, self._samples_since = 0, time.monotonic()
+        self.achieved_rate, self._rate_low = None, False
+        print(f"[QCM] Sampling at {rate:g} Hz")
 
     def _start_run_log(self, command) -> bool:
         """Open the run log and write its opening rows. Returns whether recording
@@ -420,6 +474,8 @@ class QCMWorker(threading.Thread):
                 self._crystal_temperature() if command.t_start_source == "crystal" else None)
             command = replace(command, ambient_temp=T)
             print(f"[QCM] T start {T:g} degC from {self._t_start_from}")
+            if self._pending_sample_rate is not None:  # set since the last sample
+                self._set_sample_rate(self._pending_sample_rate)
             self.qcm.setMeasurementReference(T=command.ambient_temp, mat_dens=command.mat_dens,
                                              z_ratio=command.z_ratio, compensated=self.compensated)
             self._run_compensated = self.compensated
@@ -501,6 +557,18 @@ class QCMWorker(threading.Thread):
             # the acquisition loop itself for no benefit: the resonances move over
             # minutes, not milliseconds.
             self.freq_track_interval = max(1.0, float(command.interval))
+        elif isinstance(command, SetAcquisitionCommand):
+            rates = (self._publish.rate, self._log.rate)
+            self._publish.rate = float(command.publish_rate)
+            self._log.rate = float(command.log_rate)
+            if self._in_run() and command.sample_rate != self.sample_rate:
+                self._pending_sample_rate = float(command.sample_rate)
+                print(f"[QCM] Sample rate {command.sample_rate:g} Hz applies when this run ends")
+            else:
+                self._set_sample_rate(float(command.sample_rate))
+            if self._in_run() and (self._publish.rate, self._log.rate) != rates:
+                self.logger.write_event("ACQUISITION", json.dumps(self._acquisition_settings(),
+                                                                  sort_keys=True, separators=(",", ":")))
         elif isinstance(command, SetRateWindowCommand):
             # Mid-run too: a longer window fills from the samples to come, a
             # shorter one drops the oldest at the next sample.
@@ -622,8 +690,15 @@ class QCMWorker(threading.Thread):
         open-loop, where the phase can sit quiet enough to pass the lock test at
         a frequency that is not a resonance at all. Those states want a fixed,
         known drive and set it themselves — the servo must not walk it.
+
+        It steps every AGC_INTERVAL rather than every sample: the servo's gain
+        is per step, so stepping at the sample rate would make it ten times
+        faster at 100 Hz, and the drive dither that comes with it ten times
+        larger in the measured frequency.
         """
         if self.state not in (WorkerState.MEASURING, WorkerState.IDLE):
+            return
+        if not self._agc_steps.due(time.monotonic(), 1.0 / self.sample_rate):
             return
         for osc, amp, locked in ((1, data.amp_mass, lock_mass),
                                  (2, data.amp_temp, lock_temp)):
@@ -697,10 +772,38 @@ class QCMWorker(threading.Thread):
             self.logger.write_event("TARGET_REACHED", f"{thickness:.4f} nm >= target {self.target_thickness:.4f} nm")
             self._set_target_reached(True, thickness)
 
+    def _count_sample(self, mono: float):
+        """Count this sample towards the achieved rate, and say once when a run
+        falls more than 10 % behind the set rate, and again when it recovers."""
+        self._samples += 1
+        elapsed = mono - self._samples_since
+        if elapsed < 1.0:
+            return
+        self.achieved_rate = self._samples / elapsed
+        self._samples, self._samples_since = 0, mono
+        low = self.state == WorkerState.MEASURING and self.achieved_rate < 0.9 * self.sample_rate
+        if low == self._rate_low:
+            return
+        self._rate_low = low
+        if low:
+            msg = (f"sampling at {self.achieved_rate:.1f} Hz of the {self.sample_rate:g} Hz set; "
+                   f"a cycle takes longer than the sample period")
+            print(f"[QCM] {msg}")
+            self.logger.write_event("SAMPLE_RATE_LOW", msg)
+        else:
+            self.logger.write_event("SAMPLE_RATE_OK", f"sampling at {self.achieved_rate:.1f} Hz again")
+
     def update(self):
+        mono = time.monotonic()
+        if self._pending_sample_rate is not None and not self._in_run():
+            self._set_sample_rate(self._pending_sample_rate)
+        self._count_sample(mono)
+        # Whether this sample goes out to the GUI and the PLC.
+        publish = self._publish.due(mono, 1.0 / self.sample_rate)
+
         # Advance the phase-error window by exactly one sample per channel per
         # cycle. This is the only place that samples it during normal running, so
-        # the window length translates directly into a time constant.
+        # the window, sized from the sample rate, spans a fixed time.
         lock_mass, quality_mass = self.qcm.sampleLock(1)
         lock_temp, quality_temp = self.qcm.sampleLock(2)
 
@@ -713,7 +816,8 @@ class QCMWorker(threading.Thread):
             self.event_queue.put(LockStatusEvent(
                 lock_mass=lock_mass, lock_temp=lock_temp,
                 quality_mass=quality_mass, quality_temp=quality_temp,
-                parked_mass=parked_mass, parked_temp=parked_temp))
+                parked_mass=parked_mass, parked_temp=parked_temp,
+                sample_rate=self.achieved_rate))
             self._last_lock_status = status
             self._last_lock_emit = now
 
@@ -733,11 +837,12 @@ class QCMWorker(threading.Thread):
             # drive gain goes with it: the amplitude is proportional to it, so a
             # bare reading cannot be judged against any fixed scale once the
             # drive is a setting rather than a constant.
-            self.event_queue.put(CapAdjustEvent(
-                amp_mass=self.qcm.getMag(1), amp_temp=self.qcm.getMag(2),
-                gain_mass=self.qcm.getOutputGain(1), gain_temp=self.qcm.getOutputGain(2)))
+            if publish:
+                self.event_queue.put(CapAdjustEvent(
+                    amp_mass=self.qcm.getMag(1), amp_temp=self.qcm.getMag(2),
+                    gain_mass=self.qcm.getOutputGain(1), gain_temp=self.qcm.getOutputGain(2)))
         elif self.state == WorkerState.MEASURING:
-            self._measure(lock_mass, lock_temp, now)
+            self._measure(lock_mass, lock_temp, now, mono, publish)
         else:
             # Not measuring — idle, or locking: push the raw readings anyway.
             # Frequencies, amplitudes, phases and lock quality need neither a
@@ -755,12 +860,15 @@ class QCMWorker(threading.Thread):
             # presses start — otherwise every run would open with the servo
             # still hunting.
             self._update_agc(telemetry, lock_mass, lock_temp)
-            self.event_queue.put(TelemetryEvent(data=telemetry))
+            if publish:
+                self.event_queue.put(TelemetryEvent(data=telemetry))
 
         self._refresh_leds(lock_mass, lock_temp, now)
 
-    def _measure(self, lock_mass: bool, lock_temp: bool, now: float):
-        """One measurement cycle of a run."""
+    def _measure(self, lock_mass: bool, lock_temp: bool, now: float, mono: float, publish: bool):
+        """One measurement cycle of a run. Every sample goes into the deposition
+        rate, the target check and the lock automation; the run log and the
+        GUI/PLC take theirs on their own schedules."""
         compensated = self._run_compensated
         # A lost temp-mode lock leaves fT pointing at nothing in particular.
         # With the hold on, the last solved temperature is carried forward so
@@ -783,12 +891,14 @@ class QCMWorker(threading.Thread):
         data.uncompensated_rate = self._rate_uncomp.update(data.timestamp, data.uncompensated_thickness)
         thickness = data.calculated_thickness
         self._comp_ok = thickness is not None and math.isfinite(thickness)
-        self.logger.write_measurement(data)  # durable on-disk record (WS-independent)
+        if self._log.due(mono, 1.0 / self.sample_rate):
+            self.logger.write_measurement(data)  # durable on-disk record (WS-independent)
         if compensated:
             self._note_temp_hold(hold_temp, data)
         self._update_agc(data, lock_mass, lock_temp)
         self._check_target(data)
-        self.event_queue.put(MeasurementEvent(data=data))
+        if publish:
+            self.event_queue.put(MeasurementEvent(data=data))
         # Keep each PLL capture window centred on its current frequency — but
         # only for a channel that is locked. An unlocked loop's readout is not a
         # resonance, and following it walks the window away from where the

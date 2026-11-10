@@ -179,6 +179,9 @@ class Application(threading.Thread):
             self.worker_command_queue.put(wc.SetTargetThicknessCommand(command.target))
         elif isinstance(command, ac.SetRateWindowCommand):
             self.worker_command_queue.put(wc.SetRateWindowCommand(command.window))
+        elif isinstance(command, ac.SetAcquisitionCommand):
+            self.worker_command_queue.put(wc.SetAcquisitionCommand(
+                command.sample_rate, command.publish_rate, command.log_rate))
         elif isinstance(command, ac.SetStorageReclaimCommand):
             self.worker_command_queue.put(wc.SetStorageReclaimCommand(
                 command.prune_old_runs, command.trim_current_run))
@@ -243,7 +246,8 @@ class Application(threading.Thread):
             self._emit(ae.LockStatusEvent(
                 lock_mass=event.lock_mass, lock_temp=event.lock_temp,
                 quality_mass=event.quality_mass, quality_temp=event.quality_temp,
-                parked_mass=event.parked_mass, parked_temp=event.parked_temp))
+                parked_mass=event.parked_mass, parked_temp=event.parked_temp,
+                sample_rate=event.sample_rate))
 
         elif isinstance(event, we.CapAdjustEvent):
             self._emit(ae.CapAdjustEvent(

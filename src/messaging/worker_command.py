@@ -144,6 +144,14 @@ class SetSensorParamsCommand(WorkerCommand):
     tooling_ratio: float = 1.0  # proportional scaling of reported thickness
 
 @dataclass
+class SetAcquisitionCommand(WorkerCommand):
+    """Acquisition timing (domain/acquisition.py). A new sample rate waits for a
+    run in progress to end; the other two take effect at once."""
+    sample_rate: float   # Hz the worker samples at
+    publish_rate: float  # Hz the GUI and the PLC are sent samples at
+    log_rate: float      # Hz the run log takes samples at; 0 = every sample
+
+@dataclass
 class SetRateWindowCommand(WorkerCommand):
     """Seconds of thickness the deposition rate is fitted over."""
     window: float

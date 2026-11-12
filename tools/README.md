@@ -19,7 +19,7 @@ up as a service it is always running; otherwise start it over SSH:
 ```bash
 ssh root@<red_pitaya_ip>
 cd /root/QCM_red_pitaya
-.venv/bin/python src/main.py          # add --no-opcua if there is no PLC
+.venv/bin/python src/main.py          # OPC-UA is off until enabled in Settings
 ```
 
 See [src/README.md](../src/README.md) for full setup and the systemd service
@@ -104,7 +104,9 @@ qcm = QCMClient("192.168.1.50")
 #    polynomial coefficients come from this profile).
 qcm.activate_crystal("SC_cut_6MHz")
 
-# 2. Lock the two PLLs onto the crystal's resonances.
+# 2. Lock the two PLLs onto the crystal's resonances. The service already
+#    locks once on its own when it starts; this re-locks on the crystal
+#    activated above.
 qcm.get_lock()
 time.sleep(2)                       # give the loops time to settle
 print("state:", qcm.state())        # -> "RUNNING" once locked
@@ -157,6 +159,7 @@ access to the fields of `MeasurementData`:
 | `compensated_freq`       | temperature-compensated mass frequency   |
 | `uncompensated_thickness`| raw Sauerbrey thickness (nm)             |
 | `calculated_thickness`   | temperature-compensated thickness (nm)   |
+| `uncompensated_rate`, `calculated_rate` | deposition rate of each thickness (nm/s) over the rate window; `None` until it fills |
 | `calculated_temp`        | crystal temperature from the model (°C)  |
 | `amp_mass`, `amp_temp`   | demodulated amplitudes                   |
 | `phase_mass`, `phase_temp`| demodulated phases                      |
@@ -198,6 +201,8 @@ All methods are on `QCMClient`. Frequencies are in Hz unless noted.
 | `state()` | `GET /state` | returns the state string |
 | `set_target_thickness(value)` | `POST /settings/target_thickness` | nm; 0 = no target |
 | `target()` | `GET /measurement/target` | current target + whether it has been reached |
+| `set_rate_window(seconds)` | `POST /settings/rate_window` | s of thickness the rate is fitted over, 0.1–300; default 1 |
+| `set_acquisition(sample_rate, publish_rate=10, log_rate=10)` | `POST /settings/acquisition` | Hz: how often the instrument samples (1-100), how often the GUI, the stream and the PLC get a sample (1-25), how often the run log takes one (0 = every sample); defaults 100, 10, 10 |
 
 ### Target thickness
 
@@ -262,8 +267,10 @@ frequencies can sit outside the PLL capture range of where the resonance now
 is — and a re-lock aimed there fails however healthy the crystal is. While both
 modes are locked the start frequencies are re-pointed every `interval` seconds
 at the frequencies the PLLs are actually holding (rounded to 100 Hz), so a
-re-lock starts from the last place the lock was known to be good. This is
-in-memory only: `GET /settings/lock_frequencies`, `get_lock()` and the
+re-lock starts from the last place the lock was known to be good. Tracking
+only starts once a lock attempt (`get_lock()`, the lock the service does when
+it starts, or a re-lock) has aimed the loops, and a sweep or a capacitor
+adjustment stops it until the next one. This is in-memory only: `GET /settings/lock_frequencies`, `get_lock()` and the
 OPC-triggered lock all pick it up, but the crystal profile on disk is untouched
 until you save it yourself.
 
@@ -291,6 +298,7 @@ qcm.set_freq_tracking(True, interval=10.0)
 | `settings()` | `GET /settings` (everything at once) |
 | `get_coefficients()` | `GET /settings/coefficients` (from the active crystal) |
 | `set_measurement_params(ambient_temp, mat_dens, z_ratio, target_thickness=None)` | `POST /settings/measurement_params` (persist run parameters without starting a run) |
+| `set_measurement_mode(mode)` | `POST /settings/measurement_mode` — `"compensated"` (default, both modes) or `"uncompensated"` (mass mode only, temp oscillator parked, no temperature) |
 
 ### Drive gain and AGC
 Each oscillator's excitation sinewave is scaled in the FPGA by `output_gain_1` /
@@ -383,6 +391,7 @@ sensor parameters. Activating one applies all of them.
 | method | endpoint |
 |--------|----------|
 | `start_sweep(oscillator_idx, start_freq, stop_freq, step_size, settle_time)` | `POST /sweep/start` |
+| `start_sweep_centered(oscillator_idx, center_freq, span, step_size, settle_time)` | `POST /sweep/start` with a centre and span, as the web UI sends it (points symmetric about the centre) |
 | `sweep_mode(oscillator_idx, settle_time=0.05)` | 50 kHz window at 100 Hz around the crystal's lock frequency |
 | `abort_sweep()` | `POST /sweep/abort` |
 | `sweeps()` | `GET /sweeps` — sweep CSVs on the Pitaya, newest first |
@@ -417,7 +426,9 @@ python sweep_plotter.py sweep.csv
 ```
 
 It draws amplitude and phase against frequency and marks the two strongest
-well-separated peaks — the same "peak / 2nd peak" the ANALYSIS tab reports. With
+well-separated peaks — the same "peak / 2nd peak" the ANALYSIS tab reports. The
+phase is unwrapped by default, like the ANALYSIS tab's; untick "Unwrap phase"
+for the phase as measured. With
 no argument it opens a file dialog or picks the newest `qcm_sweep_*.csv` from
 the current directory, `./data/sweeps`, or your Downloads folder.
 
@@ -519,6 +530,7 @@ other side of each seam.
 |--------|----------|
 | `opc_settings()` | `GET /opc/settings` |
 | `opc_connect(url, user="", password=None, base_node=None)` | `POST /opc/connect` — `password=None` keeps the stored one |
+| `set_opc_enabled(enabled)` | `POST /opc/enabled` — switch the bridge on or off (off by default; kept across restarts) |
 | `opc_nodes()` | `GET /opc/nodes` (the node tree to mirror on the PLC) |
 
 ### System
@@ -576,4 +588,7 @@ curl -X POST "http://192.168.1.50:8000/measurement/stop"
   `start_measurement()`.
 - **`stream()` raises "Live streaming needs websocket-client"** — run
   `pip install websocket-client`.
-- **`opc_connect` returns 503** — the server was started with `--no-opcua`.
+- **`opc_connect` / `set_opc_enabled` return 503** — the server was started
+  with `--no-opcua`.
+- **The PLC gets nothing** — the OPC-UA bridge is off by default: switch it
+  on under Settings → OPC-UA, or `qcm.set_opc_enabled(True)`.

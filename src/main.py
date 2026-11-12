@@ -8,6 +8,7 @@ from domain.fpga_interface import FPGAInterface
 from domain.qcm_interface import QCMInterface
 from domain.version import VersionInfo
 from workers.qcm_worker import QCMWorker
+from workers.temperature_worker import TemperatureWorker
 from app.application import Application
 from api.server import RestServer
 from plc.wago_client import WagoClient
@@ -45,11 +46,18 @@ def build_system(enable_opcua: bool = True):
     version = VersionInfo(fpga)
     print(f"INFO: software {version.software.name()}, bitstream {version.fpga['fpg']}")
 
+    # LTC2986 temperature sensors on the SPI bus. A box without them only gets
+    # "unavailable" in the TEMP SENSORS tab; see domain/temperature_sensors.py.
+    temperature_queue = queue.Queue()
+    temperature_worker = TemperatureWorker(event_queue=temperature_queue)
+
     qcm_worker = QCMWorker(
         qcm=qcm,
         command_queue=worker_command_queue,
         event_queue=worker_event_queue,
         version=version,
+        # The run log records the newest sensor readings beside every sample.
+        temperatures=lambda: temperature_worker.latest,
     )
 
     # OPC-UA bridge (optional — system works without a PLC)
@@ -61,7 +69,10 @@ def build_system(enable_opcua: bool = True):
         opc_command_queue = queue.Queue()
         opc_event_queue   = queue.Queue()
         opc_status_queue  = queue.Queue()
-        wago = WagoClient(auto_connect=True)
+        # Not connected here: the bridge is off until the opc_enabled setting
+        # (Settings -> OPC-UA, off by default) switches it on, and the worker
+        # makes the connection then, with the persisted connection settings.
+        wago = WagoClient(auto_connect=False)
         opc_worker = OPCUAWorker(
             client=wago,
             command_queue=opc_command_queue,
@@ -77,12 +88,14 @@ def build_system(enable_opcua: bool = True):
         opc_command_queue=opc_command_queue,
         opc_event_queue=opc_event_queue,
         opc_status_queue=opc_status_queue,
+        temperature_queue=temperature_queue,
     )
 
     rest_server = RestServer(
         api_command_queue=api_command_queue,
         api_event_queue=api_event_queue,
         wago_client=wago if enable_opcua else None,
+        opc_worker=opc_worker,
         version=version,
     )
     # OPC-triggered actions take their parameters from the REST settings.
@@ -95,6 +108,7 @@ def build_system(enable_opcua: bool = True):
         qcm=qcm,
         version=version,
         qcm_worker=qcm_worker,
+        temperature_worker=temperature_worker,
         application=application,
         rest_server=rest_server,
         worker_command_queue=worker_command_queue,
@@ -104,6 +118,7 @@ def build_system(enable_opcua: bool = True):
         opc_command_queue=opc_command_queue,
         opc_event_queue=opc_event_queue,
         opc_status_queue=opc_status_queue,
+        temperature_queue=temperature_queue,
     )
     if opc_worker:
         system["opc_worker"] = opc_worker
@@ -132,6 +147,7 @@ def run_normal(system: dict):
     """Start worker + application threads and run the main loop."""
 
     system["qcm_worker"].start()
+    system["temperature_worker"].start()
     system["application"].start()
     if "opc_worker" in system:
         system["opc_worker"].start()
@@ -157,6 +173,8 @@ def run_normal(system: dict):
         if "opc_worker" in system:
             system["opc_worker"].stop()
             system["opc_worker"].join()
+        system["temperature_worker"].stop()
+        system["temperature_worker"].join()
         system["application"].stop()
         system["qcm_worker"].stop()
         system["qcm_worker"].join()
@@ -173,7 +191,8 @@ def main():
     parser.add_argument(
         "--no-opcua",
         action="store_true",
-        help="Disable OPC-UA PLC bridge"
+        help="Leave the OPC-UA PLC bridge out entirely. It is off by default "
+             "anyway; switch it on under Settings -> OPC-UA"
     )
     args = parser.parse_args()
 

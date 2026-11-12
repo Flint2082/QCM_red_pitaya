@@ -9,6 +9,11 @@ One event row is special: SETTINGS carries a JSON blob of the settings the run
 was acquired with. It is not drawn as a marker — tick "Show settings" to overlay
 it on the plot (it is also printed to the console on load).
 
+The deposition rate (rate_comp_nm_s, rate_uncomp_nm_s) is in the file from the
+version that started logging it. For an older file it is worked out here from
+the thickness, by the rule the server uses live, over the run's Rate Window or
+1 s; those channels are marked "calc." and the console says so.
+
 Usage:
     python tools/csv_plotter.py [path/to/qcm_run.csv]
 
@@ -33,7 +38,13 @@ from matplotlib.widgets import CheckButtons
 CHANNELS = [
     ("thickness_comp_nm",   "Comp. Thickness (nm)",   "tab:green"),
     ("thickness_uncomp_nm", "Uncomp. Thickness (nm)", "tab:olive"),
+    ("rate_comp_nm_s",      "Comp. Rate (nm/s)",      "mediumseagreen"),
+    ("rate_uncomp_nm_s",    "Uncomp. Rate (nm/s)",    "darkkhaki"),
     ("temperature_c",       "Temperature (°C)",       "tab:red"),
+    ("pt100_c",             "PT100 (°C)",             "darkorange"),
+    ("thermocouple_c",      "Thermocouple (°C)",      "firebrick"),
+    ("cold_junction_c",     "Cold Junction (°C)",     "steelblue"),
+    ("zynq_die_c",          "Zynq Die (°C)",          "mediumpurple"),
     ("freq_mass_hz",        "Mass Freq (Hz)",         "tab:blue"),
     ("freq_temp_hz",        "Temp Freq (Hz)",         "tab:cyan"),
     ("comp_mass_freq_hz",   "Comp. Mass Freq (Hz)",   "tab:orange"),
@@ -51,6 +62,13 @@ CHANNELS = [
 DEFAULT_ON = {"thickness_comp_nm", "thickness_uncomp_nm", "temperature_c", "comp_mass_freq_hz"}
 
 LOCK_COLUMNS = {"lock_mass", "lock_temp"}
+
+# Each rate column and the thickness it is the rate of.
+RATE_COLUMNS = {"rate_comp_nm_s": "thickness_comp_nm", "rate_uncomp_nm_s": "thickness_uncomp_nm"}
+# The server's default Rate Window, for a file whose SETTINGS row has none.
+DEFAULT_RATE_WINDOW = 10.0  # s
+# Elements per block of the padded window matrix in _segment_rate.
+_RATE_BLOCK = 2_000_000
 
 
 def find_default_csv():
@@ -114,6 +132,84 @@ def format_settings(settings):
     return "\n".join(f"{k.ljust(width)} : {v}" for k, v in lines)
 
 
+def trailing_rate(t, y, window):
+    """Rate of y per second at every sample: the slope of a least-squares line
+    through the finite samples of the last `window` seconds, the newest
+    included. The rule the server logs the rate by, live, one sample at a time
+    (src/processing/deposition_rate.py); kept in step with it so a run logged
+    before the rate was reads the same as one logged after. NaN where the server
+    has no rate: until the samples in the window span half of it."""
+    t = np.asarray(t, dtype=float)
+    y = np.asarray(y, dtype=float)
+    out = np.full(t.shape, np.nan)
+    ok = np.isfinite(t) & np.isfinite(y)
+    # The server starts afresh where the clock stepped back behind the newest
+    # sample it holds.
+    prev = pd.Series(np.where(ok, t, np.nan)).ffill().shift().to_numpy()
+    with np.errstate(invalid="ignore"):
+        steps = np.flatnonzero(t < prev)
+    bounds = [0, *steps, len(t)]
+    for a, b in zip(bounds[:-1], bounds[1:]):
+        out[a:b] = _segment_rate(t[a:b], y[a:b], ok[a:b], window)
+    return out
+
+
+def _segment_rate(t, y, ok, window):
+    """trailing_rate over a stretch whose clock never steps back."""
+    out = np.full(t.shape, np.nan)
+    tt, yy = t[ok], y[ok]
+    if tt.size < 2:
+        return out
+    # Each row's window is the finite samples [lo, hi): up to and including the
+    # row, and later than `window` before it. Membership is decided on the
+    # absolute timestamps, exactly as the server decides it.
+    hi = np.cumsum(ok)
+    with np.errstate(invalid="ignore"):
+        lo = np.minimum(np.searchsorted(tt, t - window, side="right"), hi)
+    rows = np.flatnonzero(np.isfinite(t) & (hi - lo >= 2))
+    rows = rows[tt[hi[rows] - 1] - tt[lo[rows]] >= window / 2]
+    if not rows.size:
+        return out
+    # Slopes from times relative to the stretch's start: ~1.7e9 s timestamps
+    # would lose the digits the slope is made of.
+    tt = tt - tt[0]
+    width = int((hi - lo)[rows].max())
+    step = max(1, _RATE_BLOCK // width)
+    for a in range(0, rows.size, step):
+        r = rows[a:a + step]
+        idx = lo[r, None] + np.arange(width)
+        inside = idx < hi[r, None]
+        idx = np.minimum(idx, tt.size - 1)
+        n = inside.sum(axis=1)
+        T = np.where(inside, tt[idx], 0.0)
+        Y = np.where(inside, yy[idx], 0.0)
+        tc = np.where(inside, T - (T.sum(axis=1) / n)[:, None], 0.0)
+        yc = np.where(inside, Y - (Y.sum(axis=1) / n)[:, None], 0.0)
+        out[r] = (tc * yc).sum(axis=1) / (tc * tc).sum(axis=1)
+    return out
+
+
+def add_rates(data, settings):
+    """Work the rate columns out from the thickness where the file has no rate
+    logged, over the window the run was taken with. Returns the columns it
+    filled in and the window it used."""
+    window = DEFAULT_RATE_WINDOW
+    try:
+        window = float(settings["measurement"]["rate_window"])
+    except (KeyError, TypeError, ValueError):
+        pass
+    filled = []
+    t = pd.to_numeric(data["timestamp_s"], errors="coerce").to_numpy(dtype=float)
+    for rate, thickness in RATE_COLUMNS.items():
+        logged = rate in data.columns and pd.to_numeric(data[rate], errors="coerce").notna().any()
+        if logged or thickness not in data.columns:
+            continue
+        y = pd.to_numeric(data[thickness], errors="coerce").to_numpy(dtype=float)
+        data[rate] = trailing_rate(t, y, window)
+        filled.append(rate)
+    return filled, window
+
+
 def load(path):
     """Split the CSV into measurement data, event markers, and the run settings."""
     df = pd.read_csv(path)
@@ -156,13 +252,19 @@ def main():
     settings_text = format_settings(settings)
     print(f"\n=== Run settings — {Path(path).name} ===\n{settings_text}\n")
 
+    calculated, rate_window = add_rates(data, settings)
+    if calculated:
+        print(f"No rate logged in this file: {', '.join(calculated)} calculated from the "
+              f"thickness over a {rate_window:g} s window.\n")
+
     fig, ax = plt.subplots(figsize=(12, 7))
     fig.canvas.manager.set_window_title(f"QCM Plotter — {Path(path).name}")
     plt.subplots_adjust(left=0.32, right=0.92, bottom=0.08, top=0.93)
 
     # One line per available channel; raw_y keeps the unscaled values for toggling.
     lines, raw = {}, {}
-    available = [c for c in CHANNELS if c[0] in data.columns]
+    available = [(column, label.replace(")", ", calc.)") if column in calculated else label, color)
+                 for column, label, color in CHANNELS if column in data.columns]
     for column, label, color in available:
         y = to_numeric(data[column], column).to_numpy(dtype=float)
         raw[column] = y

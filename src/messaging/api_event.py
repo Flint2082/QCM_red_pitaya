@@ -53,6 +53,14 @@ class LockStatusEvent(ApiEvent):
     lock_temp: bool
     quality_mass: float | None  # phase-error std (rad); None = window not full yet
     quality_temp: float | None
+    # Oscillator parked at 0 Hz by the last lock attempt (a 0 Hz start
+    # frequency, or the temp mode of an uncompensated lock): never locked, and
+    # not expected to be.
+    parked_mass: bool = False
+    parked_temp: bool = False
+    # Samples a second the acquisition loop actually took over the last second,
+    # None until it has run for one.
+    sample_rate: float | None = None
 
 @dataclass
 class CapAdjustEvent(ApiEvent):
@@ -108,8 +116,37 @@ class SystemStatusEvent(ApiEvent):
     lock_status_temp_mode: bool
 
 @dataclass
+class TemperatureEvent(ApiEvent):
+    """One round of readings from the LTC2986 temperature sensors, from
+    workers/temperature_worker.py. `sensors` holds one dict per sensor (key,
+    name, channel, temperature in °C or None, faults); it is empty while the
+    chip is unavailable, and `error` then says why. `available` is about the
+    LTC2986 only: `zynq_die_c` is the Zynq's die temperature (°C, None when
+    unreadable), reported either way."""
+    available: bool
+    sensors: list[dict] = field(default_factory=list)
+    error: str | None = None
+    zynq_die_c: float | None = None
+    timestamp: float | None = None
+
+@dataclass
+class CalibrationStatusEvent(ApiEvent):
+    """Once a second: whether the crystal has settled for a calibration point,
+    and why not. See domain/calibration_recorder.py for the fields."""
+    status: dict
+
+@dataclass
+class CalibrationPointsEvent(ApiEvent):
+    """The calibration points and settings, after any change. `added` is the
+    point just taken, when that is what changed them."""
+    points: list[dict]
+    settings: dict
+    added: dict | None = None
+
+@dataclass
 class OpcStatusEvent(ApiEvent):
     connected: bool
+    enabled: bool = True  # False = bridge switched off (opc_enabled), not a lost link
     ambient_temp:    float | None = None
     start_freq_mass: float | None = None
     start_freq_temp: float | None = None

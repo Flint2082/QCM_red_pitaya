@@ -35,3 +35,12 @@ class MeasurementData(TelemetryData):
     # temp-mode lock was lost (see QCMInterface.getMeasurement). The row is still
     # a real measurement of the mass mode — only the thermal correction is frozen.
     temp_held: bool = False
+    # False for a run on the mass mode alone (the uncompensated measurement
+    # mode): calculated_thickness is then the uncompensated thickness, and
+    # calculated_temp is None because no temperature is measured.
+    compensated: bool = True
+    # Deposition rate (nm/s) of calculated_thickness and of
+    # uncompensated_thickness, over the worker's rate window (see
+    # processing/deposition_rate.py). None until the window has filled.
+    calculated_rate: float | None = None
+    uncompensated_rate: float | None = None

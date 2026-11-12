@@ -39,6 +39,8 @@ class Application(threading.Thread):
         opc_command_queue: queue.Queue | None = None,
         opc_event_queue:   queue.Queue | None = None,
         opc_status_queue:  queue.Queue | None = None,
+        # Readings from the temperature worker (optional)
+        temperature_queue: queue.Queue | None = None,
 
         system_state=None,
     ):
@@ -49,6 +51,7 @@ class Application(threading.Thread):
         self._command_queues: list[queue.Queue] = [q for q in (api_command_queue, opc_command_queue) if q]
         self._event_queues:   list[queue.Queue] = [q for q in (api_event_queue,   opc_event_queue)   if q]
         self._opc_status_queue: queue.Queue | None = opc_status_queue
+        self._temperature_queue: queue.Queue | None = temperature_queue
         self.system_state = system_state
         self.running = True
 
@@ -72,6 +75,7 @@ class Application(threading.Thread):
                 did_work = self._process_api_commands()
                 did_work |= self._process_worker_events()
                 did_work |= self._process_opc_status()
+                did_work |= self._process_temperatures()
                 # Sleep briefly when idle — without this the loop busy-spins at
                 # 100% CPU, starving the worker and the uvicorn event loop (GIL
                 # contention), which makes the UI laggy and drops WebSockets.
@@ -99,6 +103,22 @@ class Application(threading.Thread):
         return did_work
 
     # --------------------------------------------------
+    # Inbound: temperature readings → forward to REST/WS clients
+    # --------------------------------------------------
+
+    def _process_temperatures(self) -> bool:
+        if self._temperature_queue is None:
+            return False
+        did_work = False
+        try:
+            while True:
+                self._emit(self._temperature_queue.get_nowait())
+                did_work = True
+        except queue.Empty:
+            pass
+        return did_work
+
+    # --------------------------------------------------
     # Inbound: commands from API → forward to worker
     # --------------------------------------------------
 
@@ -120,7 +140,8 @@ class Application(threading.Thread):
         """
         if isinstance(command, ac.StartMeasurementCommand):
             self.worker_command_queue.put(wc.StartMeasurementCommand(
-                ambient_temp=command.ambient_temp, mat_dens=command.mat_dens, z_ratio=command.z_ratio))
+                ambient_temp=command.ambient_temp, mat_dens=command.mat_dens, z_ratio=command.z_ratio,
+                t_start_source=command.t_start_source))
         elif isinstance(command, ac.StopMeasurementCommand):
             self.worker_command_queue.put(wc.StopMeasurementCommand())
         elif isinstance(command, ac.RetryRunLogCommand):
@@ -150,10 +171,17 @@ class Application(threading.Thread):
             self.worker_command_queue.put(wc.SetAutoRelockCommand(command.enabled))
         elif isinstance(command, ac.SetTempHoldCommand):
             self.worker_command_queue.put(wc.SetTempHoldCommand(command.enabled))
+        elif isinstance(command, ac.SetMeasurementModeCommand):
+            self.worker_command_queue.put(wc.SetMeasurementModeCommand(command.compensated))
         elif isinstance(command, ac.SetFreqTrackingCommand):
             self.worker_command_queue.put(wc.SetFreqTrackingCommand(command.enabled, command.interval))
         elif isinstance(command, ac.SetTargetThicknessCommand):
             self.worker_command_queue.put(wc.SetTargetThicknessCommand(command.target))
+        elif isinstance(command, ac.SetRateWindowCommand):
+            self.worker_command_queue.put(wc.SetRateWindowCommand(command.window))
+        elif isinstance(command, ac.SetAcquisitionCommand):
+            self.worker_command_queue.put(wc.SetAcquisitionCommand(
+                command.sample_rate, command.publish_rate, command.log_rate))
         elif isinstance(command, ac.SetStorageReclaimCommand):
             self.worker_command_queue.put(wc.SetStorageReclaimCommand(
                 command.prune_old_runs, command.trim_current_run))
@@ -217,7 +245,9 @@ class Application(threading.Thread):
         elif isinstance(event, we.LockStatusEvent):
             self._emit(ae.LockStatusEvent(
                 lock_mass=event.lock_mass, lock_temp=event.lock_temp,
-                quality_mass=event.quality_mass, quality_temp=event.quality_temp))
+                quality_mass=event.quality_mass, quality_temp=event.quality_temp,
+                parked_mass=event.parked_mass, parked_temp=event.parked_temp,
+                sample_rate=event.sample_rate))
 
         elif isinstance(event, we.CapAdjustEvent):
             self._emit(ae.CapAdjustEvent(

@@ -4,6 +4,12 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>QCM Monitor</title>
+<!-- Tab icon: the electrode pattern of the sensor crystal. The lab PC's
+     Chromium 72–79 predates SVG favicons (Chrome 80), skips the SVG link by its
+     type and takes the .ico; newer browsers prefer the SVG. The .ico holds
+     16/32/48 px PNGs rendered from the SVG — redo them if the SVG changes. -->
+<link rel="icon" href="favicon.ico" sizes="32x32">
+<link rel="icon" href="favicon.svg" type="image/svg+xml">
 <!-- Everything this page needs is served by the Pitaya itself: the control PC
      never has to reach the internet. These were CDN links (cdnjs, jsdelivr,
      Google Fonts), which on an air-gapped bench left the page not merely
@@ -46,8 +52,7 @@ body { background: var(--bg); color: var(--text); font-family: 'DM Sans', sans-s
 
 header { height: var(--header-h); background: var(--surface); border-bottom: 1px solid var(--border); display: flex; align-items: center; padding: 0 16px; gap: 16px; flex-shrink: 0; }
 .logo { font-family: 'DM Mono', monospace; font-size: 13px; font-weight: 500; letter-spacing: 0.14em; color: var(--text); display: flex; align-items: center; gap: 8px; flex-shrink: 0; }
-.logo-icon { width: 22px; height: 22px; border: 1.5px solid var(--blue); border-radius: 2px; display: flex; align-items: center; justify-content: center; }
-.logo-icon svg { width: 12px; height: 12px; stroke: var(--blue); fill: none; }
+.logo-icon { width: 22px; height: 22px; display: block; }
 .logo-sep { width: 1px; height: 20px; background: var(--border); }
 .device-badge { font-family: 'DM Mono', monospace; font-size: 10px; color: var(--text-dim); letter-spacing: 0.06em; background: var(--surface-2); border: 1px solid var(--border); border-radius: 2px; padding: 2px 8px; }
 .version-value { font-family: 'DM Mono', monospace; font-size: 12px; color: var(--text-mid); }
@@ -155,7 +160,7 @@ footer { height: 24px; background: var(--surface); border-top: 1px solid var(--b
 .log-error   { color:var(--red); }
 .log-critical{ color:var(--red); font-weight:500; }
 .log-debug   { color:var(--text-dim); }
-.modal-overlay { position:fixed; inset:0; background:rgba(0,0,0,0.75); display:flex; align-items:center; justify-content:center; z-index:9000; }
+.modal-overlay { position:fixed; top:0; right:0; bottom:0; left:0; background:rgba(0,0,0,0.75); display:flex; align-items:center; justify-content:center; z-index:9000; }
 .modal { background:var(--surface); border:1px solid var(--border-2); border-radius:4px; padding:28px; max-width:500px; width:90%; box-shadow:0 8px 32px rgba(0,0,0,0.5); }
 .modal-title { font-family:'DM Mono',monospace; font-size:13px; letter-spacing:0.08em; color:var(--orange); margin-bottom:12px; }
 .modal-title.green { color: var(--green); }
@@ -171,7 +176,7 @@ footer { height: 24px; background: var(--surface); border-top: 1px solid var(--b
 /* Toggle switch */
 .toggle-switch { position: relative; width: 38px; height: 22px; flex-shrink: 0; }
 .toggle-switch input { opacity: 0; width: 0; height: 0; }
-.toggle-slider { position: absolute; inset: 0; background: var(--border-2); border-radius: 11px; cursor: pointer; transition: 0.2s; }
+.toggle-slider { position: absolute; top: 0; right: 0; bottom: 0; left: 0; background: var(--border-2); border-radius: 11px; cursor: pointer; transition: 0.2s; }
 .toggle-slider::before { content: ''; position: absolute; width: 16px; height: 16px; left: 3px; top: 3px; background: var(--text-dim); border-radius: 50%; transition: 0.2s; }
 .toggle-switch input:checked + .toggle-slider { background: var(--blue); }
 .toggle-switch input:checked + .toggle-slider::before { transform: translateX(16px); background: #fff; }
@@ -200,9 +205,7 @@ footer { height: 24px; background: var(--surface); border-top: 1px solid var(--b
 
 <header>
   <div class="logo">
-    <div class="logo-icon">
-      <svg viewBox="0 0 12 12" stroke-width="1.5"><circle cx="6" cy="6" r="4"/><circle cx="6" cy="6" r="1.5" fill="var(--blue)" stroke="none"/></svg>
-    </div>
+    <img class="logo-icon" src="favicon.svg" alt="">
     QCM MONITOR
   </div>
   <div class="logo-sep"></div>
@@ -244,6 +247,7 @@ footer { height: 24px; background: var(--surface); border-top: 1px solid var(--b
   <button class="tab" onclick="switchTab('calibrate',this)"><div class="tab-dot" style="background:#26d0ce"></div>CALIBRATE</button>
   <button class="tab" onclick="switchTab('settings',this)"><div class="tab-dot" style="background:var(--orange)"></div>SETTINGS</button>
   <button class="tab" onclick="switchTab('logs',this)"><div class="tab-dot" id="log-tab-dot" style="background:var(--border-2)"></div>LOGS</button>
+  <button class="tab" onclick="switchTab('temps',this)"><div class="tab-dot" id="temps-tab-dot" style="background:var(--border-2)"></div>TEMP SENSORS</button>
 </div>
 
 <div class="content">
@@ -253,7 +257,7 @@ footer { height: 24px; background: var(--surface); border-top: 1px solid var(--b
     <div class="toolbar">
       <span class="toolbar-label">WINDOW</span>
       <div class="num-input-wrap">
-        <input id="input-window-main" type="number" value="3000" min="50" max="50000" step="50" onchange="setWindowMain(this.value)">
+        <input id="input-window-main" type="number" value="3000" min="50" max="50000" step="50" onchange="setWindowMain(this.value); applyChartWindows()">
         <span class="num-input-unit">pts</span>
       </div>
       <div class="toolbar-sep"></div>
@@ -263,19 +267,29 @@ footer { height: 24px; background: var(--surface); border-top: 1px solid var(--b
       <button class="btn" onclick="clearCharts()">CLEAR</button>
     </div>
     <div class="stat-bar">
-      <div class="stat"><div class="stat-label">Comp. Thickness</div><div class="stat-value" id="val-comp" style="color:var(--green)">—</div><div class="stat-unit">nm</div></div>
+      <div class="stat"><div class="stat-label comp-label" data-uncomp="Thickness (Uncomp.)">Comp. Thickness</div><div class="stat-value" id="val-comp" style="color:var(--green)">—</div><div class="stat-unit">nm</div></div>
+      <div class="stat" title="Slope of the thickness over the Rate Window (Settings → Measurement)"><div class="stat-label comp-label" data-uncomp="Rate (Uncomp.)">Comp. Rate</div><div class="stat-value" id="val-rate" style="color:var(--green)">—</div><div class="stat-unit">nm/s</div></div>
+      <div class="stat"><div class="stat-label">Uncomp. Thickness</div><div class="stat-value" id="val-uncomp" style="color:var(--blue)">—</div><div class="stat-unit">nm</div></div>
+      <div class="stat" title="Slope of the thickness over the Rate Window (Settings → Measurement)"><div class="stat-label">Uncomp. Rate</div><div class="stat-value" id="val-rate-uncomp" style="color:var(--blue)">—</div><div class="stat-unit">nm/s</div></div>
       <div class="stat"><div class="stat-label">Temperature</div><div class="stat-value" id="val-T" style="color:var(--orange)">—</div><div class="stat-unit" id="val-T-unit">°C</div></div>
-      <div class="stat"><div class="stat-label">Uncomp. Thickness</div><div class="stat-value" id="val-uncomp">—</div><div class="stat-unit">nm</div></div>
       <div class="stat"><div class="stat-label">Sample Count</div><div class="stat-value" id="val-n">0</div><div class="stat-unit">points</div></div>
     </div>
-    <div class="chart-grid" style="grid-template-columns:1fr; grid-template-rows:1fr 1fr;">
+    <div class="chart-grid" style="grid-template-columns:1fr 1fr; grid-template-rows:1fr 1fr;">
       <div class="chart-card">
-        <div class="chart-card-header"><div class="chart-card-title"><div class="chart-color-bar" style="background:var(--green)"></div>COMPENSATED THICKNESS</div><div class="chart-card-meta" id="meta-comp">—</div></div>
+        <div class="chart-card-header"><div class="chart-card-title"><div class="chart-color-bar" style="background:var(--green)"></div><span class="comp-label" data-uncomp="THICKNESS — UNCOMPENSATED">COMPENSATED THICKNESS</span></div><div class="chart-card-meta" id="meta-comp">—</div></div>
         <div class="chart-body"><canvas id="chart-main-comp"></canvas></div>
       </div>
       <div class="chart-card">
-        <div class="chart-card-header"><div class="chart-card-title"><div class="chart-color-bar" style="background:var(--orange)"></div>TEMPERATURE</div><div class="chart-card-meta" id="meta-temp">—</div></div>
-        <div class="chart-body"><canvas id="chart-main-temp"></canvas></div>
+        <div class="chart-card-header"><div class="chart-card-title"><div class="chart-color-bar" style="background:var(--blue)"></div>UNCOMPENSATED THICKNESS</div><div class="chart-card-meta" id="meta-uncomp">—</div></div>
+        <div class="chart-body"><canvas id="chart-main-uncomp"></canvas></div>
+      </div>
+      <div class="chart-card">
+        <div class="chart-card-header"><div class="chart-card-title"><div class="chart-color-bar" style="background:var(--green)"></div><span class="comp-label" data-uncomp="RATE — UNCOMPENSATED">COMPENSATED RATE</span></div><div class="chart-card-meta" id="meta-rate">—</div></div>
+        <div class="chart-body"><canvas id="chart-main-rate"></canvas></div>
+      </div>
+      <div class="chart-card">
+        <div class="chart-card-header"><div class="chart-card-title"><div class="chart-color-bar" style="background:var(--blue)"></div>UNCOMPENSATED RATE</div><div class="chart-card-meta" id="meta-rate-uncomp">—</div></div>
+        <div class="chart-body"><canvas id="chart-main-rate-uncomp"></canvas></div>
       </div>
     </div>
   </div>
@@ -285,7 +299,7 @@ footer { height: 24px; background: var(--surface); border-top: 1px solid var(--b
     <div class="toolbar">
       <span class="toolbar-label">WINDOW</span>
       <div class="num-input-wrap">
-        <input id="input-window-monitor" type="number" value="300" min="50" max="50000" step="50" onchange="setWindowMonitor(this.value)">
+        <input id="input-window-monitor" type="number" value="300" min="50" max="50000" step="50" onchange="setWindowMonitor(this.value); applyChartWindows()">
         <span class="num-input-unit">pts</span>
       </div>
       <div class="toolbar-sep"></div>
@@ -298,14 +312,14 @@ footer { height: 24px; background: var(--surface); border-top: 1px solid var(--b
       <div class="stat"><div class="stat-label">Mass Mode Freq</div><div class="stat-value" id="val-fM" style="color:var(--green)">—</div><div class="stat-unit">Hz</div></div>
       <div class="stat"><div class="stat-label">Temp Mode Freq</div><div class="stat-value" id="val-fT" style="color:var(--blue)">—</div><div class="stat-unit">Hz</div></div>
       <div class="stat"><div class="stat-label">Comp. Mass Freq</div><div class="stat-value" id="val-comp-fM" style="color:var(--purple)">—</div><div class="stat-unit">Hz</div></div>
-      <div class="stat"><div class="stat-label">Comp. Thickness</div><div class="stat-value" id="val-comp-a" style="color:var(--green)">—</div><div class="stat-unit">nm</div></div>
+      <div class="stat"><div class="stat-label comp-label" data-uncomp="Thickness (Uncomp.)">Comp. Thickness</div><div class="stat-value" id="val-comp-a" style="color:var(--green)">—</div><div class="stat-unit">nm</div></div>
       <div class="stat"><div class="stat-label">Uncomp. Thickness</div><div class="stat-value" id="val-uncomp-a">—</div><div class="stat-unit">nm</div></div>
       <div class="stat"><div class="stat-label">Temperature</div><div class="stat-value" id="val-T-a" style="color:var(--orange)">—</div><div class="stat-unit" id="val-T-a-unit">°C</div></div>
       <div class="stat" title="Phase-error standard deviation over the lock window. Lower is better; this is what the lock decision is made on."><div class="stat-label">Mass Lock σ</div><div class="stat-value" id="val-q-mass">—</div><div class="stat-unit">mrad</div></div>
       <div class="stat" title="Phase-error standard deviation over the lock window. Lower is better; this is what the lock decision is made on."><div class="stat-label">Temp Lock σ</div><div class="stat-value" id="val-q-temp">—</div><div class="stat-unit">mrad</div></div>
     </div>
     <div class="chart-grid" style="grid-template-columns:1fr 1fr; grid-template-rows:1fr 1fr 1fr; overflow-y:auto;">
-      <div class="chart-card"><div class="chart-card-header"><div class="chart-card-title"><div class="chart-color-bar" style="background:var(--green)"></div>COMP. THICKNESS</div><div class="chart-card-meta" id="meta-comp-a">—</div></div><div class="chart-body" style="min-height:110px"><canvas id="chart-comp-a"></canvas></div></div>
+      <div class="chart-card"><div class="chart-card-header"><div class="chart-card-title"><div class="chart-color-bar" style="background:var(--green)"></div><span class="comp-label" data-uncomp="THICKNESS (UNCOMP.)">COMP. THICKNESS</span></div><div class="chart-card-meta" id="meta-comp-a">—</div></div><div class="chart-body" style="min-height:110px"><canvas id="chart-comp-a"></canvas></div></div>
       <div class="chart-card"><div class="chart-card-header"><div class="chart-card-title"><div class="chart-color-bar" style="background:var(--orange)"></div>TEMPERATURE</div><div class="chart-card-meta" id="meta-temp-a">—</div></div><div class="chart-body" style="min-height:110px"><canvas id="chart-temp-a"></canvas></div></div>
       <div class="chart-card"><div class="chart-card-header"><div class="chart-card-title"><div class="chart-color-bar" style="background:var(--green)"></div>MASS MODE FREQ</div><div class="chart-card-meta" id="meta-fM">—</div></div><div class="chart-body" style="min-height:110px"><canvas id="chart-fM"></canvas></div></div>
       <div class="chart-card"><div class="chart-card-header"><div class="chart-card-title"><div class="chart-color-bar" style="background:var(--blue)"></div>TEMP MODE FREQ</div><div class="chart-card-meta" id="meta-fT">—</div></div><div class="chart-body" style="min-height:110px"><canvas id="chart-fT"></canvas></div></div>
@@ -323,14 +337,14 @@ footer { height: 24px; background: var(--surface); border-top: 1px solid var(--b
         <option value="2">2 — Temp</option>
       </select>
       <div class="toolbar-sep"></div>
-      <span class="toolbar-label">START</span>
+      <span class="toolbar-label">CENTER</span>
       <div class="num-input-wrap">
-        <input id="sweep-start" type="number" value="5900000" min="100000" max="50000000" step="1000">
+        <input id="sweep-center" type="number" value="6000000" min="100000" max="50000000" step="1000">
         <span class="num-input-unit">Hz</span>
       </div>
-      <span class="toolbar-label">STOP</span>
+      <span class="toolbar-label">SPAN</span>
       <div class="num-input-wrap">
-        <input id="sweep-stop" type="number" value="6100000" min="100000" max="50000000" step="1000">
+        <input id="sweep-span" type="number" value="200000" min="0" max="50000000" step="1000">
         <span class="num-input-unit">Hz</span>
       </div>
       <span class="toolbar-label">STEP</span>
@@ -371,7 +385,7 @@ footer { height: 24px; background: var(--surface); border-top: 1px solid var(--b
         <div class="chart-body"><canvas id="chart-sweep-amp"></canvas></div>
       </div>
       <div class="chart-card">
-        <div class="chart-card-header" title="Dashed line = the loop's phase lock point (∓π/2, per this oscillator's feedback inversion). Crosses mark where the phase crosses it on a falling edge — the frequencies this oscillator can lock to."><div class="chart-card-title"><div class="chart-color-bar" style="background:var(--purple)"></div>PHASE vs FREQUENCY</div><div class="chart-card-meta" id="meta-sweep-phase">—</div></div>
+        <div class="chart-card-header" title="Solid = phase unwrapped (the ±2π jumps at ±π removed); grey dashed = the phase as measured, wrapped to ±π. Orange dashed line = the loop's phase lock point (∓π/2, per this oscillator's feedback inversion), which the measured phase crosses. Crosses mark where it does so on a falling edge — the frequencies this oscillator can lock to — drawn on the unwrapped trace."><div class="chart-card-title"><div class="chart-color-bar" style="background:var(--purple)"></div>PHASE vs FREQUENCY <span style="opacity:.5;text-transform:none;letter-spacing:0">— unwrapped, raw dashed</span></div><div class="chart-card-meta" id="meta-sweep-phase">—</div></div>
         <div class="chart-body"><canvas id="chart-sweep-phase"></canvas></div>
       </div>
     </div>
@@ -384,21 +398,48 @@ footer { height: 24px; background: var(--surface); border-top: 1px solid var(--b
       <button class="btn btn-green" id="btn-start-stop-3" onclick="toggleStartStop()"><svg viewBox="0 0 12 12"><polygon points="3,2 10,6 3,10"/></svg>START</button>
       <div class="toolbar-sep"></div>
       <span class="toolbar-label">TEMP</span>
-      <div class="num-input-wrap">
+      <select id="cal-temp-source" onchange="onCalTempSource()" title="Where ADD POINT takes the temperature from: typed in, or the latest reading of an LTC2986 sensor (TEMP SENSORS tab)" style="background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);color:var(--text);font-family:'DM Mono',monospace;font-size:11px;padding:0 8px;height:26px;outline:none;">
+        <option value="manual">Manual</option>
+        <option value="pt100">PT100</option>
+        <option value="thermocouple">Thermocouple</option>
+        <option value="cold_junction">Cold junction</option>
+      </select>
+      <div class="num-input-wrap" id="cal-temp-wrap">
         <input id="cal-temp-input" type="number" value="25" step="0.1">
         <span class="num-input-unit">°C</span>
       </div>
-      <button class="btn btn-blue" onclick="addCalPoint()" title="Record the current live frequencies at the temperature entered">
+      <button class="btn btn-blue" onclick="addCalPoint()" title="Add a point now: the frequencies and temperature averaged over the settle window">
         <svg viewBox="0 0 12 12"><path d="M5.25 1h1.5v3.75H10.5v1.5H6.75V10h-1.5V6.25H1.5v-1.5h3.75z"/></svg>ADD POINT
       </button>
+      <label title="Take the point by itself once the crystal has settled (with a sensor as the TEMP source)" style="display:flex;align-items:center;gap:6px;font-family:'DM Mono',monospace;font-size:10px;color:var(--text-dim);cursor:pointer;user-select:none">
+        <input type="checkbox" id="cal-auto" checked onchange="setCalSetting('auto_capture', this.checked)" style="accent-color:var(--blue)"> AUTO
+      </label>
       <div class="toolbar-sep"></div>
       <button class="btn" onclick="clearCalPoints()">CLEAR POINTS</button>
       <div class="header-spacer"></div>
       <button class="btn btn-blue" id="btn-cal-transfer" onclick="transferCalCoeffs()" disabled title="Compare against the current crystal calibration, then copy the fitted coefficients into the Crystal settings form">TRANSFER TO CRYSTAL →</button>
     </div>
+    <!-- Settle detector on the Pitaya: a point is due once fT (and the TEMP sensor)
+         have drifted less than the limits over WINDOW, for HOLD in a row. -->
+    <div class="toolbar">
+      <span class="toolbar-label">SETTLE</span>
+      <div class="status-pill idle" id="cal-settle-pill">—</div>
+      <span id="cal-settle-reason" style="font-family:'DM Mono',monospace;font-size:10px;color:var(--text-dim)"></span>
+      <div class="header-spacer"></div>
+      <span class="toolbar-label" title="Span the drifts are fitted over, and a point is averaged over">WINDOW</span>
+      <div class="num-input-wrap"><input id="cal-window" type="number" min="0.5" max="30" step="0.5" onchange="setCalSetting('window_s', this.value * 60)"><span class="num-input-unit">min</span></div>
+      <span class="toolbar-label" title="Largest temp-mode frequency drift that counts as settled">fT ≤</span>
+      <div class="num-input-wrap"><input id="cal-max-ft" type="number" min="0.01" step="0.1" onchange="setCalSetting('max_ft_drift', this.value)"><span class="num-input-unit">Hz/min</span></div>
+      <span class="toolbar-label" title="Largest drift of the TEMP sensor that counts as settled">T ≤</span>
+      <div class="num-input-wrap"><input id="cal-max-temp" type="number" min="0.0001" step="0.001" onchange="setCalSetting('max_temp_drift', this.value)"><span class="num-input-unit">°C/min</span></div>
+      <span class="toolbar-label" title="How long both have to stay within the limits">HOLD</span>
+      <div class="num-input-wrap"><input id="cal-hold" type="number" min="0" max="60" step="0.5" onchange="setCalSetting('hold_s', this.value * 60)"><span class="num-input-unit">min</span></div>
+    </div>
     <div class="stat-bar">
       <div class="stat"><div class="stat-label">Mass Mode Freq</div><div class="stat-value" id="val-cal-fM" style="color:var(--green)">—</div><div class="stat-unit">Hz</div></div>
       <div class="stat"><div class="stat-label">Temp Mode Freq</div><div class="stat-value" id="val-cal-fT" style="color:var(--blue)">—</div><div class="stat-unit">Hz</div></div>
+      <div class="stat"><div class="stat-label">fT Drift</div><div class="stat-value" id="val-cal-ft-drift">—</div><div class="stat-unit">Hz/min over the window</div></div>
+      <div class="stat"><div class="stat-label" id="label-cal-temp-drift">Sensor Drift</div><div class="stat-value" id="val-cal-temp-drift">—</div><div class="stat-unit">°C/min over the window</div></div>
       <div class="stat"><div class="stat-label">Calibration Points</div><div class="stat-value" id="cal-point-count">0</div><div class="stat-unit">points</div></div>
       <div class="stat"><div class="stat-label">Lock Status</div><div class="stat-value" id="val-cal-lock" style="font-size:14px;color:var(--red)">UNLOCKED</div><div class="stat-unit"></div></div>
     </div>
@@ -451,6 +492,11 @@ footer { height: 24px; background: var(--surface); border-top: 1px solid var(--b
       <div class="settings-content">
 
         <div class="settings-panel active" id="spanel-meas">
+          <div class="settings-section-title">MODE</div>
+          <div class="settings-group">
+            <div class="settings-row"><div><div class="settings-row-label">Measurement Mode</div><div class="settings-row-desc"><b>Compensated</b> locks both modes and solves the crystal temperature from the temp mode, so the thickness is corrected for it. <b>Uncompensated</b> locks the mass mode only — GET LOCK parks the temp oscillator at 0 Hz — and reports the plain thickness from the mass-mode shift, with no temperature: every frequency change is taken as film, so it is only as good as the crystal's temperature is steady. For a crystal with no usable temp mode or no calibration. GET LOCK uses the new mode straight away; a run in progress keeps the mode it was started in. Either mode is also parked by setting its lock frequency to 0 Hz</div></div><div></div><div style="display:flex;align-items:center;gap:6px"><select class="settings-input" id="s-meas-mode" style="width:150px;text-align:left"><option value="compensated">Compensated</option><option value="uncompensated">Uncompensated</option></select></div></div>
+          </div>
+
           <div class="settings-section-title">MATERIAL PROPERTIES</div>
           <div class="settings-group">
             <div class="settings-row"><div><div class="settings-row-label">Material Density</div><div class="settings-row-desc">Deposited film material density</div></div><div></div><div style="display:flex;align-items:center;gap:6px"><input class="settings-input" type="number" id="s-mat-dens" value="19320" step="10"><span class="settings-unit">kg/m³</span></div></div>
@@ -459,13 +505,22 @@ footer { height: 24px; background: var(--surface); border-top: 1px solid var(--b
 
           <div class="settings-section-title">TEMPERATURE</div>
           <div class="settings-group">
-            <div class="settings-row"><div><div class="settings-row-label">Ambient Temperature</div><div class="settings-row-desc">Starting reference temperature</div></div><div></div><div style="display:flex;align-items:center;gap:6px"><input class="settings-input" type="number" id="s-amb-temp" value="23" step="0.5"><span class="settings-unit">°C</span></div></div>
+            <div class="settings-row"><div><div class="settings-row-label">T Start Source</div><div class="settings-row-desc">Where a run's starting reference temperature comes from, read the moment the run starts (from the GUI or the PLC). Crystal solves it from the two locked modes with the active crystal's calibration, constants fM_0/fT_0 included, so it needs a profile calibrated on this crystal. A thermometer is read directly. Without a current reading the run starts from Ambient Temperature instead and the run log says so</div></div><div></div><div style="display:flex;align-items:center;gap:6px"><span id="s-tstart-live" style="font-family:'DM Mono',monospace;font-size:11px;color:var(--text-dim)"></span><select class="settings-input" id="s-tstart-source" onchange="updateTStartLive()" style="width:150px;text-align:left"><option value="manual">Manual</option><option value="crystal">Crystal</option><option value="pt100">PT100</option><option value="thermocouple">Thermocouple</option><option value="cold_junction">Cold junction</option></select></div></div>
+            <div class="settings-row"><div><div class="settings-row-label">Ambient Temperature</div><div class="settings-row-desc">Starting reference temperature when T Start Source is Manual, and the fallback for the other sources</div></div><div></div><div style="display:flex;align-items:center;gap:6px"><input class="settings-input" type="number" id="s-amb-temp" value="23" step="0.5"><span class="settings-unit">°C</span></div></div>
           </div>
 
           <div class="settings-section-title">TARGET</div>
           <div class="settings-group">
             <div class="settings-row"><div><div class="settings-row-label">Target Thickness</div><div class="settings-row-desc">Compensated thickness at which the target flag is raised — shows a popup and sets the flag on the OPC server and the REST API. The measurement keeps running. 0 = no target.</div></div><div></div><div style="display:flex;align-items:center;gap:6px"><input class="settings-input" type="number" id="s-target-thickness" value="0" step="1" min="0"><span class="settings-unit">nm</span></div></div>
             <div class="settings-row"><div><div class="settings-row-label">Target Status</div><div class="settings-row-desc">Live state of the flag for the current run</div></div><div></div><div style="display:flex;align-items:center;gap:6px"><span id="s-target-status" style="font-family:'DM Mono',monospace;font-size:12px;color:var(--text-dim)">NO TARGET</span></div></div>
+          </div>
+
+          <div class="settings-section-title">SAMPLING &amp; RATE</div>
+          <div class="settings-group">
+            <div class="settings-row"><div><div class="settings-row-label">Sample Rate</div><div class="settings-row-desc">How often the frequencies are read and the thickness and deposition rate worked out. The FPGA updates its frequency registers far faster, so this is the software's pace only. A higher rate puts more samples into each rate window, which is what keeps a short, quick-reacting window usable; for a given window it hardly changes the noise, which comes from slow frequency wander. Lock detection and the drive-gain servo keep the same timing at any rate. 100 Hz takes about half of one CPU core; that load warms the board and shifts its reference clock by a few tens of ppb, which reads as thickness, so change the rate a few minutes before a run rather than just before. A change waits for a run in progress to end. The rate actually achieved shows at the bottom of the page, and a run that falls behind says so in its log. 1–100 Hz</div></div><div></div><div style="display:flex;align-items:center;gap:6px"><input class="settings-input" type="number" id="s-sample-rate" value="100" step="1" min="1" max="100"><span class="settings-unit">Hz</span></div></div>
+            <div class="settings-row"><div><div class="settings-row-label">Rate Window</div><div class="settings-row-desc">The deposition rate is the slope of a straight line fitted through this much of the latest thickness, every sample of it, for both the compensated and the uncompensated rate. A longer window gives a quieter rate that follows a change more slowly, lagging it by about half the window. It needs two samples in half a window, so at 10 Hz keep it at 0.2 s or more. The rate stays blank until half a window of the run has been taken. Takes effect immediately, a run in progress included, where a longer window blanks the rate again until half of it has been taken; the run log records the window in its SETTINGS row. 0.1–300 s</div></div><div></div><div style="display:flex;align-items:center;gap:6px"><input class="settings-input" type="number" id="s-rate-window" value="1" step="0.1" min="0.1" max="300"><span class="settings-unit">s</span></div></div>
+            <div class="settings-row"><div><div class="settings-row-label">Display / PLC Rate</div><div class="settings-row-desc">How often a sample is sent to this page, and every other open browser, and written to the PLC. Each one is the newest sample, its rate fitted to every sample before it. Old lab PCs draw 10 Hz comfortably. Takes effect immediately. 1–25 Hz</div></div><div></div><div style="display:flex;align-items:center;gap:6px"><input class="settings-input" type="number" id="s-publish-rate" value="10" step="1" min="1" max="25"><span class="settings-unit">Hz</span></div></div>
+            <div class="settings-row"><div><div class="settings-row-label">Log Rate</div><div class="settings-row-desc">How often the run log takes a sample; 0 logs every sample. Each row carries the deposition rate fitted to every sample, whatever this is set to. A row is about 300 bytes: about 250 MB a day at 10 Hz, 2.6 GB if every sample at 100 Hz is logged, so mind the free space on the SD card (System → Storage) before a long run. Takes effect immediately; a change during a run is noted in its log. 0–100 Hz</div></div><div></div><div style="display:flex;align-items:center;gap:6px"><input class="settings-input" type="number" id="s-log-rate" value="10" step="1" min="0" max="100"><span class="settings-unit">Hz</span></div></div>
           </div>
         </div>
 
@@ -498,7 +553,7 @@ footer { height: 24px; background: var(--surface); border-top: 1px solid var(--b
 
           <div class="settings-section-title">LOCK RECOVERY</div>
           <div class="settings-group">
-            <div class="settings-row"><div><div class="settings-row-label">Auto Re-lock</div><div class="settings-row-desc">Re-acquire automatically if the <b>mass mode</b> loses lock during a measurement — that is the mode the thickness is measured from, and nothing in software can retrieve it off resonance. A temp-mode-only loss never triggers one: re-locking resets <b>both</b> oscillators and blocks for several seconds, which would drag the mass loop through a re-acquisition it did not need, and on marginal lock detection it repeats that indefinitely while breaking the loops it is trying to rescue. The temp loop is left running with its capture window where the lock was last good and usually returns on its own; GET LOCK re-acquires both on demand</div></div><div></div><div style="display:flex;align-items:center;gap:6px"><select class="settings-input" id="s-auto-relock" style="width:150px;text-align:left"><option value="1">Enabled</option><option value="0">Disabled</option></select></div></div>
+            <div class="settings-row"><div><div class="settings-row-label">Auto Re-lock</div><div class="settings-row-desc">Re-acquire automatically if the <b>mass mode</b> loses lock during a measurement — that is the mode the thickness is measured from, and nothing in software can retrieve it off resonance. A temp-mode-only loss never triggers one: re-locking resets <b>both</b> oscillators and interrupts the thickness output for a few seconds (the raw readings keep streaming), which would drag the mass loop through a re-acquisition it did not need, and on marginal lock detection it repeats that indefinitely while breaking the loops it is trying to rescue. The temp loop is left running with its capture window where the lock was last good and usually returns on its own; GET LOCK re-acquires both on demand</div></div><div></div><div style="display:flex;align-items:center;gap:6px"><select class="settings-input" id="s-auto-relock" style="width:150px;text-align:left"><option value="1">Enabled</option><option value="0">Disabled</option></select></div></div>
             <div class="settings-row"><div><div class="settings-row-label">Hold Temperature On Lock Loss</div><div class="settings-row-desc">Hold the last calculated temperature while the temp mode is unlocked, rather than solving it from an off-resonance Ft. Only the thermal <i>correction</i> pauses: the mass mode is still measured and the compensated thickness keeps coming out, following the film sample for sample. Held samples show as <b>HELD</b> on the Monitor tab.<br><br><b>Disabled</b>, the temperature is solved from whatever Ft currently reads, locked or not — the live figure, with the lock flag and lock quality beside it to say how far to trust it. Useful when lock detection is marginal and the loops are in fact fine. Either way a sample is produced every cycle and the run is never interrupted</div></div><div></div><div style="display:flex;align-items:center;gap:6px"><select class="settings-input" id="s-temp-hold" style="width:150px;text-align:left"><option value="1">Enabled</option><option value="0">Disabled</option></select></div></div>
             <div class="settings-row"><div><div class="settings-row-label">Track Lock Frequencies</div><div class="settings-row-desc">While both modes are locked, keep the start frequencies on the frequencies the PLLs are actually holding, so a re-lock aims at where the resonances are now instead of where they were hours ago. Does not change the crystal profile on disk</div></div><div></div><div style="display:flex;align-items:center;gap:6px"><select class="settings-input" id="s-freq-track" style="width:150px;text-align:left"><option value="1">Enabled</option><option value="0">Disabled</option></select></div></div>
             <div class="settings-row"><div><div class="settings-row-label">Tracking Interval</div><div class="settings-row-desc">How often the start frequencies are updated</div></div><div></div><div style="display:flex;align-items:center;gap:6px"><input class="settings-input" type="number" id="s-freq-track-interval" value="10" step="1" min="1"><span class="settings-unit">s</span></div></div>
@@ -550,6 +605,7 @@ footer { height: 24px; background: var(--surface); border-top: 1px solid var(--b
         <div class="settings-panel" id="spanel-opc">
           <div class="settings-section-title">CONNECTION</div>
           <div class="settings-group">
+            <div class="settings-row"><div><div class="settings-row-label">OPC-UA Bridge</div><div class="settings-row-desc">Link to the WAGO PLC. Off by default: while disabled the QCM holds no connection, so the PLC can neither read results nor trigger GET LOCK / START / STOP. Takes effect immediately and is remembered across restarts; the connection settings below are kept either way, and RESTORE DEFAULTS leaves this alone</div></div><div></div><div style="display:flex;align-items:center;gap:6px"><select class="settings-input" id="s-opc-enabled" style="width:150px;text-align:left" onchange="setOpcEnabled(this.value === '1')"><option value="0">Disabled</option><option value="1">Enabled</option></select></div></div>
             <div class="settings-row">
               <div><div class="settings-row-label">Status</div><div class="settings-row-desc">WAGO PLC link</div></div>
               <div></div>
@@ -607,7 +663,7 @@ footer { height: 24px; background: var(--surface); border-top: 1px solid var(--b
               <div class="crystal-stat-label">Total Deposited</div>
               <div class="crystal-stat-value"><span id="s-crystal-deposited">—</span> <span style="font-size:10px;color:var(--text-dim)">nm</span></div>
             </div>
-            <div class="crystal-stat-cell">
+            <div class="crystal-stat-cell" title="Mass-mode frequency drop since the crystal was new: (virgin − current) / virgin. 0 % on a fresh crystal, rising as film builds up. Updated while the mass mode is locked">
               <div class="crystal-stat-label">Usage</div>
               <div class="crystal-stat-value"><span id="s-crystal-usage">—</span> <span style="font-size:10px;color:var(--text-dim)">%</span></div>
             </div>
@@ -634,11 +690,11 @@ footer { height: 24px; background: var(--surface); border-top: 1px solid var(--b
             <div class="settings-row"><div><div class="settings-row-label">fM_3</div><div class="settings-row-desc">Mass mode cubic term</div></div><div></div><div style="display:flex;align-items:center;gap:6px"><input class="settings-input" type="number" id="s-coeff-fM3" value="0.00037590534093399105" step="any" style="width:180px" oninput="updateCoeffCharts()"></div></div>
             <div class="settings-row"><div><div class="settings-row-label">fM_2</div><div class="settings-row-desc">Mass mode quadratic term</div></div><div></div><div style="display:flex;align-items:center;gap:6px"><input class="settings-input" type="number" id="s-coeff-fM2" value="-0.10904938259265566" step="any" style="width:180px" oninput="updateCoeffCharts()"></div></div>
             <div class="settings-row"><div><div class="settings-row-label">fM_1</div><div class="settings-row-desc">Mass mode linear term</div></div><div></div><div style="display:flex;align-items:center;gap:6px"><input class="settings-input" type="number" id="s-coeff-fM1" value="9.159340464734298" step="any" style="width:180px" oninput="updateCoeffCharts()"></div></div>
-            <div class="settings-row"><div><div class="settings-row-label">fM_0</div><div class="settings-row-desc">Mass mode constant term</div></div><div></div><div style="display:flex;align-items:center;gap:6px"><input class="settings-input" type="number" id="s-coeff-fM0" value="5982438.448062406" step="any" style="width:180px"></div></div>
+            <div class="settings-row"><div><div class="settings-row-label">fM_0</div><div class="settings-row-desc">Mass mode constant term. Only T start from the crystal reads it, with fT_0</div></div><div></div><div style="display:flex;align-items:center;gap:6px"><input class="settings-input" type="number" id="s-coeff-fM0" value="5982438.448062406" step="any" style="width:180px"></div></div>
             <div class="settings-row"><div><div class="settings-row-label">fT_3</div><div class="settings-row-desc">Temp mode cubic term</div></div><div></div><div style="display:flex;align-items:center;gap:6px"><input class="settings-input" type="number" id="s-coeff-fT3" value="-0.0025499455088113026" step="any" style="width:180px" oninput="updateCoeffCharts()"></div></div>
             <div class="settings-row"><div><div class="settings-row-label">fT_2</div><div class="settings-row-desc">Temp mode quadratic term</div></div><div></div><div style="display:flex;align-items:center;gap:6px"><input class="settings-input" type="number" id="s-coeff-fT2" value="1.2282423071087347" step="any" style="width:180px" oninput="updateCoeffCharts()"></div></div>
             <div class="settings-row"><div><div class="settings-row-label">fT_1</div><div class="settings-row-desc">Temp mode linear term</div></div><div></div><div style="display:flex;align-items:center;gap:6px"><input class="settings-input" type="number" id="s-coeff-fT1" value="-231.43245120384452" step="any" style="width:180px" oninput="updateCoeffCharts()"></div></div>
-            <div class="settings-row"><div><div class="settings-row-label">fT_0</div><div class="settings-row-desc">Temp mode constant term</div></div><div></div><div style="display:flex;align-items:center;gap:6px"><input class="settings-input" type="number" id="s-coeff-fT0" value="6574158.7173102535" step="any" style="width:180px"></div></div>
+            <div class="settings-row"><div><div class="settings-row-label">fT_0</div><div class="settings-row-desc">Temp mode constant term. Only T start from the crystal reads it, with fM_0</div></div><div></div><div style="display:flex;align-items:center;gap:6px"><input class="settings-input" type="number" id="s-coeff-fT0" value="6574158.7173102535" step="any" style="width:180px"></div></div>
           </div>
 
           <!-- Polynomial preview graphs (constant term excluded — shows Δf vs ΔT) -->
@@ -732,6 +788,13 @@ footer { height: 24px; background: var(--surface); border-top: 1px solid var(--b
               </div>
               <label class="toggle-switch"><input type="checkbox" id="notif-recFailed" checked onchange="setNotifOption('recFailed',this.checked)"><span class="toggle-slider"></span></label>
             </div>
+            <div class="notif-row">
+              <div class="notif-row-info">
+                <div class="notif-label">Calibration Point</div>
+                <div class="notif-desc">The CALIBRATE tab took a point by itself (set the next temperature), or the crystal has settled and is waiting for one</div>
+              </div>
+              <label class="toggle-switch"><input type="checkbox" id="notif-calPoint" checked onchange="setNotifOption('calPoint',this.checked)"><span class="toggle-slider"></span></label>
+            </div>
           </div>
           <button class="btn" onclick="testNotifSound()" style="margin-right:8px">TEST SOUND</button>
           <button class="btn btn-blue" onclick="requestNotifPermission()">REQUEST PERMISSION</button>
@@ -757,20 +820,63 @@ footer { height: 24px; background: var(--surface); border-top: 1px solid var(--b
     <div id="log-output"></div>
   </div>
 
+  <!-- TEMP SENSORS — temporary: a direct readout of the LTC2986 on the V2 board.
+       Labels and channels are filled in from the backend's TemperatureEvent. -->
+  <div class="tab-panel" id="panel-temps">
+    <div class="toolbar">
+      <span class="toolbar-label">WINDOW</span>
+      <div class="num-input-wrap" title="Points per chart. The sensors are read once a second, so 3600 pts is an hour.">
+        <input id="input-window-temps" type="number" value="3600" min="50" max="50000" step="50" onchange="setWindowTemps(this.value); applyChartWindows()">
+        <span class="num-input-unit">pts</span>
+      </div>
+      <div class="toolbar-sep"></div>
+      <span class="toolbar-label">LTC2986</span>
+      <div class="status-pill idle" id="temps-status">WAITING</div>
+      <span id="temps-error" style="font-family:'DM Mono',monospace;font-size:10px;color:var(--red)"></span>
+      <div class="header-spacer"></div>
+      <button class="btn" onclick="clearTempCharts()">CLEAR</button>
+    </div>
+    <div class="stat-bar">
+      <div class="stat"><div class="stat-label" id="label-temp-pt100">PT100</div><div class="stat-value" id="val-temp-pt100" style="color:var(--orange)">—</div><div class="stat-unit" id="unit-temp-pt100">°C</div></div>
+      <div class="stat"><div class="stat-label" id="label-temp-thermocouple">Thermocouple</div><div class="stat-value" id="val-temp-thermocouple" style="color:var(--red)">—</div><div class="stat-unit" id="unit-temp-thermocouple">°C</div></div>
+      <div class="stat"><div class="stat-label" id="label-temp-cold_junction">Cold Junction</div><div class="stat-value" id="val-temp-cold_junction" style="color:var(--blue)">—</div><div class="stat-unit" id="unit-temp-cold_junction">°C</div></div>
+      <div class="stat" title="The Zynq's own die temperature, from its XADC — not on the LTC2986. A proxy for the Pitaya's reference oscillator, whose drift shifts both modes alike and reads as mass."><div class="stat-label">Zynq die · XADC</div><div class="stat-value" id="val-temp-zynq_die" style="color:var(--purple)">—</div><div class="stat-unit" id="unit-temp-zynq_die">°C</div></div>
+    </div>
+    <!-- 2×2, filled column by column: PT100 and thermocouple on the left, the
+         board's TSic and the Zynq die (the electronics) on the right. -->
+    <div class="chart-grid" style="grid-template-columns:1fr 1fr; grid-template-rows:1fr 1fr; grid-auto-flow:column;">
+      <div class="chart-card"><div class="chart-card-header"><div class="chart-card-title"><div class="chart-color-bar" style="background:var(--orange)"></div><span id="title-temp-pt100">PT100</span></div><div class="chart-card-meta" id="meta-temp-pt100">—</div></div><div class="chart-body"><canvas id="chart-temp-pt100"></canvas></div></div>
+      <div class="chart-card"><div class="chart-card-header"><div class="chart-card-title"><div class="chart-color-bar" style="background:var(--red)"></div><span id="title-temp-thermocouple">THERMOCOUPLE</span></div><div class="chart-card-meta" id="meta-temp-thermocouple">—</div></div><div class="chart-body"><canvas id="chart-temp-thermocouple"></canvas></div></div>
+      <div class="chart-card"><div class="chart-card-header"><div class="chart-card-title"><div class="chart-color-bar" style="background:var(--blue)"></div><span id="title-temp-cold_junction">COLD JUNCTION</span></div><div class="chart-card-meta" id="meta-temp-cold_junction">—</div></div><div class="chart-body"><canvas id="chart-temp-cold_junction"></canvas></div></div>
+      <div class="chart-card"><div class="chart-card-header"><div class="chart-card-title"><div class="chart-color-bar" style="background:var(--purple)"></div><span>ZYNQ DIE (XADC)</span></div><div class="chart-card-meta" id="meta-temp-zynq_die">—</div></div><div class="chart-body"><canvas id="chart-temp-zynq_die"></canvas></div></div>
+    </div>
+  </div>
+
 </div>
 
 <footer>
   <span class="footer-text" id="footer-left">n = 0</span>
+  <span class="footer-text" id="footer-rate" title="Samples a second the instrument actually takes, against the Sample Rate set (Settings → Measurement)"></span>
   <span class="footer-text" id="footer-right">—</span>
 </footer>
 
 <script>
+// ---- Older-browser compatibility ----
+// The GUI is also opened from older lab PCs whose Chromium/Edge predates v80. Those
+// cannot parse optional chaining (?.) or nullish coalescing (??): a single one is a
+// syntax error that kills the whole script and leaves a dead page. Nor do they have
+// structuredClone (v98). Keep this script to ES2019 and use these helpers instead.
+function fieldValue(id) { const el = document.getElementById(id); return el ? el.value : undefined; }
+function ifNull(v, d) { return v == null ? d : v; }
+function deepCopy(o) { return JSON.parse(JSON.stringify(o)); }  // plain data only (chart options)
+
 const DEV_HOSTS = ['localhost', '127.0.0.1', ''];
 const backendHost = DEV_HOSTS.includes(location.hostname) ? 'rp-f0ea58.local' : location.hostname;
 let API_URL = `http://${backendHost}:8000`;
 let WS_URL  = `ws://${backendHost}:8000/ws`;
 let MAX_PTS_MAIN = 3000;
 let MAX_PTS_MONITOR = 300;
+let MAX_PTS_TEMPS = 3600;  // one hour at the temperature worker's 1 s read interval
 
 function setWindowMain(v) {
   MAX_PTS_MAIN = Math.max(50, parseInt(v) || 3000);
@@ -780,6 +886,10 @@ function setWindowMonitor(v) {
   MAX_PTS_MONITOR = Math.max(50, parseInt(v) || 300);
   document.getElementById('input-window-monitor').value = MAX_PTS_MONITOR;
 }
+function setWindowTemps(v) {
+  MAX_PTS_TEMPS = Math.max(50, parseInt(v) || 3600);
+  document.getElementById('input-window-temps').value = MAX_PTS_TEMPS;
+}
 
 // ---- UI preferences ----
 // Chart window lengths and sweep parameters are operator-side view/scan choices,
@@ -787,8 +897,8 @@ function setWindowMonitor(v) {
 // settings.json. Without this every reload silently put back the hard-coded
 // defaults, which is a nuisance when a crystal needs a particular sweep span.
 const UI_STORE_KEY = 'qcm.ui';
-const UI_PREF_IDS = ['input-window-main', 'input-window-monitor',
-                     'sweep-osc', 'sweep-start', 'sweep-stop', 'sweep-step', 'sweep-settle'];
+const UI_PREF_IDS = ['input-window-main', 'input-window-monitor', 'input-window-temps',
+                     'sweep-osc', 'sweep-center', 'sweep-span', 'sweep-step', 'sweep-settle'];
 
 function saveUiPrefs() {
   try {
@@ -813,7 +923,11 @@ function loadUiPrefs() {
   // The chart windows are held in JS variables, not read from the DOM per point.
   setWindowMain(document.getElementById('input-window-main').value);
   setWindowMonitor(document.getElementById('input-window-monitor').value);
-  for (const id of UI_PREF_IDS) document.getElementById(id)?.addEventListener('change', saveUiPrefs);
+  setWindowTemps(document.getElementById('input-window-temps').value);
+  for (const id of UI_PREF_IDS) {
+    const el = document.getElementById(id);
+    if (el) el.addEventListener('change', saveUiPrefs);
+  }
 }
 loadUiPrefs();
 // ---- State tracking ----
@@ -836,8 +950,10 @@ function switchTab(name, el) {
   el.classList.add('active');
   document.querySelectorAll('.tab-panel').forEach(p => p.classList.toggle('active', p.id === 'panel-' + name));
   setTimeout(() => {
-    [...Object.values(charts), ...Object.values(sweepCharts), ...Object.values(calibCharts)].forEach(c => c && c.resize());
-    if (name === 'logs' && document.getElementById('log-autoscroll')?.checked) {
+    [...Object.values(charts), ...Object.values(sweepCharts), ...Object.values(calibCharts),
+     ...Object.values(tempCharts)].forEach(c => c && c.resize());
+    const autoscroll = document.getElementById('log-autoscroll');
+    if (name === 'logs' && autoscroll && autoscroll.checked) {
       const out = document.getElementById('log-output');
       if (out) out.scrollTop = out.scrollHeight;
     }
@@ -855,13 +971,16 @@ function switchSettings(name, el) {
 // ---- Chart factory ----
 const TC = '#8a95a8';  // tick color — matches --text-dim
 const YAXIS = { display: true, ticks: { color: TC, font: { family: 'DM Mono', size: 9 }, maxTicksLimit: 4 }, grid: { color: 'rgba(255,255,255,0.03)' }, border: { color: 'transparent' } };
-const TAXIS = { display: true, ticks: { color: TC, font: { family: 'DM Mono', size: 9 }, maxTicksLimit: 5, autoSkip: true }, grid: { display: false }, border: { color: 'transparent' } };
+// sampleSize: fitting the time labels measures 5 of them instead of every one
+// (3000 on Main), which was a third of each redraw. They are all HH:MM:SS, so the
+// sample gives the same ticks.
+const TAXIS = { display: true, ticks: { color: TC, font: { family: 'DM Mono', size: 9 }, maxTicksLimit: 5, autoSkip: true, sampleSize: 5 }, grid: { display: false }, border: { color: 'transparent' } };
 const ZOOM_CFG = { zoom: { drag: { enabled: true, backgroundColor: 'rgba(74,158,255,0.06)', borderColor: 'rgba(74,158,255,0.35)', borderWidth: 1 }, mode: 'x' } };
 const BASE_OPTS = { responsive: true, maintainAspectRatio: false, animation: false, plugins: { legend: { display: false }, tooltip: { enabled: false }, zoom: ZOOM_CFG }, scales: { x: TAXIS, y: YAXIS } };
 
 function makeChart(id, color) {
   const ctx = document.getElementById(id); if (!ctx) return null;
-  return new Chart(ctx, { type: 'line', data: { labels: [], datasets: [{ data: [], borderColor: color, borderWidth: 1.5, pointRadius: 0, tension: 0.2, fill: true, backgroundColor: color + '14' }] }, options: structuredClone(BASE_OPTS) });
+  return new Chart(ctx, { type: 'line', data: { labels: [], datasets: [{ data: [], borderColor: color, borderWidth: 1.5, pointRadius: 0, tension: 0.2, fill: true, backgroundColor: color + '14' }] }, options: deepCopy(BASE_OPTS) });
 }
 
 function makeDualChart(id, c1, c2) {
@@ -872,7 +991,7 @@ function makeDualChart(id, c1, c2) {
       { data: [], borderColor: c1, borderWidth: 1.5, pointRadius: 0, tension: 0.2, fill: false, yAxisID: 'y', label: 'AMP' },
       { data: [], borderColor: c2, borderWidth: 1.5, pointRadius: 0, tension: 0.2, fill: false, yAxisID: 'y2', borderDash: [4,2], label: 'PHASE' },
     ]},
-    options: { ...structuredClone(BASE_OPTS),
+    options: { ...deepCopy(BASE_OPTS),
       plugins: { tooltip: { enabled: false }, legend: { display: true, labels: { color: TC, font: { family: 'DM Mono', size: 9 }, boxWidth: 14, padding: 8 } }, zoom: ZOOM_CFG },
       scales: { x: TAXIS, y: { ...YAXIS, position: 'left' }, y2: { ...YAXIS, position: 'right', grid: { drawOnChartArea: false } } }
     }
@@ -880,8 +999,10 @@ function makeDualChart(id, c1, c2) {
 }
 
 const charts = {
-  mainComp: makeChart('chart-main-comp', '#2ecc8a'),
-  mainTemp: makeChart('chart-main-temp', '#f5a623'),
+  mainComp:       makeChart('chart-main-comp',        '#2ecc8a'),
+  mainUncomp:     makeChart('chart-main-uncomp',      '#4a9eff'),
+  mainRate:       makeChart('chart-main-rate',        '#2ecc8a'),
+  mainRateUncomp: makeChart('chart-main-rate-uncomp', '#4a9eff'),
   fM:       makeChart('chart-fM',        '#2ecc8a'),
   fT:       makeChart('chart-fT',        '#4a9eff'),
   compA:    makeChart('chart-comp-a',    '#2ecc8a'),
@@ -895,10 +1016,11 @@ const charts = {
 // ---- Sweep charts (x-axis = frequency) ----
 const XAXIS = { display: true, ticks: { color: TC, font: { family: 'DM Mono', size: 9 }, maxTicksLimit: 8, callback: function(v) { return (this.getLabelForValue(v)/1e6).toFixed(3) + 'M'; } }, grid: { color: 'rgba(255,255,255,0.03)' }, border: { color: 'transparent' } };
 
-// Both sweep charts carry the same three datasets at the same indices, so the
+// Both sweep charts carry the same four datasets at the same indices, so the
 // amp/phase pair can be driven by one piece of code. The amp chart simply never
-// gets TARGET data.
-const SWEEP_DS = { TRACE: 0, TARGET: 1, MARKS: 2 };
+// gets TARGET or RAW data. On the phase chart TRACE is the unwrapped phase and
+// RAW the phase as measured, wrapped to ±π.
+const SWEEP_DS = { TRACE: 0, TARGET: 1, MARKS: 2, RAW: 3 };
 const LOCK_MARK_COLOR = '#f5a623';
 
 // Hovering either sweep chart annotates both — they share one frequency axis, so
@@ -954,7 +1076,11 @@ const sweepCrosshairPlugin = {
       }
     }
 
-    const text = `${(freq / 1e6).toFixed(6)} MHz   ${val == null || !isFinite(val) ? '—' : Number(val).toFixed(4)}`;
+    // The phase chart also gives the measured value when unwrapping moved it.
+    const raw = chart.data.datasets[SWEEP_DS.RAW].data[i];
+    const rawNote = (raw != null && isFinite(raw) && val != null && Math.abs(raw - val) > 1e-9)
+      ? `   (raw ${Number(raw).toFixed(4)})` : '';
+    const text = `${(freq / 1e6).toFixed(6)} MHz   ${val == null || !isFinite(val) ? '—' : Number(val).toFixed(4)}${rawNote}`;
     ctx.font = '9px "DM Mono", monospace';
     const w = ctx.measureText(text).width + 10;
     // Flip the box to the left of the rule when it would overflow the plot.
@@ -969,19 +1095,24 @@ const sweepCrosshairPlugin = {
   }
 };
 
-function makeSweepChart(id, color) {
+// `fill` shades under the trace — right for amplitude, meaningless for phase,
+// whose unwrapped trace can run whole turns from zero and would drag a slab.
+function makeSweepChart(id, color, fill = true) {
   const ctx = document.getElementById(id); if (!ctx) return null;
-  const opts = structuredClone(BASE_OPTS);
+  const opts = deepCopy(BASE_OPTS);
   opts.scales.x = XAXIS;
   return new Chart(ctx, {
     type: 'line',
     data: { labels: [], datasets: [
-      { label: 'trace', data: [], borderColor: color, borderWidth: 1.5, pointRadius: 0, tension: 0, fill: true, backgroundColor: color + '14', order: 3 },
+      { label: 'trace', data: [], borderColor: color, borderWidth: 1.5, pointRadius: 0, tension: 0, fill, backgroundColor: color + '14', order: 3 },
       // Horizontal reference at the loop's phase lock point (phase chart only).
       { label: 'lock point', data: [], borderColor: 'rgba(245,166,35,0.4)', borderWidth: 1, borderDash: [4, 3], pointRadius: 0, fill: false, order: 2 },
       // Sparse: null everywhere except the samples nearest a lock point, so the
       // markers ride the same category axis as the trace.
       { label: 'lock points', data: [], showLine: false, pointStyle: 'crossRot', pointRadius: 6, pointBorderWidth: 2, borderColor: LOCK_MARK_COLOR, backgroundColor: LOCK_MARK_COLOR, order: 1 },
+      // The measured phase before unwrapping (phase chart only), greyed out and
+      // drawn underneath the trace.
+      { label: 'raw phase', data: [], borderColor: 'rgba(138,149,168,0.5)', borderWidth: 1, borderDash: [3, 3], pointRadius: 0, tension: 0, fill: false, order: 4 },
     ]},
     options: opts,
     plugins: [sweepCrosshairPlugin],
@@ -989,7 +1120,7 @@ function makeSweepChart(id, color) {
 }
 const sweepCharts = {
   amp:   makeSweepChart('chart-sweep-amp',   '#4a9eff'),
-  phase: makeSweepChart('chart-sweep-phase', '#a78bfa'),
+  phase: makeSweepChart('chart-sweep-phase', '#a78bfa', false),
 };
 
 // ---- Calibration scatter + cubic-fit charts (x-axis = temperature) ----
@@ -1021,7 +1152,7 @@ function makeCalibChart(id, color, key) {
             label: (c) => {
               if (c.datasetIndex !== 0) return '';
               const p = _calPoints[c.dataIndex];
-              return p ? [`T = ${p.t} °C`, `${key} = ${p[key].toFixed(2)} Hz`, '(click to delete)'] : '';
+              return p ? [`T = ${p.t} °C · ${p.source}`,`${key} = ${p[key].toFixed(2)} Hz`, '(click to delete)'] : '';
             }
           }
         },
@@ -1061,21 +1192,14 @@ function setupZoomGroup(chartList) {
       group.forEach(c => {
         c.resetZoom('none');
         // Trim data that accumulated while frozen, then resume live view
-        const mx = c._maxPts;
-        if (mx != null) {
-          const d = c.data;
-          while (d.labels.length > mx) {
-            d.labels.shift();
-            d.datasets.forEach(ds => { if (ds.data.length > mx) ds.data.shift(); });
-          }
-        }
+        if (c._maxPts != null) trimToWindow(c, c._maxPts);
         c.update('none');
       });
       state.syncing = false;
     });
   });
 }
-setupZoomGroup([charts.mainComp, charts.mainTemp]);
+setupZoomGroup([charts.mainComp, charts.mainUncomp, charts.mainRate, charts.mainRateUncomp]);
 setupZoomGroup([charts.fM, charts.fT, charts.compA, charts.tempA, charts.lpf1, charts.lpf2]);
 setupZoomGroup([sweepCharts.amp, sweepCharts.phase]);
 setupZoomGroup([charts.calFmLive, charts.calFtLive]);
@@ -1116,12 +1240,13 @@ function toggleSweep() {
 
 async function runSweep() {
   const osc    = parseInt(document.getElementById('sweep-osc').value);
-  const start  = parseFloat(document.getElementById('sweep-start').value);
-  const stop   = parseFloat(document.getElementById('sweep-stop').value);
+  const center = parseFloat(document.getElementById('sweep-center').value);
+  const span   = parseFloat(document.getElementById('sweep-span').value);
   const step   = parseFloat(document.getElementById('sweep-step').value);
   const settle = parseFloat(document.getElementById('sweep-settle').value);
-  if ([start, stop, step, settle].some(isNaN)) { showToast('Enter valid sweep parameters.', true); return; }
-  await startSweep(osc, start, stop, step, settle);
+  if ([center, span, step, settle].some(isNaN) || step <= 0 || span < 0) { showToast('Enter valid sweep parameters.', true); return; }
+  if (center - span / 2 < 0) { showToast('The span reaches below 0 Hz — narrow it or move the center up.', true); return; }
+  await startSweep(osc, center, span, step, settle);
 }
 
 // SWEEP fM / SWEEP fT: centre the standard window on the crystal's lock
@@ -1135,24 +1260,33 @@ async function runModeSweep(osc) {
     showToast(`Set a valid ${osc === 1 ? 'mass' : 'temp'} lock frequency in Crystal Settings`, true);
     return;
   }
-  const start = centre - MODE_SWEEP_WINDOW / 2;
-  const stop  = centre + MODE_SWEEP_WINDOW / 2;
-  document.getElementById('sweep-osc').value   = String(osc);
-  document.getElementById('sweep-start').value = start;
-  document.getElementById('sweep-stop').value  = stop;
-  document.getElementById('sweep-step').value  = MODE_SWEEP_STEP;
+  document.getElementById('sweep-osc').value    = String(osc);
+  document.getElementById('sweep-center').value = centre;
+  document.getElementById('sweep-span').value   = MODE_SWEEP_WINDOW;
+  document.getElementById('sweep-step').value   = MODE_SWEEP_STEP;
+  saveUiPrefs();  // set from code, so no change event fires to remember them
   const settle = parseFloat(document.getElementById('sweep-settle').value) || 0.05;
   showToast(`Sweeping ${osc === 1 ? 'fM' : 'fT'} — ${fmtHz(MODE_SWEEP_WINDOW)} around ${(centre/1e6).toFixed(4)} MHz`);
-  await startSweep(osc, start, stop, MODE_SWEEP_STEP, settle);
+  await startSweep(osc, centre, MODE_SWEEP_WINDOW, MODE_SWEEP_STEP, settle);
 }
 
-async function startSweep(osc, start, stop, step, settle) {
-  _sweepTotal = Math.floor((stop - start) / step) + 1;
+// The server lays a centred sweep out symmetrically on the step grid, so the
+// centre is always a point and a ragged span loses the same at both ends. The
+// point count here follows the same rule, for the progress readout.
+async function startSweep(osc, center, span, step, settle) {
+  _sweepTotal = 2 * Math.floor(span / 2 / step) + 1;
   clearSweep();
   document.getElementById('val-sweep-status').textContent = 'PENDING';
   setSweepBtnState(true);
   try {
-    await fetch(`${API_URL}/sweep/start?oscillator_idx=${osc}&start_freq=${start}&stop_freq=${stop}&step_size=${step}&settle_time=${settle}`, { method: 'POST' });
+    const r = await fetch(`${API_URL}/sweep/start?oscillator_idx=${osc}&center_freq=${center}&span=${span}&step_size=${step}&settle_time=${settle}`, { method: 'POST' });
+    if (!r.ok) {
+      let detail = '';
+      try { detail = (await r.json()).detail || ''; } catch(e) {}
+      showToast(`Sweep refused — ${detail || r.status}`, true);
+      document.getElementById('val-sweep-status').textContent = 'ERROR';
+      setSweepBtnState(false);
+    }
   } catch(e) {
     console.error('Sweep failed:', e);
     document.getElementById('val-sweep-status').textContent = 'ERROR';
@@ -1167,11 +1301,33 @@ async function abortSweep() {
   document.getElementById('val-sweep-status').textContent = 'ABORTED';
 }
 
+// Phase unwrapping. The demodulator reports the phase wrapped to ±π, so a trace
+// passing ±π jumps by 2π and the shape across a resonance is lost in the jumps.
+// Each step is taken the short way round instead (wrapPi of the difference) and
+// added to the previous unwrapped value, which removes the jumps and leaves
+// the real phase change. A step of more than π is ambiguous, and the short way
+// is the guess, as it is for any unwrap: resolving the phase across a resonance
+// needs steps well under its ~50 Hz width. The trace starts from the first
+// measured value, so it lies within ±π there and can drift from that band by
+// whole turns.
+//
+// `_unwrapLast` is the last sample with a reading, so a missing one leaves a gap
+// without breaking the continuity of what follows.
+let _unwrapLast = null;   // { raw, unwrapped }
+function unwrapNext(raw) {
+  if (raw == null || !isFinite(raw)) return null;
+  const u = _unwrapLast ? _unwrapLast.unwrapped + wrapPi(raw - _unwrapLast.raw) : raw;
+  _unwrapLast = { raw, unwrapped: u };
+  return u;
+}
+
 function onSweepPoint(e) {
+  const unwrapped = unwrapNext(e.phase);
   sweepCharts.amp.data.labels.push(e.frequency);
   sweepCharts.amp.data.datasets[SWEEP_DS.TRACE].data.push(e.amplitude);
   sweepCharts.phase.data.labels.push(e.frequency);
-  sweepCharts.phase.data.datasets[SWEEP_DS.TRACE].data.push(e.phase);
+  sweepCharts.phase.data.datasets[SWEEP_DS.TRACE].data.push(unwrapped);
+  sweepCharts.phase.data.datasets[SWEEP_DS.RAW].data.push(e.phase);
   _dirtyCharts.add(sweepCharts.amp);
   _dirtyCharts.add(sweepCharts.phase);
 
@@ -1179,7 +1335,7 @@ function onSweepPoint(e) {
   const pct = _sweepTotal > 0 ? Math.round(100 * n / _sweepTotal) : 0;
   setText('val-sweep-n', n);
   document.getElementById('meta-sweep-amp').textContent   = fmt(e.amplitude, 4);
-  document.getElementById('meta-sweep-phase').textContent = fmt(e.phase, 4);
+  document.getElementById('meta-sweep-phase').textContent = fmt(unwrapped, 4);
   document.getElementById('val-sweep-status').textContent = `${pct}%`;
 
   updateSweepLockPoints();
@@ -1199,8 +1355,8 @@ function wrapPi(x) { return ((x + Math.PI) % TWO_PI + TWO_PI) % TWO_PI - Math.PI
 // and non-inverted feedback flips it to +π/2. Read from the oscillator the
 // Analysis tab is sweeping, so the markers match how that channel actually locks.
 function lockPhaseTarget() {
-  const osc = document.getElementById('sweep-osc')?.value === '2' ? 2 : 1;
-  const inv = document.getElementById(`s-osc${osc}-inv`)?.value !== '0';
+  const osc = fieldValue('sweep-osc') === '2' ? 2 : 1;
+  const inv = fieldValue(`s-osc${osc}-inv`) !== '0';
   return inv ? -Math.PI / 2 : Math.PI / 2;
 }
 
@@ -1270,19 +1426,26 @@ function findLockPoints(freqs, phases, amps, target) {
 let _sweepLockPoints = [];
 
 function updateSweepLockPoints() {
-  const freqs  = sweepCharts.phase.data.labels;
-  const phases = sweepCharts.phase.data.datasets[SWEEP_DS.TRACE].data;
-  const amps   = sweepCharts.amp.data.datasets[SWEEP_DS.TRACE].data;
+  const freqs     = sweepCharts.phase.data.labels;
+  // Found on the phase as measured: the search is wrap-safe by itself, and the
+  // ±π reading is the one the loop's lock point is defined on.
+  const phases    = sweepCharts.phase.data.datasets[SWEEP_DS.RAW].data;
+  const unwrapped = sweepCharts.phase.data.datasets[SWEEP_DS.TRACE].data;
+  const amps      = sweepCharts.amp.data.datasets[SWEEP_DS.TRACE].data;
   const target = lockPhaseTarget();
   const pts = findLockPoints(freqs, phases, amps, target);
   _sweepLockPoints = pts;
 
   // Markers snap to the nearer of the two bracketing samples; the reported
-  // frequency stays interpolated, which is where the precision matters.
+  // frequency stays interpolated, which is where the precision matters. On the
+  // phase chart a marker sits on the unwrapped trace, at the lock point shifted
+  // by the whole turns unwrapping has added there.
   const phaseMarks = new Array(freqs.length).fill(null);
   const ampMarks   = new Array(freqs.length).fill(null);
   pts.forEach(p => {
-    phaseMarks[p.index] = target;
+    const u = unwrapped[p.index];
+    phaseMarks[p.index] = (u == null || !isFinite(u)) ? target
+                        : target + TWO_PI * Math.round((u - target) / TWO_PI);
     const a = amps[p.index];
     ampMarks[p.index] = (a == null || !isFinite(a)) ? null : a;
   });
@@ -1292,7 +1455,7 @@ function updateSweepLockPoints() {
 
   // Tiles list the strongest first. Crossings with no amplitude reading sort last
   // rather than to the top, which is where a null would land in a naive compare.
-  const ranked = pts.slice().sort((x, y) => (y.amp ?? -Infinity) - (x.amp ?? -Infinity));
+  const ranked = pts.slice().sort((x, y) => ifNull(y.amp, -Infinity) - ifNull(x.amp, -Infinity));
   setText('val-sweep-lock-n', freqs.length ? String(pts.length) : '—');
   setText('val-sweep-lock1',  ranked[0] ? fmt(ranked[0].freq, 0) : '—');
   setText('val-sweep-lock2',  ranked[1] ? fmt(ranked[1].freq, 0) : '—');
@@ -1320,7 +1483,8 @@ async function downloadSweepCsv() {
   if (!name) {
     try {
       const d = await fetch(`${API_URL}/sweeps`).then(r => r.json());
-      name = d.current || (d.sweeps || []).find(s => s.size > 0)?.name;
+      const recorded = (d.sweeps || []).find(s => s.size > 0);
+      name = d.current || (recorded && recorded.name);
     } catch(e) { /* fall through to the error toast */ }
   }
   if (!name) { showToast('No recorded sweep to download', true); return; }
@@ -1336,6 +1500,7 @@ function clearSweep() {
     c.data.labels = []; c.data.datasets.forEach(d => d.data = []); c.update('none');
   });
   _sweepLockPoints = [];
+  _unwrapLast = null;
   ['val-sweep-n','val-sweep-lock-n','val-sweep-lock1',
    'val-sweep-lock2'].forEach(id => setText(id, '—'));
   document.getElementById('meta-sweep-amp').textContent   = '—';
@@ -1351,30 +1516,84 @@ let sampleCount = 0;
 // progressively unresponsive as the charts filled up.
 const CHART_REDRAW_MS = 100;
 const _dirtyCharts = new Set();
+// A chart on a hidden tab is skipped and stays dirty, so it draws within one tick
+// of its tab being shown. Most of the live charts are off-screen at any moment,
+// and updating them cost as much as drawing the visible ones — on a slow PC that
+// alone was enough to saturate the page.
+function chartOnVisibleTab(c) {
+  const panel = c.canvas.closest('.tab-panel');
+  return !panel || panel.classList.contains('active');
+}
 setInterval(() => {
   if (document.hidden) return;  // skip repaints in background tabs; data still accumulates
-  for (const c of _dirtyCharts) c.update('none');
-  _dirtyCharts.clear();
+  for (const c of _dirtyCharts) {
+    if (!chartOnVisibleTab(c)) continue;
+    c.update('none');
+    _dirtyCharts.delete(c);
+  }
 }, CHART_REDRAW_MS);
 
 function push(chart, value, dsIdx = 0, max = MAX_PTS_MAIN, label = '') {
   if (!chart) return;
-  chart._maxPts = max;
   const d = chart.data;
   if (dsIdx === 0) d.labels.push(label);
   d.datasets[dsIdx].data.push(value);
-  if (!chart._zoomGroupState?.zoomed) {
-    if (d.labels.length > max) { d.labels.shift(); d.datasets.forEach(ds => { if (ds.data.length > max) ds.data.shift(); }); }
-    _dirtyCharts.add(chart);
-  }
+  trimToWindow(chart, max);
+}
+
+// Drop a chart's oldest points beyond `max`, however many there are. Dropping
+// just one per new point, as push() used to, left a lowered window with no
+// effect: the chart stayed at its old length for good. A zoomed chart is frozen
+// and keeps everything; it is trimmed when the zoom is reset.
+function trimToWindow(chart, max) {
+  if (!chart) return;
+  chart._maxPts = max;
+  if (chart._zoomGroupState && chart._zoomGroupState.zoomed) return;
+  const d = chart.data;
+  if (d.labels.length > max) d.labels.splice(0, d.labels.length - max);
+  d.datasets.forEach(ds => { if (ds.data.length > max) ds.data.splice(0, ds.data.length - max); });
+  _dirtyCharts.add(chart);
+}
+
+// A changed WINDOW field applies at once, rather than with the next point (which
+// on Main only comes during a run).
+function applyChartWindows() {
+  [charts.mainComp, charts.mainUncomp, charts.mainRate, charts.mainRateUncomp]
+    .forEach(c => trimToWindow(c, MAX_PTS_MAIN));
+  [charts.fM, charts.fT, charts.compA, charts.tempA, charts.lpf1, charts.lpf2,
+   charts.calFmLive, charts.calFtLive].forEach(c => trimToWindow(c, MAX_PTS_MONITOR));
+  Object.values(tempCharts).forEach(c => trimToWindow(c, MAX_PTS_TEMPS));
+}
+
+// ---- Measurement mode / parked oscillators ----
+// Uncompensated runs lock the mass mode alone; GET LOCK then parks the temp
+// oscillator, as it parks either one whose lock frequency is 0 Hz. Which ones
+// the instrument actually has parked comes from LockStatusEvent; _measMode is
+// the mode as last loaded or applied (not an unapplied edit in the form).
+let _measMode = 'compensated';
+const _parked = { mass: false, temp: false };
+
+// Thickness tiles and chart titles say which thickness they are showing: in an
+// uncompensated run calculated_thickness is the uncompensated one. Each label
+// carries its uncompensated text in data-uncomp and keeps its own in data-comp.
+let _compView = true;
+function setCompensatedView(compensated) {
+  if (compensated === _compView) return;
+  _compView = compensated;
+  document.querySelectorAll('.comp-label').forEach(el => {
+    if (el.dataset.comp == null) el.dataset.comp = el.textContent;
+    el.textContent = compensated ? el.dataset.comp : el.dataset.uncomp;
+  });
 }
 
 function setLock(mode, locked) {
   const dot   = document.getElementById(`lock-dot-${mode}`);
   const label = document.getElementById(`lock-label-${mode}`);
   if (!dot) return;
-  dot.className   = 'ws-dot ' + (locked ? 'connected' : 'error');
-  label.textContent = (mode === 'mass' ? 'MASS' : 'TEMP') + (locked ? ' LOCKED' : ' UNLOCKED');
+  // A parked oscillator is grey rather than red: not locked, but not meant to be.
+  const parked = _parked[mode];
+  dot.className   = 'ws-dot ' + (parked ? '' : (locked ? 'connected' : 'error'));
+  label.textContent = (mode === 'mass' ? 'MASS' : 'TEMP') + (parked ? ' PARKED' : (locked ? ' LOCKED' : ' UNLOCKED'));
   if (mode === 'mass') lockMass = locked;
   if (mode === 'temp') lockTemp = locked;
   updateCalLockStatus();
@@ -1410,14 +1629,18 @@ function fmtHz(hz) {
 function setMeta(id, v, u) { const el = document.getElementById(id); if (el) el.textContent = v != null ? `${fmt(v,4)} ${u}` : '—'; }
 function setText(id, v) { const el = document.getElementById(id); if (el) el.textContent = v; }
 
-// Crystal usage = current Fm / virgin Fm × 100. Virgin Freq field is the reference;
-// when it's 0 ("use run start") fall back to the first Fm seen this run.
+// Crystal usage = how far the mass mode has dropped from the virgin frequency,
+// (virgin − current) / virgin × 100: 0 % on a fresh crystal, rising as film builds
+// up. Virgin Freq field is the reference; when it's 0 ("use run start") fall back
+// to the first Fm seen this run. Clamped at 0, since temperature alone can lift a
+// fresh crystal a little above its virgin frequency. Only fed locked readings:
+// an unlocked or parked (0 Hz) mass mode is not a resonance.
 function updateCrystalUsage(currentFm) {
   const el = document.getElementById('s-crystal-usage');
   if (!el || currentFm == null) return;
-  const virginInput = parseFloat(document.getElementById('s-crystal-freq-virgin')?.value);
+  const virginInput = parseFloat(fieldValue('s-crystal-freq-virgin'));
   const virgin = (virginInput > 0) ? virginInput : _runStartFm;
-  el.textContent = virgin ? (currentFm / virgin * 100).toFixed(2) : '—';
+  el.textContent = virgin ? Math.max(0, (virgin - currentFm) / virgin * 100).toFixed(2) : '—';
 }
 
 // Lock quality = phase-error σ, shown in mrad because a good lock lives in the
@@ -1427,7 +1650,7 @@ function setLockQuality(mode, sigma) {
   const el = document.getElementById(`val-q-${mode}`);
   if (!el) return;
   if (sigma == null || !isFinite(sigma)) { el.textContent = '—'; el.style.color = ''; return; }
-  const limit = parseFloat(document.getElementById('s-lock-std')?.value) || 0.05;
+  const limit = parseFloat(fieldValue('s-lock-std')) || 0.05;
   el.textContent = (sigma * 1000).toFixed(1);
   el.style.color = sigma < limit * 0.5 ? 'var(--green)'
                  : sigma < limit       ? 'var(--orange)'
@@ -1451,14 +1674,12 @@ function setTempHeld(held) {
 // in progress — the only difference is that the compensated values are absent
 // outside a run, and those are handled by onMeasurement alone.
 function applyTelemetry(e, ts) {
+  noteCrystalTemp(e.crystal_temp);
   setText('val-fM', fmt(e.freq_mass_mode, 2));
   setText('val-fT', fmt(e.freq_temp_mode, 2));
-  updateCrystalUsage(e.freq_mass_mode);
+  if (e.lock_mass) updateCrystalUsage(e.freq_mass_mode);
 
-  // Calibration tab: remember the latest live frequencies for ADD POINT, and
-  // mirror them into the calibrate stat bar + live charts.
-  if (e.freq_mass_mode != null) _lastFm = e.freq_mass_mode;
-  if (e.freq_temp_mode != null) _lastFt = e.freq_temp_mode;
+  // Calibration tab: mirror them into the calibrate stat bar + live charts.
   setText('val-cal-fM', fmt(e.freq_mass_mode, 2));
   setText('val-cal-fT', fmt(e.freq_temp_mode, 2));
   setMeta('meta-cal-fM-live', e.freq_mass_mode, 'Hz');
@@ -1493,6 +1714,7 @@ function onMeasurement(e) {
   const ts = e.timestamp ? new Date(e.timestamp * 1000).toLocaleTimeString() : '';
 
   applyTelemetry(e, ts);
+  setCompensatedView(e.compensated !== false);
 
   // Virgin-frequency fallback: the first Fm of the *run*, so this is set here
   // and not in applyTelemetry — idle telemetry must not claim the reference.
@@ -1502,18 +1724,25 @@ function onMeasurement(e) {
   setText('val-T',       fmt(e.calculated_temp, 3));
   setTempHeld(!!e.temp_held);
   setText('val-uncomp',  fmt(e.uncompensated_thickness, 4));
+  // Rates are null while the rate window fills at the start of a run.
+  setText('val-rate',        fmt(e.calculated_rate, 4));
+  setText('val-rate-uncomp', fmt(e.uncompensated_rate, 4));
   setText('val-comp-fM', fmt(e.compensated_freq, 2));
   setText('val-comp-a',  fmt(e.calculated_thickness, 4));
   setText('val-uncomp-a',fmt(e.uncompensated_thickness, 4));
   setText('val-T-a',     fmt(e.calculated_temp, 6));
 
-  push(charts.mainComp, e.calculated_thickness,  0, MAX_PTS_MAIN,    ts);
-  push(charts.mainTemp, e.calculated_temp,       0, MAX_PTS_MAIN,    ts);
+  push(charts.mainComp,       e.calculated_thickness,    0, MAX_PTS_MAIN,    ts);
+  push(charts.mainUncomp,     e.uncompensated_thickness, 0, MAX_PTS_MAIN,    ts);
+  push(charts.mainRate,       ifNull(e.calculated_rate, null),    0, MAX_PTS_MAIN, ts);
+  push(charts.mainRateUncomp, ifNull(e.uncompensated_rate, null), 0, MAX_PTS_MAIN, ts);
   push(charts.compA,    e.calculated_thickness,  0, MAX_PTS_MONITOR, ts);
   push(charts.tempA,    e.calculated_temp,       0, MAX_PTS_MONITOR, ts);
 
-  setMeta('meta-comp',   e.calculated_thickness,  'nm');
-  setMeta('meta-temp',   e.calculated_temp,  '°C');
+  setMeta('meta-comp',        e.calculated_thickness,    'nm');
+  setMeta('meta-uncomp',      e.uncompensated_thickness, 'nm');
+  setMeta('meta-rate',        e.calculated_rate,         'nm/s');
+  setMeta('meta-rate-uncomp', e.uncompensated_rate,      'nm/s');
   setMeta('meta-comp-a', e.calculated_thickness,  'nm');
   setMeta('meta-temp-a', e.calculated_temp,  '°C');
 
@@ -1531,6 +1760,119 @@ function onMeasurement(e) {
 function clearCharts() {
   sampleCount = 0; setText('val-n','0'); setText('footer-left','n = 0');
   Object.values(charts).forEach(c => { if (!c) return; c.data.labels=[]; c.data.datasets.forEach(d=>d.data=[]); c.update('none'); });
+}
+
+// ---- Temperature sensors (LTC2986) — the temporary TEMP SENSORS tab ----
+// Kept out of `charts` so CLEAR on Main/Monitor leaves them alone. Keyed by the
+// backend's sensor keys (domain/temperature_sensors.py); the element ids follow.
+// zynq_die is not an LTC2986 sensor: it comes in the event's zynq_die_c field.
+// Their window is MAX_PTS_TEMPS, set from the tab's WINDOW field.
+const tempCharts = {
+  pt100:         makeChart('chart-temp-pt100',         '#f5a623'),
+  thermocouple:  makeChart('chart-temp-thermocouple',  '#e05c5c'),
+  cold_junction: makeChart('chart-temp-cold_junction', '#4a9eff'),
+  zynq_die:      makeChart('chart-temp-zynq_die',      '#a78bfa'),
+};
+setupZoomGroup(Object.values(tempCharts));  // double-click resets the zoom, as on the other tabs
+
+function onTemperature(ev) {
+  const pill = document.getElementById('temps-status');
+  pill.className = 'status-pill ' + (ev.available ? 'running' : 'error');
+  pill.textContent = ev.available ? 'READING' : 'UNAVAILABLE';
+  setText('temps-error', ev.available ? '' : (ev.error || ''));
+  const ts = ev.timestamp ? new Date(ev.timestamp * 1000).toLocaleTimeString() : '';
+  // The die sensor is reported whether or not the LTC2986 is there.
+  const die = ifNull(ev.zynq_die_c, null);
+  setText('val-temp-zynq_die', fmt(die, 2));
+  setText('unit-temp-zynq_die', die == null ? 'unavailable' : '°C');
+  setMeta('meta-temp-zynq_die', die, '°C');
+  push(tempCharts.zynq_die, die, 0, MAX_PTS_TEMPS, ts);
+  if (!ev.available) {
+    // Blank the tiles rather than leave the last readings looking live, and
+    // break the lines so the outage shows on the charts.
+    document.getElementById('temps-tab-dot').style.background = 'var(--red)';
+    _lastTemps = {};
+    updateCalTemp(ev.error);
+    updateTStartLive(ev.error);
+    for (const key of Object.keys(tempCharts)) {
+      if (key === 'zynq_die') continue;
+      setText('val-temp-' + key, '—');
+      setText('meta-temp-' + key, '—');
+      setText('unit-temp-' + key, '°C');
+      document.getElementById('unit-temp-' + key).style.color = '';
+      if (tempCharts[key] && tempCharts[key].data.labels.length) push(tempCharts[key], null, 0, MAX_PTS_TEMPS, ts);
+    }
+    return;
+  }
+  let anyFault = false;
+  for (const s of ev.sensors) {
+    if (!(s.key in tempCharts)) continue;
+    const faults = s.faults || [];
+    anyFault = anyFault || faults.length > 0;
+    _lastTemps[s.key] = { temperature: s.temperature, faults, at: Date.now() };
+    document.querySelectorAll(`#cal-temp-source option[value="${s.key}"], #s-tstart-source option[value="${s.key}"]`)
+      .forEach(opt => { opt.textContent = s.name; });
+    setText('label-temp-' + s.key, `${s.name} · CH${s.channel}`);
+    setText('title-temp-' + s.key, s.name);
+    setText('val-temp-' + s.key, fmt(s.temperature, 2));
+    const unit = document.getElementById('unit-temp-' + s.key);
+    unit.textContent = faults.length ? '°C · ' + faults.join(', ') : '°C';
+    unit.style.color = faults.length ? 'var(--red)' : '';
+    setMeta('meta-temp-' + s.key, s.temperature, '°C');
+    push(tempCharts[s.key], s.temperature, 0, MAX_PTS_TEMPS, ts);
+  }
+  document.getElementById('temps-tab-dot').style.background = anyFault ? 'var(--orange)' : 'var(--green)';
+  updateCalTemp();
+  updateTStartLive();
+}
+
+// The crystal's own absolute temperature, which the server puts on every
+// telemetry sample (crystal_temp: null unless both modes are locked).
+let _crystalTemp = null, _crystalLiveShown = 0;
+
+function noteCrystalTemp(t) {
+  if (t != null) _crystalTemp = { temperature: t, at: Date.now() };
+  // Samples arrive several times a second; the label only needs about one.
+  if (fieldValue('s-tstart-source') === 'crystal' && Date.now() - _crystalLiveShown > 1000) {
+    _crystalLiveShown = Date.now();
+    updateTStartLive();
+  }
+}
+
+// The T start source's current reading in °C, or null without a fresh one.
+// The worker allows a reading up to 5 s old (TEMPERATURE_MAX_AGE); so does this.
+function tStartReading(key) {
+  const r = key === 'crystal' ? _crystalTemp : _lastTemps[key];
+  return r && r.temperature != null && Date.now() - r.at <= 5000 ? r.temperature : null;
+}
+
+// Show beside the T Start Source what the selected source reads now, so it is
+// clear what a run started this moment would begin from. For the crystal the
+// PT100 goes alongside: the two disagreeing by more than a few tenths says the
+// profile's constants (fM_0, fT_0) do not belong to this crystal.
+function updateTStartLive(unavailableReason) {
+  const el = document.getElementById('s-tstart-live');
+  if (!el) return;
+  const key = fieldValue('s-tstart-source');
+  if (!key || key === 'manual') { el.textContent = ''; el.title = ''; return; }
+  const t = tStartReading(key);
+  let text = t != null ? `now ${t.toFixed(2)} °C` : 'no reading';
+  let why;
+  if (key === 'crystal') {
+    const pt = tStartReading('pt100');
+    if (t != null && pt != null) text += ` · PT100 ${pt.toFixed(2)}`;
+    why = 'both modes have to be locked, with frequencies the active crystal\'s calibration covers';
+  } else {
+    const r = _lastTemps[key];
+    why = r && r.faults.length ? r.faults.join(', ') : (unavailableReason || 'no current reading');
+  }
+  el.textContent = text;
+  el.style.color = t != null ? 'var(--text-dim)' : 'var(--red)';
+  el.title = t != null ? '' : why + ' — a run started now would use Ambient Temperature';
+}
+
+function clearTempCharts() {
+  Object.values(tempCharts).forEach(c => { if (!c) return; c.data.labels=[]; c.data.datasets.forEach(d=>d.data=[]); c.update('none'); });
 }
 
 // ---- WebSocket ----
@@ -1585,6 +1927,9 @@ function connect() {
       if (ev.type === 'SweepCompleteEvent') onSweepComplete(ev);
       if (ev.type === 'CapAdjustEvent')     onCapAdjust(ev);
       if (ev.type === 'OpcStatusEvent')     onOpcStatus(ev);
+      if (ev.type === 'TemperatureEvent')   onTemperature(ev);
+      if (ev.type === 'CalibrationPointsEvent') onCalibrationPoints(ev);
+      if (ev.type === 'CalibrationStatusEvent') onCalibrationStatus(ev.status);
       if (ev.type === 'LockFailedEvent')    document.getElementById('modal-lock-failed').style.display = 'flex';
       if (ev.type === 'LockStatusEvent')    onLockStatus(ev);
       if (ev.type === 'StartFreqAutoUpdatedEvent') onStartFreqAutoUpdated(ev);
@@ -1612,7 +1957,7 @@ function showToast(msg, isError = false, isWarning = false) {
 // Preferences are per-browser (two operators on two laptops want their own), so
 // they persist to localStorage rather than to the instrument's settings.json.
 const NOTIF_STORE_KEY = 'qcm.notifications';
-const notifConfig = { enabled: false, sound: true, lockLost: true, sweepComplete: true, opcLost: true, wsLost: true, recFailed: true, storageReclaim: true, targetReached: true };
+const notifConfig = { enabled: false, sound: true, lockLost: true, sweepComplete: true, opcLost: true, wsLost: true, recFailed: true, storageReclaim: true, targetReached: true, calPoint: true };
 let _audioCtx = null;
 
 function setNotifOption(key, value) {
@@ -1639,7 +1984,7 @@ function loadNotifConfig() {
         lockLost: 'notif-lockLost', sweepComplete: 'notif-sweepComplete',
         targetReached: 'notif-targetReached', opcLost: 'notif-opcLost',
         wsLost: 'notif-wsLost', recFailed: 'notif-recFailed',
-        storageReclaim: 'notif-storageReclaim' })) {
+        storageReclaim: 'notif-storageReclaim', calPoint: 'notif-calPoint' })) {
     const el = document.getElementById(id);
     if (el) el.checked = notifConfig[k];
   }
@@ -1704,6 +2049,11 @@ function playNotifSound(eventType) {
       playBeep(660, 0.16);
       playBeep(880, 0.16, 0.25, 0.18);
       playBeep(1180, 0.3, 0.25, 0.36);
+      break;
+    case 'calPoint':
+      // Doorbell: the operator's turn at the Peltier, not a fault.
+      playBeep(880, 0.2);
+      playBeep(660, 0.35, 0.25, 0.24);
       break;
   }
 }
@@ -1950,7 +2300,7 @@ function stopFromTarget() {
 function updateTargetStatus() {
   const el = document.getElementById('s-target-status');
   if (!el) return;
-  const target = parseFloat(document.getElementById('s-target-thickness')?.value);
+  const target = parseFloat(fieldValue('s-target-thickness'));
   if (!(target > 0)) {
     el.textContent = 'NO TARGET';
     el.style.color = 'var(--text-dim)';
@@ -2064,14 +2414,14 @@ async function loadCrystalForm(name) {
   try {
     const p = await fetch(`${API_URL}/crystals/${name}`).then(r => r.json());
     document.getElementById('s-crystal-name').value         = p.name || '';
-    document.getElementById('s-crystal-freq-mass').value    = p.freq_mass ?? '';
-    document.getElementById('s-crystal-freq-temp').value    = p.freq_temp ?? '';
-    document.getElementById('s-crystal-hours').textContent  = (p.hours_active ?? 0).toFixed(2);
-    document.getElementById('s-crystal-deposited').textContent = (p.total_deposited ?? 0).toFixed(2);
-    document.getElementById('s-crystal-mass-sens').value = p.mass_sensitivity ?? -13.3e-8;
-    document.getElementById('s-crystal-sens-area').value = p.sens_area ?? 5.25e-5;
-    document.getElementById('s-crystal-tooling').value = p.tooling_ratio ?? 1;
-    document.getElementById('s-crystal-freq-virgin').value = p.freq_virgin ?? 6000000;
+    document.getElementById('s-crystal-freq-mass').value    = ifNull(p.freq_mass, '');
+    document.getElementById('s-crystal-freq-temp').value    = ifNull(p.freq_temp, '');
+    document.getElementById('s-crystal-hours').textContent  = ifNull(p.hours_active, 0).toFixed(2);
+    document.getElementById('s-crystal-deposited').textContent = ifNull(p.total_deposited, 0).toFixed(2);
+    document.getElementById('s-crystal-mass-sens').value = ifNull(p.mass_sensitivity, -13.3e-8);
+    document.getElementById('s-crystal-sens-area').value = ifNull(p.sens_area, 5.25e-5);
+    document.getElementById('s-crystal-tooling').value = ifNull(p.tooling_ratio, 1);
+    document.getElementById('s-crystal-freq-virgin').value = ifNull(p.freq_virgin, 6000000);
     const coeffMap = { fM0:'fM_0', fM1:'fM_1', fM2:'fM_2', fM3:'fM_3',
                        fT0:'fT_0', fT1:'fT_1', fT2:'fT_2', fT3:'fT_3' };
     for (const [id, key] of Object.entries(coeffMap)) {
@@ -2097,7 +2447,7 @@ async function refreshCrystalList(select = null) {
     const names = d.crystals || [];
     _activeCrystal = d.active || null;
     // Names are sanitized server-side (alphanumerics, - and _ only).
-    const chosen = select ?? (sel.value || _activeCrystal || names[0] || '');
+    const chosen = ifNull(select, sel.value || _activeCrystal || names[0] || '');
     sel.innerHTML = names.length
       ? names.map(n => `<option value="${n}"${n === chosen ? ' selected' : ''}>${n === _activeCrystal ? '● ' : ''}${n}</option>`).join('')
       : '<option value="">— no profiles —</option>';
@@ -2159,7 +2509,7 @@ const INFO_FOLD_CHARS = 90;
 function initSettingsInfo() {
   for (const desc of document.querySelectorAll('.settings-row-desc')) {
     const row = desc.closest('.settings-row');
-    const label = row?.querySelector('.settings-row-label');
+    const label = row && row.querySelector('.settings-row-label');
     if (!row || !label) continue;   // e.g. the standalone note above the OPC node list
     if (desc.textContent.trim().length < INFO_FOLD_CHARS) continue;
     desc.hidden = true;
@@ -2184,10 +2534,10 @@ async function loadInitialSettings() {
   try {
     s = await fetch(`${API_URL}/settings`).then(r => r.json());
     for (const osc of [1, 2]) {
-      const os = s.oscillators?.[osc];
+      const os = s.oscillators && s.oscillators[osc];
       if (!os) continue;
-      document.getElementById(`s-osc${osc}-int`).value = os.int_gain ?? '';
-      document.getElementById(`s-osc${osc}-lpf`).value  = os.lpf_freq  ?? '';
+      document.getElementById(`s-osc${osc}-int`).value = ifNull(os.int_gain, '');
+      document.getElementById(`s-osc${osc}-lpf`).value  = ifNull(os.lpf_freq, '');
       document.getElementById(`s-osc${osc}-inv`).value = os.inverted ? '1' : '0';
       document.getElementById(`s-osc${osc}-agc`).value = os.agc_enabled ? '1' : '0';
       if (os.manual_gain != null) document.getElementById(`s-osc${osc}-gain`).value = os.manual_gain;
@@ -2195,13 +2545,32 @@ async function loadInitialSettings() {
     }
     if (s.output_mode != null) document.getElementById('s-output-mode').value = s.output_mode;
     if (s.measurement) {
+      if (s.measurement.mode) {
+        _measMode = s.measurement.mode;
+        document.getElementById('s-meas-mode').value = _measMode;
+        // Outside a run the labels follow the setting; in one, the samples say.
+        if (!_isRunning) setCompensatedView(_measMode !== 'uncompensated');
+      }
       if (s.measurement.ambient_temp != null) document.getElementById('s-amb-temp').value   = s.measurement.ambient_temp;
+      if (s.measurement.t_start_source) {
+        document.getElementById('s-tstart-source').value = s.measurement.t_start_source;
+        updateTStartLive();
+      }
       if (s.measurement.mat_dens != null)     document.getElementById('s-mat-dens').value   = s.measurement.mat_dens;
       if (s.measurement.z_ratio != null)      document.getElementById('s-mat-zratio').value = s.measurement.z_ratio;
       if (s.measurement.target_thickness != null) document.getElementById('s-target-thickness').value = s.measurement.target_thickness;
+      if (s.measurement.rate_window != null)      document.getElementById('s-rate-window').value = s.measurement.rate_window;
+    }
+    if (s.acquisition) {
+      if (s.acquisition.sample_rate != null) {
+        document.getElementById('s-sample-rate').value = s.acquisition.sample_rate;
+        _sampleRateSet = s.acquisition.sample_rate;
+      }
+      if (s.acquisition.publish_rate != null) document.getElementById('s-publish-rate').value = s.acquisition.publish_rate;
+      if (s.acquisition.log_rate != null)     document.getElementById('s-log-rate').value     = s.acquisition.log_rate;
     }
     // Lock-failed hint tracks the PLL capture window rather than a fixed number.
-    if (s.pll?.capture_range != null) {
+    if (s.pll && s.pll.capture_range != null) {
       const el = document.getElementById('lock-capture-range');
       if (el) el.textContent = fmtHz(s.pll.capture_range);
     }
@@ -2234,7 +2603,7 @@ async function loadInitialSettings() {
       if (lf.mass != null) document.getElementById('s-crystal-freq-mass').value = lf.mass;
       if (lf.temp != null) document.getElementById('s-crystal-freq-temp').value = lf.temp;
     }
-    const c = s.coefficients ?? {};
+    const c = s.coefficients || {};
     const coeffMap = { fM0:'fM_0', fM1:'fM_1', fM2:'fM_2', fM3:'fM_3',
                        fT0:'fT_0', fT1:'fT_1', fT2:'fT_2', fT3:'fT_3' };
     for (const [id, key] of Object.entries(coeffMap)) {
@@ -2245,6 +2614,9 @@ async function loadInitialSettings() {
 
   try {
     const opc = await fetch(`${API_URL}/opc/settings`).then(r => r.json());
+    const opcSel = document.getElementById('s-opc-enabled');
+    if (opcSel && opc.enabled != null) opcSel.value = opc.enabled ? '1' : '0';
+    if (opcSel && opc.available === false) opcSel.disabled = true;   // --no-opcua
     if (opc.url)       document.getElementById('s-opc-url').value  = opc.url;
     if (opc.user)      document.getElementById('s-opc-user').value = opc.user;
     if (opc.base_node) document.getElementById('s-opc-base').value = opc.base_node;
@@ -2260,7 +2632,7 @@ async function loadInitialSettings() {
   try {
     const t = await fetch(`${API_URL}/measurement/target`).then(r => r.json());
     _targetReached = !!t.reached;
-    _targetInfo = { thickness: t.thickness_at_target ?? 0, target: t.target_thickness ?? 0 };
+    _targetInfo = { thickness: ifNull(t.thickness_at_target, 0), target: ifNull(t.target_thickness, 0) };
     document.getElementById('target-pill').style.display = _targetReached ? 'flex' : 'none';
   } catch(e) { /* older backend without the target endpoint */ }
   updateTargetStatus();
@@ -2281,7 +2653,11 @@ async function connectOpc() {
     // used to wipe the saved password whenever only the URL or user was edited.
     if (password) params.set('password', password);
     const r = await fetch(`${API_URL}/opc/connect?${params}`, { method: 'POST' });
-    if (r.ok) { showToast('Reconnecting…'); loadOpcNodes(); }
+    if (r.ok) {
+      const d = await r.json();
+      showToast(d.enabled === false ? 'Saved — switch the bridge on to connect' : 'Reconnecting…');
+      loadOpcNodes();
+    }
     else showToast('Connect failed', true);
   } catch(e) { showToast('Connect failed', true); }
 }
@@ -2453,11 +2829,16 @@ function toggleStartStop() {
   if (btn && btn.classList.contains('btn-red')) {
     sendCommand('stop');
   } else {
-    if (!lockMass || !lockTemp) {
-      document.getElementById('confirm-mass-status').textContent = lockMass ? '✓ LOCKED' : '✗ UNLOCKED';
-      document.getElementById('confirm-temp-status').textContent = lockTemp ? '✓ LOCKED' : '✗ UNLOCKED';
+    // An uncompensated run needs the mass mode alone.
+    const needTemp = _measMode !== 'uncompensated';
+    if (!lockMass || (needTemp && !lockTemp)) {
+      const status = (locked, parked) => locked ? '✓ LOCKED' : (parked ? '✗ PARKED' : '✗ UNLOCKED');
+      document.getElementById('confirm-mass-status').textContent = status(lockMass, _parked.mass);
+      document.getElementById('confirm-temp-status').textContent = needTemp
+        ? status(lockTemp, _parked.temp) : '— not used (uncompensated)';
       document.getElementById('confirm-mass-status').style.color = lockMass ? 'var(--green)' : 'var(--red)';
-      document.getElementById('confirm-temp-status').style.color = lockTemp ? 'var(--green)' : 'var(--red)';
+      document.getElementById('confirm-temp-status').style.color = !needTemp ? 'var(--text-dim)'
+        : (lockTemp ? 'var(--green)' : 'var(--red)');
       document.getElementById('modal-confirm-start').style.display = 'flex';
     } else {
       sendCommand('start');
@@ -2473,11 +2854,27 @@ function doStartAnyway() {
 // Throttled heartbeat: keeps the dots and the quality tiles honest while the
 // worker is between telemetry pushes (e.g. mid-sweep, or during cap adjust).
 function onLockStatus(ev) {
+  _parked.mass = !!ev.parked_mass;
+  _parked.temp = !!ev.parked_temp;
   setLock('mass', ev.lock_mass);
   setLock('temp', ev.lock_temp);
   setLockQuality('mass', ev.quality_mass);
   setLockQuality('temp', ev.quality_temp);
   checkLockLost(ev.lock_mass, ev.lock_temp);
+  showSampleRate(ev.sample_rate);
+}
+
+// Sample rate set (as last loaded or applied) and achieved (from the lock
+// status heartbeat, once a second). Orange when the instrument falls more than
+// 10 % short — a cycle then takes longer than the sample period.
+let _sampleRateSet = null;
+function showSampleRate(achieved) {
+  const el = document.getElementById('footer-rate');
+  if (!el) return;
+  if (achieved == null) { el.textContent = ''; return; }
+  const set = _sampleRateSet;
+  el.textContent = `sampling ${achieved.toFixed(1)} Hz` + (set != null ? ` of ${set}` : '');
+  el.style.color = (set != null && achieved < 0.9 * set) ? 'var(--orange)' : '';
 }
 
 function onStartFreqAutoUpdated(ev) {
@@ -2508,15 +2905,34 @@ function onStartFreqAutoUpdated(ev) {
 
 function onOpcStatus(ev) {
   const connected = ev.connected;
+  // Switched off (the default) is not a lost link: grey, and no alert. An event
+  // without the field comes from a server that predates the switch.
+  const enabled = ev.enabled !== false;
 
-  if (_prevOpcConnected === true && !connected) {
+  if (enabled && _prevOpcConnected === true && !connected) {
     sendNotif('QCM — OPC Disconnected', 'Connection to WAGO PLC lost', 'opcLost');
   }
-  _prevOpcConnected = connected;
+  _prevOpcConnected = enabled ? connected : null;
 
-  document.getElementById('opc-dot').className       = 'ws-dot ' + (connected ? 'connected' : 'error');
-  document.getElementById('opc-panel-dot').className = 'ws-dot ' + (connected ? 'connected' : 'error');
-  document.getElementById('opc-panel-label').textContent = connected ? 'CONNECTED' : 'DISCONNECTED';
+  const cls = 'ws-dot ' + (!enabled ? '' : (connected ? 'connected' : 'error'));
+  document.getElementById('opc-dot').className       = cls;
+  document.getElementById('opc-panel-dot').className = cls;
+  document.getElementById('opc-panel-label').textContent = !enabled ? 'DISABLED' : (connected ? 'CONNECTED' : 'DISCONNECTED');
+  const sel = document.getElementById('s-opc-enabled');
+  if (sel) sel.value = enabled ? '1' : '0';
+}
+
+// Takes effect at once, like CONNECT, rather than waiting for APPLY: it is a
+// link to another machine, not a setting of this one.
+async function setOpcEnabled(enabled) {
+  try {
+    await postOrThrow(`${API_URL}/opc/enabled?enabled=${enabled}`);
+    showToast(enabled ? 'OPC-UA bridge enabled — connecting…' : 'OPC-UA bridge disabled');
+  } catch(e) {
+    showToast(`Could not switch OPC-UA — ${e.message || e}`, true);
+    const sel = document.getElementById('s-opc-enabled');
+    if (sel) sel.value = enabled ? '0' : '1';
+  }
 }
 
 // ---- Commands ----
@@ -2525,11 +2941,18 @@ async function sendCommand(action) {
   if (action === 'start') {
     const t = parseFloat(document.getElementById('s-amb-temp').value);
     if (isNaN(t)) { showToast('Set a valid ambient temperature in Settings.', true); return; }
+    // T start from a thermometer is read by the Pitaya as the run starts; warn
+    // here when it is going to fall back to the typed-in value.
+    const src = fieldValue('s-tstart-source') || 'manual';
+    if (src !== 'manual' && tStartReading(src) == null) {
+      const opt = document.querySelector(`#s-tstart-source option[value="${src}"]`);
+      showToast(`${opt ? opt.textContent : src} has no current reading — the run starts from the typed-in ${t} °C`, false, true);
+    }
     _startRequested = true;  // marks this RUNNING transition as a fresh run (clears the buffer)
     // Film material parameters from the Measurement settings (per-run values)
-    const dens = parseFloat(document.getElementById('s-mat-dens')?.value);
-    const zr   = parseFloat(document.getElementById('s-mat-zratio')?.value);
-    url = `${API_URL}/measurement/start?ambient_temp=${t}`
+    const dens = parseFloat(fieldValue('s-mat-dens'));
+    const zr   = parseFloat(fieldValue('s-mat-zratio'));
+    url = `${API_URL}/measurement/start?ambient_temp=${t}&t_start_source=${encodeURIComponent(src)}`
         + (isNaN(dens) ? '' : `&mat_dens=${dens}`)
         + (isNaN(zr)   ? '' : `&z_ratio=${zr}`);
   } else if (action === 'stop') {
@@ -2665,7 +3088,8 @@ function goToCrystalSettings() {
   document.querySelectorAll('.tab-panel').forEach(p => p.classList.toggle('active', p.id === 'panel-settings'));
   document.querySelectorAll('.settings-nav-item').forEach(i => i.classList.remove('active'));
   document.querySelectorAll('.settings-panel').forEach(p => p.classList.toggle('active', p.id === 'spanel-crystals'));
-  document.querySelector('[onclick*="crystals"]')?.classList.add('active');
+  const crystalsNav = document.querySelector('[onclick*="crystals"]');
+  if (crystalsNav) crystalsNav.classList.add('active');
   initCoeffChartsIfNeeded();
 }
 
@@ -2699,16 +3123,40 @@ async function applyMeasurementParams() {
   const dens = parseFloat(document.getElementById('s-mat-dens').value);
   const zr   = parseFloat(document.getElementById('s-mat-zratio').value);
   if ([t, dens, zr].some(isNaN)) throw new Error('Ambient temp, density and Z-ratio must be numbers');
+  const rateWindow = parseFloat(document.getElementById('s-rate-window').value);
+  if (!(rateWindow >= 0.1 && rateWindow <= 300)) throw new Error('Rate window must be 0.1 to 300 s');
   const target = parseFloat(document.getElementById('s-target-thickness').value);
+  const src = fieldValue('s-tstart-source') || 'manual';
   await postOrThrow(`${API_URL}/settings/measurement_params?ambient_temp=${t}&mat_dens=${dens}&z_ratio=${zr}`
+            + `&t_start_source=${encodeURIComponent(src)}`
             + (isNaN(target) ? '' : `&target_thickness=${target}`));
   updateTargetStatus();
+  await postOrThrow(`${API_URL}/settings/rate_window?seconds=${rateWindow}`);
+  const mode = document.getElementById('s-meas-mode').value;
+  await postOrThrow(`${API_URL}/settings/measurement_mode?mode=${mode}`);
+  _measMode = mode;
+  if (!_isRunning) setCompensatedView(mode !== 'uncompensated');
 }
 
+async function applyAcquisition() {
+  const sample  = parseFloat(document.getElementById('s-sample-rate').value);
+  const publish = parseFloat(document.getElementById('s-publish-rate').value);
+  const log     = parseFloat(document.getElementById('s-log-rate').value);
+  if (!(sample >= 1 && sample <= 100))   throw new Error('Sample rate must be 1 to 100 Hz');
+  if (!(publish >= 1 && publish <= 25))  throw new Error('Display / PLC rate must be 1 to 25 Hz');
+  if (!(log >= 0 && log <= 100))         throw new Error('Log rate must be 0 (every sample) to 100 Hz');
+  await postOrThrow(`${API_URL}/settings/acquisition?sample_rate=${sample}&publish_rate=${publish}&log_rate=${log}`);
+  if (sample !== _sampleRateSet && _isRunning) _applyNote = 'Settings applied; the new sample rate takes effect when this run ends';
+  _sampleRateSet = sample;
+}
+
+let _applyNote = '';  // said in place of "Settings applied" when something waits
 async function applyAllSettings() {
+  _applyNote = '';
   await applyOscSettings(1);
   await applyOscSettings(2);
   await applyMeasurementParams();
+  await applyAcquisition();
   await applyOutputMode();
   await applyLockSettings();
   await applyStorageReclaim();
@@ -2731,7 +3179,8 @@ const CRYSTAL_SETTING_IDS = [
 // Every settings input that APPLY commits. OPC fields are excluded (they have
 // their own CONNECT action).
 const SETTING_IDS = [
-  's-mat-dens', 's-mat-zratio', 's-amb-temp', 's-target-thickness',
+  's-meas-mode', 's-mat-dens', 's-mat-zratio', 's-amb-temp', 's-tstart-source', 's-target-thickness',
+  's-rate-window', 's-sample-rate', 's-publish-rate', 's-log-rate',
   's-osc1-int', 's-osc1-lpf', 's-osc1-inv', 's-osc1-agc', 's-osc1-gain', 's-osc1-amp',
   's-osc2-int', 's-osc2-lpf', 's-osc2-inv', 's-osc2-agc', 's-osc2-gain', 's-osc2-amp',
   's-lock-phase', 's-lock-std', 's-auto-relock', 's-temp-hold',
@@ -2745,7 +3194,7 @@ let _baselineReady = false;
 function isDirty(ids) {
   return ids.some(id => {
     const el = document.getElementById(id);
-    return el && String(el.value) !== String(_baseline[id] ?? '');
+    return el && String(el.value) !== String(ifNull(_baseline[id], ''));
   });
 }
 
@@ -2784,7 +3233,7 @@ async function restoreDefaults() {
       'Restore the standard settings?\n\n'
     + 'Oscillator gains, LPF cutoffs, feedback inversion, drive gain control (back to '
     + 'manual at 1.0), output mode, lock detection, '
-    + 'auto re-lock, the film parameters and the target thickness go back to the values '
+    + 'auto re-lock, the measurement mode (compensated), the film parameters, the T start source (manual) and the target thickness go back to the values '
     + 'that ship with the software, immediately. Unapplied edits in this panel are discarded.\n\n'
     + 'The active crystal and the OPC connection describe this instrument, so they are '
     + 'left as they are.'
@@ -2801,7 +3250,7 @@ async function commitSettings() {
   try {
     await applyAllSettings();
     snapshotBaseline();
-    showToast('Settings applied');
+    showToast(_applyNote || 'Settings applied');
   } catch (e) {
     updateDirtyState();   // re-enable so the change can be retried
     // Name what failed: a silent "Apply failed" left no way to tell a rejected
@@ -2821,11 +3270,15 @@ function undoSettings() {
 }
 
 // Recompute dirtiness whenever any settings field is edited.
-document.querySelector('.settings-content')?.addEventListener('input', updateDirtyState);
-document.querySelector('.settings-content')?.addEventListener('change', updateDirtyState);
+const settingsContent = document.querySelector('.settings-content');
+if (settingsContent) {
+  settingsContent.addEventListener('input', updateDirtyState);
+  settingsContent.addEventListener('change', updateDirtyState);
+}
 // The target readout follows the field as it is typed, so "ARMED at 250 nm"
 // reflects what is in the box even before APPLY commits it.
-document.getElementById('s-target-thickness')?.addEventListener('input', updateTargetStatus);
+const targetThicknessInput = document.getElementById('s-target-thickness');
+if (targetThicknessInput) targetThicknessInput.addEventListener('input', updateTargetStatus);
 
 function toggleCrystalAdvanced(btn) {
   const adv = document.getElementById('crystal-advanced');
@@ -2872,7 +3325,7 @@ function initCoeffChartsIfNeeded() {
 
 function updateCoeffCharts() {
   if (!_coeffChartsInit) return;
-  const gv = id => parseFloat(document.getElementById(id)?.value) || 0;
+  const gv = id => parseFloat(fieldValue(id)) || 0;
   const fM3 = gv('s-coeff-fM3'), fM2 = gv('s-coeff-fM2'), fM1 = gv('s-coeff-fM1');
   const fT3 = gv('s-coeff-fT3'), fT2 = gv('s-coeff-fT2'), fT1 = gv('s-coeff-fT1');
   const temps = Array.from({ length: 101 }, (_, i) => i);  // 0–100 °C
@@ -2883,11 +3336,130 @@ function updateCoeffCharts() {
 }
 
 // ---- Calibration tab ----
-// Points recorded by ADD POINT: each {t, fM, fT}. The latest live frequencies
-// come from onMeasurement (only streamed while a measurement is RUNNING).
-let _lastFm = null, _lastFt = null;
+// The points live on the Pitaya (domain/calibration_recorder.py), which also
+// decides when the crystal has settled and, with AUTO, takes the point itself.
+// This tab only shows them and sends the operator's changes; every change comes
+// back to all open pages as a CalibrationPointsEvent. Each point here is
+// {id, t, fM, fT, source} plus the backend's full record as `raw`.
 let _calPoints = [];
 let _calCoefM = null, _calCoefT = null;  // [c3, c2, c1, c0] each, or null when < 4 points
+let _calSettings = null;                 // as last received from the Pitaya
+let _calStatus = null;                   // latest CalibrationStatusEvent status
+
+// Each sensor's latest reading {temperature, faults}, for the TEMP field.
+let _lastTemps = {};
+
+function calTempSource() {
+  const sel = document.getElementById('cal-temp-source');
+  return { key: sel.value, name: sel.options[sel.selectedIndex].textContent };
+}
+
+function onCalTempSource() {
+  const manual = calTempSource().key === 'manual';
+  document.getElementById('cal-temp-input').readOnly = !manual;
+  updateCalTemp();
+  setCalSetting('source', calTempSource().key);
+}
+
+// Mirror the selected sensor's latest reading into the TEMP field; a fault or
+// a missing reading blanks it and outlines it red, with the reason as tooltip.
+function updateCalTemp(unavailableReason) {
+  const { key } = calTempSource();
+  const input = document.getElementById('cal-temp-input');
+  const wrap = document.getElementById('cal-temp-wrap');
+  if (key === 'manual') { wrap.style.borderColor = ''; wrap.title = ''; return; }
+  const r = _lastTemps[key];
+  const problem = !r ? (unavailableReason || 'no reading yet')
+                : r.faults.length ? r.faults.join(', ') : '';
+  input.value = r && r.temperature != null ? r.temperature.toFixed(2) : '';
+  wrap.style.borderColor = problem ? 'var(--red)' : '';
+  wrap.title = problem;
+}
+
+// Send one setting to the Pitaya. On a refusal the controls go back to what it
+// holds; on success the CalibrationPointsEvent that follows updates them.
+async function setCalSetting(key, value) {
+  try {
+    const r = await fetch(`${API_URL}/calibration/settings?${key}=${encodeURIComponent(value)}`, { method: 'POST' });
+    if (!r.ok) {
+      const d = await r.json().catch(() => ({}));
+      showToast(d.detail || `Setting not changed (HTTP ${r.status})`, true);
+      syncCalControls();
+    }
+  } catch(e) { showToast('Setting not changed: no connection', true); syncCalControls(); }
+}
+
+// Put the Pitaya's settings into the controls, leaving alone a field that is
+// being typed in.
+function syncCalControls() {
+  const s = _calSettings;
+  if (!s) return;
+  const put = (id, v) => { const el = document.getElementById(id); if (el && el !== document.activeElement) el.value = v; };
+  const sel = document.getElementById('cal-temp-source');
+  if (sel.value !== s.source) {
+    sel.value = s.source;
+    document.getElementById('cal-temp-input').readOnly = s.source !== 'manual';
+    updateCalTemp();
+  }
+  document.getElementById('cal-auto').checked = !!s.auto_capture;
+  put('cal-window', +(s.window_s / 60).toFixed(2));
+  put('cal-max-ft', s.max_ft_drift);
+  put('cal-max-temp', s.max_temp_drift);
+  put('cal-hold', +(s.hold_s / 60).toFixed(2));
+}
+
+function onCalibrationPoints(ev) {
+  _calSettings = ev.settings;
+  _calPoints = (ev.points || []).map(p => ({
+    id: p.id, t: p.temperature, fM: p.fM, fT: p.fT,
+    source: p.source_name + (p.auto ? ', auto' : '') + (p.settled ? '' : ', not settled'), raw: p }));
+  syncCalControls();
+  refreshCalCharts();
+  const p = ev.added;
+  if (p && p.auto) {
+    sendNotif('QCM — Calibration point taken',
+              `${p.temperature.toFixed(2)} °C (${p.source_name}): set the next temperature`, 'calPoint');
+  }
+}
+
+const CAL_STATES = {   // state -> [pill text, pill class]
+  no_data:    ['NO DATA',    'idle'],
+  unlocked:   ['UNLOCKED',   'error'],
+  sensor:     ['SENSOR',     'error'],
+  collecting: ['COLLECTING', 'sweeping'],
+  settling:   ['SETTLING',   'locking'],
+  steady:     ['STEADY',     'locking'],
+  settled:    ['SETTLED',    'running'],
+};
+
+function onCalibrationStatus(st) {
+  const prev = _calStatus;
+  _calStatus = st;
+  const [text, cls] = CAL_STATES[st.state] || [String(st.state).toUpperCase(), 'idle'];
+  const pill = document.getElementById('cal-settle-pill');
+  pill.className = 'status-pill ' + cls;
+  pill.textContent = text;
+  setText('cal-settle-reason', (st.reason || '') + (st.save_error ? ` · ${st.save_error}` : ''));
+  document.getElementById('cal-settle-reason').style.color = st.save_error ? 'var(--red)' : '';
+
+  const drift = (id, v, max, digits) => {
+    const el = document.getElementById(id);
+    el.textContent = v == null ? '—' : (v >= 0 ? '+' : '') + v.toFixed(digits);
+    el.style.color = v == null ? '' : Math.abs(v) <= max ? 'var(--green)' : 'var(--orange)';
+  };
+  drift('val-cal-ft-drift', st.fT_drift, st.max_ft_drift, 2);
+  const sensor = st.source !== 'manual';
+  setText('label-cal-temp-drift', sensor ? `${st.source_name} Drift` : 'Sensor Drift');
+  drift('val-cal-temp-drift', sensor ? st.temp_drift : null, st.max_temp_drift, 4);
+
+  // Settled with nothing taken yet: the operator has to add the point (manual
+  // source, or AUTO off). An automatic point announces itself instead.
+  if (st.state === 'settled' && !(prev && prev.state === 'settled') && !st.point_here) {
+    sendNotif('QCM — Crystal settled',
+              st.source === 'manual' ? 'Enter the temperature and press ADD POINT'
+                                     : 'Press ADD POINT (AUTO is off)', 'calPoint');
+  }
+}
 
 // Solve a small dense linear system A x = b by Gauss-Jordan with partial
 // pivoting. Returns the solution vector, or null if A is (near-)singular.
@@ -2931,22 +3503,37 @@ function polyfit3(xs, ys) {
   return cs.map((c, j) => c / scale[j]);
 }
 
-function addCalPoint() {
-  const t = parseFloat(document.getElementById('cal-temp-input').value);
-  if (isNaN(t)) { showToast('Enter a valid temperature', true); return; }
-  if (_lastFm == null || _lastFt == null) {
-    showToast('No live frequency yet — START a measurement so both modes stream', true);
-    return;
+// ADD POINT: the Pitaya averages the last settle window. Taking one before the
+// crystal has settled is allowed, but only on purpose.
+async function addCalPoint() {
+  const { key } = calTempSource();
+  let query = '';
+  if (key === 'manual') {
+    const t = parseFloat(document.getElementById('cal-temp-input').value);
+    if (isNaN(t)) { showToast('Enter a valid temperature', true); return; }
+    query = `?temperature=${t}`;
   }
-  _calPoints.push({ t, fM: _lastFm, fT: _lastFt });
-  refreshCalCharts();
-  showToast(`Point added: ${t} °C  (fM ${_lastFm.toFixed(1)}, fT ${_lastFt.toFixed(1)})`);
+  const st = _calStatus;
+  if (st && st.state !== 'settled') {
+    const span = _calSettings ? `${+(_calSettings.window_s / 60).toFixed(2)} min` : 'window';
+    if (!confirm(`The crystal has not settled: ${st.reason || st.state}.\n\n` +
+                 `Add a point averaged over the last ${span} anyway?`)) return;
+  }
+  try {
+    const r = await fetch(`${API_URL}/calibration/points${query}`, { method: 'POST' });
+    const d = await r.json().catch(() => ({}));
+    if (!r.ok) { showToast(d.detail || `Point not added (HTTP ${r.status})`, true); return; }
+    showToast(`Point added: ${d.temperature.toFixed(3)} °C · ${d.source_name}  ` +
+              `(fM ${d.fM.toFixed(2)}, fT ${d.fT.toFixed(2)}, ${d.seconds} s)`);
+  } catch(e) { showToast('Point not added: no connection', true); }
 }
 
-function clearCalPoints() {
-  if (_calPoints.length && !confirm('Clear all calibration points?')) return;
-  _calPoints = [];
-  refreshCalCharts();
+async function clearCalPoints() {
+  if (_calPoints.length && !confirm('Clear all calibration points?\n\nThey are deleted on the Pitaya too.')) return;
+  try {
+    const r = await fetch(`${API_URL}/calibration/points`, { method: 'DELETE' });
+    if (!r.ok) showToast('Points not cleared', true);
+  } catch(e) { showToast('Points not cleared: no connection', true); }
 }
 
 // Redraw the scatter, recompute the cubic fit (when ≥ 4 points), and refresh
@@ -2999,22 +3586,23 @@ function drawCalChart(chart, coef, key) {
 }
 
 // Click-to-delete: confirm, then drop the point from both charts.
-function promptDeleteCalPoint(i) {
+async function promptDeleteCalPoint(i) {
   const p = _calPoints[i];
   if (!p) return;
-  if (confirm(`Delete this calibration point?\n\nT  = ${p.t} °C\nfM = ${p.fM.toFixed(2)} Hz\nfT = ${p.fT.toFixed(2)} Hz`)) {
-    _calPoints.splice(i, 1);
-    refreshCalCharts();
-    showToast('Point deleted');
-  }
+  if (!confirm(`Delete this calibration point?\n\nT  = ${p.t} °C · ${p.source}\nfM = ${p.fM.toFixed(2)} Hz\nfT = ${p.fT.toFixed(2)} Hz`)) return;
+  try {
+    const r = await fetch(`${API_URL}/calibration/points/${p.id}`, { method: 'DELETE' });
+    showToast(r.ok ? 'Point deleted' : 'Point not deleted', !r.ok);
+  } catch(e) { showToast('Point not deleted: no connection', true); }
 }
 
 // Fitted coefficients minus the constant (temperature-invariant) term, which
 // the compensation algorithm derives from the start frequencies rather than the fit.
 function renderCalCoeffs() {
   const set = (id, v) => { const el = document.getElementById(id); if (el) el.textContent = (v == null) ? '—' : Number(v).toPrecision(7); };
-  set('cal-fM3', _calCoefM?.[0]); set('cal-fM2', _calCoefM?.[1]); set('cal-fM1', _calCoefM?.[2]);
-  set('cal-fT3', _calCoefT?.[0]); set('cal-fT2', _calCoefT?.[1]); set('cal-fT1', _calCoefT?.[2]);
+  const m = _calCoefM || [], t = _calCoefT || [];
+  set('cal-fM3', m[0]); set('cal-fM2', m[1]); set('cal-fM1', m[2]);
+  set('cal-fT3', t[0]); set('cal-fT2', t[1]); set('cal-fT1', t[2]);
   const btn = document.getElementById('btn-cal-transfer');
   if (btn) btn.disabled = !(_calCoefM && _calCoefT);
 }
@@ -3059,7 +3647,7 @@ function transferCalCoeffs() {
   if (!_calCoefM || !_calCoefT) { showToast('Need at least 4 points to fit', true); return; }
   ensureTransferCharts();
   const temps = Array.from({ length: 101 }, (_, i) => i);  // 0–100 °C
-  const gv = id => parseFloat(document.getElementById(id)?.value) || 0;
+  const gv = id => parseFloat(fieldValue(id)) || 0;
   const poly = (c3, c2, c1) => temps.map(t => c3*t**3 + c2*t**2 + c1*t);  // constant term omitted
   setTransferChart(_transferCharts.fM, temps,
     poly(gv('s-coeff-fM3'), gv('s-coeff-fM2'), gv('s-coeff-fM1')),
@@ -3071,13 +3659,16 @@ function transferCalCoeffs() {
   requestAnimationFrame(() => { _transferCharts.fM && _transferCharts.fM.resize(); _transferCharts.fT && _transferCharts.fT.resize(); });
 }
 
-// Confirmed: copy the fitted (non-constant) coefficients into the Crystal
-// settings form. The user still clicks APPLY there to persist.
+// Confirmed: copy the fitted coefficients into the Crystal settings form. The
+// user still clicks APPLY there to persist. The constants go too: the run-time
+// compensation never reads them, but T start from the crystal does (it solves
+// the temperature from the absolute frequencies), and constants left over from
+// another profile put that reading degrees off.
 function confirmTransferCalCoeffs() {
   if (!_calCoefM || !_calCoefT) return;
   const setVal = (id, v) => { const el = document.getElementById(id); if (el) el.value = v; };
-  setVal('s-coeff-fM3', _calCoefM[0]); setVal('s-coeff-fM2', _calCoefM[1]); setVal('s-coeff-fM1', _calCoefM[2]);
-  setVal('s-coeff-fT3', _calCoefT[0]); setVal('s-coeff-fT2', _calCoefT[1]); setVal('s-coeff-fT1', _calCoefT[2]);
+  setVal('s-coeff-fM3', _calCoefM[0]); setVal('s-coeff-fM2', _calCoefM[1]); setVal('s-coeff-fM1', _calCoefM[2]); setVal('s-coeff-fM0', _calCoefM[3]);
+  setVal('s-coeff-fT3', _calCoefT[0]); setVal('s-coeff-fT2', _calCoefT[1]); setVal('s-coeff-fT1', _calCoefT[2]); setVal('s-coeff-fT0', _calCoefT[3]);
   updateCoeffCharts();   // refresh the preview graphs if the crystal panel is open
   updateDirtyState();    // light up APPLY / UNDO
   document.getElementById('modal-transfer-coeffs').style.display = 'none';
@@ -3105,7 +3696,8 @@ function onLogEvent(ev) {
   const dot = document.getElementById('log-tab-dot');
   if (dot && dot.style.background !== 'var(--green)') dot.style.background = 'var(--green)';
 
-  if (document.getElementById('log-autoscroll')?.checked) out.scrollTop = out.scrollHeight;
+  const autoscroll = document.getElementById('log-autoscroll');
+  if (autoscroll && autoscroll.checked) out.scrollTop = out.scrollHeight;
 }
 
 function clearLogs() {
@@ -3122,7 +3714,7 @@ function clearLogs() {
   <div class="modal">
     <div class="modal-title">⚠ PLL LOCK FAILED</div>
     <div class="modal-body">
-      The oscillators did not lock within the expected time.<br><br>
+      The lock attempt did not settle within 5 s. GET LOCK tries once; the data keeps streaming on the Monitor tab while it does.<br><br>
       Please check the following:
       <ul>
         <li><strong>Start Frequencies</strong> — must be within ~<span id="lock-capture-range">2 kHz</span> of the crystal's resonant frequency</li>
@@ -3164,8 +3756,8 @@ function clearLogs() {
     <div class="modal-body" style="margin-bottom:14px">
       Compare the crystal's current calibration polynomial (grey, dashed) with the
       newly fitted one (coloured) — both shown without their constant term. Confirm
-      to copy the new coefficients into the Crystal settings form; you still click
-      APPLY there to save.
+      to copy the new coefficients, constants included, into the Crystal settings
+      form; you still click APPLY there to save.
     </div>
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:20px">
       <div>

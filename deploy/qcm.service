@@ -13,7 +13,8 @@ User=root
 # not the working directory, so only the imports depend on this.
 WorkingDirectory=/root/QCM_red_pitaya/src
 ExecStart=/root/QCM_red_pitaya/.venv/bin/python main.py
-# Add --no-opcua to the line above if this unit runs without a WAGO PLC.
+# The OPC-UA bridge to the WAGO PLC is off until it is switched on under
+# Settings -> OPC-UA; --no-opcua on the line above leaves it out entirely.
 
 # Keep it alive across crashes / hardware hiccups.
 Restart=always

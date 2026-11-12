@@ -30,6 +30,7 @@ class StartMeasurementCommand(ApiCommand):
     ambient_temp: float
     mat_dens: float = 19320.0  # kg/m^3 — deposited film density
     z_ratio: float = 1.0       # quartz/film acoustic impedance ratio
+    t_start_source: str = "manual"  # T start from ambient_temp, "crystal", or an LTC2986 sensor key
 
 @dataclass
 class StopMeasurementCommand(ApiCommand):
@@ -104,6 +105,13 @@ class SetAutoRelockCommand(ApiCommand):
     enabled: bool  # re-acquire automatically when lock is lost mid-measurement
 
 @dataclass
+class SetMeasurementModeCommand(ApiCommand):
+    """Compensated (both modes locked, temperature solved from fT) or
+    uncompensated (mass mode only; the temp oscillator is parked). Read at GET
+    LOCK and at run start, so a run keeps the mode it was started in."""
+    compensated: bool
+
+@dataclass
 class SetTempHoldCommand(ApiCommand):
     """Hold the last calculated temperature while the temp-mode lock is lost,
     instead of solving the compensation from an untrustworthy fT."""
@@ -130,6 +138,18 @@ class SetSensorParamsCommand(ApiCommand):
     sens_area: float
     freq_virgin: float = 0.0  # Hz — pristine crystal frequency, 0 = unset
     tooling_ratio: float = 1.0  # proportional scaling of reported thickness
+
+@dataclass
+class SetAcquisitionCommand(ApiCommand):
+    """Acquisition timing: sample, publish and log rates in Hz (log 0 = every sample)."""
+    sample_rate: float
+    publish_rate: float
+    log_rate: float
+
+@dataclass
+class SetRateWindowCommand(ApiCommand):
+    """Seconds of thickness the deposition rate is fitted over."""
+    window: float
 
 @dataclass
 class SetTargetThicknessCommand(ApiCommand):

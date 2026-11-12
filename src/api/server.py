@@ -26,14 +26,20 @@ from fastapi import FastAPI, File, HTTPException, UploadFile, WebSocket, WebSock
 from fastapi.responses import FileResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 
+from domain.calibration_recorder import CalibrationRecorder
 from domain.crystal import CrystalManager, CrystalProfile, sanitize_name
 from domain.qcm_interface import OUTPUT_GAIN_MAX, WINDOW_SIZE
 from domain.run_logger import MIN_FREE_BYTES, RUNS_DIR, part_number, run_base
 from domain.sweep_logger import SWEEPS_DIR
+from domain.temperature_sensors import SENSORS
 from plc.opc_worker import _READ_KEYS as OPC_READ_KEYS, _CTRL_KEYS as OPC_CTRL_KEYS
 from messaging.api_command import *
-from messaging.api_event import LogEvent
+from messaging.api_event import CalibrationPointsEvent, CalibrationStatusEvent, LogEvent
 from messaging.defines import OutputMode
+from processing.TempCompAlgorithm import absolute_temperature
+from processing.deposition_rate import (DEFAULT_WINDOW as RATE_WINDOW, MAX_WINDOW as RATE_WINDOW_MAX,
+                                        MIN_WINDOW as RATE_WINDOW_MIN)
+from domain import acquisition as acq
 
 
 # ==================================================
@@ -130,16 +136,27 @@ class _LoggingForwarder(logging.Handler):
 # makes it impossible to tell, while debugging, whether a value is in use).
 _SETTING_KEYS = frozenset({
     "osc_settings", "output_mode", "lock_phase_tolerance", "lock_phase_std",
-    "auto_relock", "temp_hold", "freq_tracking", "freq_track_interval",
+    "auto_relock", "temp_hold", "freq_tracking", "freq_track_interval", "measurement_mode",
     "prune_old_runs", "trim_current_run",
-    "active_crystal", "ambient_temp", "mat_dens", "z_ratio",
-    "target_thickness",
-    "opc_url", "opc_user", "opc_password", "opc_base_node",
+    "active_crystal", "ambient_temp", "t_start_source", "mat_dens", "z_ratio",
+    "target_thickness", "rate_window", "sample_rate", "publish_rate", "log_rate",
+    "opc_enabled", "opc_url", "opc_user", "opc_password", "opc_base_node",
 })
+
+# Measurement modes. "compensated" locks both modes and solves the temperature
+# from fT; "uncompensated" locks the mass mode alone and parks the temp
+# oscillator, for a crystal with no usable temp mode or no calibration.
+MEASUREMENT_MODES = ("compensated", "uncompensated")
+
+# Where a run's start temperature (T start) comes from: the typed-in ambient
+# temperature, the crystal's own absolute temperature from its two modes, or an
+# LTC2986 sensor's reading, each taken at the moment the run starts. The QCM
+# worker falls back to the typed-in value when the source has none.
+T_START_SOURCES = ("manual", "crystal", *(s.key for s in SENSORS))
 
 # OPC keys, kept together because they are carried through verbatim when the
 # bridge is disabled (see _save_settings).
-_OPC_SETTING_KEYS = ("opc_url", "opc_user", "opc_password", "opc_base_node")
+_OPC_SETTING_KEYS = ("opc_enabled", "opc_url", "opc_user", "opc_password", "opc_base_node")
 
 # The settings every instrument starts from and that RESTORE DEFAULTS returns
 # to. They ship with the software rather than being captured per box, so every
@@ -186,15 +203,28 @@ DEFAULT_SETTINGS = {
     "lock_phase_std": 0.1,          # rad, max phase-error sigma ("lock quality")
     "auto_relock": True,            # re-acquire automatically on a lost lock
     "temp_hold": True,              # hold the last temperature while temp lock is lost
+    "measurement_mode": "compensated",  # both modes; "uncompensated" = mass mode only
     "freq_tracking": True,          # follow the locked frequencies for re-lock
     "freq_track_interval": 10.0,    # s between lock-frequency updates
     "prune_old_runs": True,         # delete finished runs when the disk runs low
     "trim_current_run": True,       # drop the oldest parts of the run in progress
     "ambient_temp": 23.0,           # degC, room temperature
+    "t_start_source": "manual",     # T start from ambient_temp, "crystal", or a sensor key (T_START_SOURCES)
     "mat_dens": 19320.0,            # kg/m3, gold
     "z_ratio": 1.0,                 # 1.0 = plain Sauerbrey, no Z-match
     "target_thickness": 0.0,        # nm, 0 = no target
+    "rate_window": RATE_WINDOW,     # s of thickness the deposition rate is fitted over
+    # Acquisition timing (domain/acquisition.py): the worker samples at
+    # sample_rate, the GUI and the PLC get publish_rate of those samples a
+    # second, and the run log log_rate (0 = every sample).
+    "sample_rate": acq.DEFAULT_SAMPLE_RATE,    # Hz
+    "publish_rate": acq.DEFAULT_PUBLISH_RATE,  # Hz
+    "log_rate": acq.DEFAULT_LOG_RATE,          # Hz, 0 = every sample
 }
+
+
+def _clamp(value, lo, hi) -> float:
+    return min(max(float(value), lo), hi)
 
 
 # ==================================================
@@ -274,10 +304,17 @@ class ConnectionManager:
 
 class RestServer:
     def __init__(self, api_command_queue: queue.Queue, api_event_queue: queue.Queue,
-                 wago_client=None, version=None):
+                 wago_client=None, opc_worker=None, version=None):
         self.command_queue = api_command_queue
         self.event_queue = api_event_queue
         self._wago_client = wago_client  # optional reference for live reconfiguration
+        self._opc_worker = opc_worker    # switched on and off by the opc_enabled setting
+        # Whether the OPC-UA bridge runs. Off unless this box's settings.json
+        # says otherwise: an instrument without a PLC should not sit retrying a
+        # connection to a coater that is not there. Kept with the connection
+        # settings, outside DEFAULT_SETTINGS, so RESTORE DEFAULTS cannot cut the
+        # link to a coater that does rely on it.
+        self._opc_enabled: bool = False
         self._version = version  # domain.version.VersionInfo, served by GET /version
         self.manager = ConnectionManager()
         self._thread: threading.Thread | None = None
@@ -286,6 +323,12 @@ class RestServer:
         self._broadcaster_started = False  # guards against starting two broadcasters
         self._last_state: str = "IDLE"
         self._last_opc_status: dict | None = None
+        self._last_temperatures: dict | None = None  # latest TemperatureEvent, as sent
+        # Calibration points and the settle detector that decides when to take
+        # them. Fed by the broadcaster, which sees every reading go past, and
+        # evaluated by it once a second; see domain/calibration_recorder.py.
+        self._calibration = CalibrationRecorder()
+        self._last_cal_tick = 0.0
         # Run log the worker is currently writing (None = not recording). Tracked
         # so the UI downloads the run it just took rather than whichever file in
         # data/runs/ happens to have the newest mtime.
@@ -329,7 +372,18 @@ class RestServer:
         # disabled (--no-opcua), where there is no client to read them back off.
         self._opc_settings: dict = {}
         self._load_settings()   # override the defaults with this box's saved values
+        if self._opc_worker:
+            self._opc_worker.set_enabled(self._opc_enabled)
         self._enqueue_settings("boot")  # push settings to the hardware on startup
+        # Then lock up on the start frequencies the active crystal has just set,
+        # exactly as GET LOCK does. Queued behind the settings, so the lock runs
+        # with this box's saved loop settings and measurement mode: uncompensated
+        # locks the mass mode alone, and a 0 Hz start frequency parks its
+        # oscillator. Without it the NCOs sit at 0 Hz until someone presses GET
+        # LOCK, reporting locks that are not there.
+        self.command_queue.put(StartupPLLCommand(self._lock_freq_mass, self._lock_freq_temp))
+        print(f"[Settings] Queued lock at mass {self._lock_freq_mass:.0f} Hz, "
+              f"temp {self._lock_freq_temp:.0f} Hz (boot)")
         self.app = self._build_app()
         
 
@@ -349,15 +403,21 @@ class RestServer:
             "lock_phase_std":       self._lock_phase_std,
             "auto_relock":    self._auto_relock,
             "temp_hold":      self._temp_hold,
+            "measurement_mode": self._measurement_mode,
             "freq_tracking":  self._freq_tracking,
             "freq_track_interval": self._freq_track_interval,
             "prune_old_runs":   self._prune_old_runs,
             "trim_current_run": self._trim_current_run,
             "active_crystal": self._active_crystal,
             "ambient_temp":   self._ambient_temp,
+            "t_start_source": self._t_start_source,
             "mat_dens":       self._mat_dens,
             "z_ratio":        self._z_ratio,
             "target_thickness": self._target_thickness,
+            "rate_window":    self._rate_window,
+            "sample_rate":    self._sample_rate,
+            "publish_rate":   self._publish_rate,
+            "log_rate":       self._log_rate,
         }
 
     def _apply_settings(self, d: dict):
@@ -391,6 +451,8 @@ class RestServer:
             self._auto_relock = bool(d["auto_relock"])
         if "temp_hold" in d:
             self._temp_hold = bool(d["temp_hold"])
+        if d.get("measurement_mode") in MEASUREMENT_MODES:
+            self._measurement_mode = d["measurement_mode"]
         if "freq_tracking" in d:
             self._freq_tracking = bool(d["freq_tracking"])
         if "freq_track_interval" in d:
@@ -403,12 +465,22 @@ class RestServer:
             self._active_crystal = d["active_crystal"]
         if "ambient_temp" in d:
             self._ambient_temp = float(d["ambient_temp"])
+        if d.get("t_start_source") in T_START_SOURCES:
+            self._t_start_source = d["t_start_source"]
         if "mat_dens" in d:
             self._mat_dens = float(d["mat_dens"])
         if "z_ratio" in d:
             self._z_ratio = float(d["z_ratio"])
         if "target_thickness" in d:
             self._target_thickness = float(d["target_thickness"])
+        if "rate_window" in d:
+            self._rate_window = _clamp(d["rate_window"], RATE_WINDOW_MIN, RATE_WINDOW_MAX)
+        if "sample_rate" in d:
+            self._sample_rate = _clamp(d["sample_rate"], acq.MIN_SAMPLE_RATE, acq.MAX_SAMPLE_RATE)
+        if "publish_rate" in d:
+            self._publish_rate = _clamp(d["publish_rate"], acq.MIN_PUBLISH_RATE, acq.MAX_PUBLISH_RATE)
+        if "log_rate" in d:
+            self._log_rate = _clamp(d["log_rate"], 0.0, acq.MAX_LOG_RATE)
 
     def _load_settings(self):
         try:
@@ -429,6 +501,7 @@ class RestServer:
         # URL. set_connection drops the connection instead, and the OPC worker's
         # reconnect loop brings it straight back up with the saved settings.
         self._opc_settings = {k: d[k] for k in _OPC_SETTING_KEYS if k in d}
+        self._opc_enabled = bool(d.get("opc_enabled", False))
         c = self._wago_client
         if c and "opc_url" in d:
             if d.get("opc_base_node"):
@@ -477,6 +550,7 @@ class RestServer:
         # unchanged — otherwise one run without the bridge would erase the PLC
         # connection settings the moment any unrelated setting was saved.
         if self._wago_client:
+            data["opc_enabled"]   = self._opc_enabled
             data["opc_url"]       = self._wago_client.url
             data["opc_user"]      = self._wago_client.user
             data["opc_password"]  = self._wago_client.password
@@ -509,6 +583,7 @@ class RestServer:
         """Current REST-owned parameters used when OPC triggers an action."""
         return {
             "ambient_temp":   self._ambient_temp,
+            "t_start_source": self._t_start_source,
             "mat_dens":       self._mat_dens,
             "z_ratio":        self._z_ratio,
             "lock_freq_mass": self._lock_freq_mass,
@@ -520,6 +595,14 @@ class RestServer:
         it here for GET /settings. Negative values mean "no target", same as 0."""
         self._target_thickness = max(0.0, float(value))
         self.command_queue.put(SetTargetThicknessCommand(self._target_thickness))
+
+    def _set_t_start_source(self, source: str | None):
+        """Where the next run's T start comes from; None leaves it as it is."""
+        if source is None:
+            return
+        if source not in T_START_SOURCES:
+            raise HTTPException(400, f"t_start_source must be one of {', '.join(T_START_SOURCES)}")
+        self._t_start_source = source
 
     def _apply_crystal(self, profile: CrystalProfile):
         """Push a crystal's settings into server state and the command queue.
@@ -580,9 +663,12 @@ class RestServer:
         self.command_queue.put(SetLockDetectCommand(self._lock_phase_tolerance, self._lock_phase_std))
         self.command_queue.put(SetAutoRelockCommand(self._auto_relock))
         self.command_queue.put(SetTempHoldCommand(self._temp_hold))
+        self.command_queue.put(SetMeasurementModeCommand(self._measurement_mode == "compensated"))
         self.command_queue.put(SetFreqTrackingCommand(self._freq_tracking, self._freq_track_interval))
         self.command_queue.put(SetStorageReclaimCommand(self._prune_old_runs, self._trim_current_run))
         self.command_queue.put(SetTargetThicknessCommand(self._target_thickness))
+        self.command_queue.put(SetRateWindowCommand(self._rate_window))
+        self.command_queue.put(SetAcquisitionCommand(self._sample_rate, self._publish_rate, self._log_rate))
 
         # Apply the active crystal's coefficients + lock frequencies, if any.
         if self._active_crystal:
@@ -688,20 +774,32 @@ class RestServer:
             return
         self._broadcaster_started = True
         while True:
+            now = time.time()
+            if now - self._last_cal_tick >= 1.0:
+                self._last_cal_tick = now
+                self._calibration_tick()
             try:
                 event = self.event_queue.get_nowait()
                 msg = self._serialise_event(event)
+                if msg.get("type") in ("TelemetryEvent", "MeasurementEvent"):
+                    msg["crystal_temp"] = self._crystal_temp(msg)
+                self._calibration_feed(msg)
 
                 if msg.get("type") == "StateEvent":
                     new_state = msg.get("state", "IDLE")
-                    old_state = self._last_state
                     self._last_state = new_state
+                    # A run spans its re-locks, which go RUNNING -> LOCKING ->
+                    # RUNNING. Keyed on the bare RUNNING edges, every re-lock used
+                    # to close the run's stats and open new ones — adding the
+                    # thickness so far to the crystal's total twice, and marking
+                    # the run as no longer recording, so it could be deleted.
+                    in_run = self._measurement_start_time is not None
                     # Start tracking when measurement begins
-                    if new_state == "RUNNING" and old_state != "RUNNING":
+                    if new_state == "RUNNING" and not in_run:
                         self._measurement_start_time = time.time()
                         self._session_thickness = 0.0
                     # Flush stats when measurement ends
-                    elif old_state == "RUNNING" and new_state != "RUNNING":
+                    elif in_run and new_state not in ("RUNNING", "LOCKING"):
                         self._recording = False  # the worker closes the log when a run ends
                         if self._measurement_start_time is not None and self._active_crystal:
                             elapsed_h = (time.time() - self._measurement_start_time) / 3600
@@ -752,9 +850,62 @@ class RestServer:
                 elif msg.get("type") == "OpcStatusEvent":
                     self._last_opc_status = msg
 
+                elif msg.get("type") == "TemperatureEvent":
+                    self._last_temperatures = msg
+
                 await self.manager.broadcast(msg)
             except queue.Empty:
                 await asyncio.sleep(0.01)
+
+    def _crystal_temp(self, msg: dict):
+        """The crystal's absolute temperature (degC) from this sample's two
+        modes with the active crystal's calibration, the reading T start from
+        the crystal would take now. None unless both modes are locked. See
+        absolute_temperature."""
+        if not (msg.get("lock_mass") and msg.get("lock_temp") and self._coefficients):
+            return None
+        try:
+            return absolute_temperature(self._coefficients, msg.get("freq_mass_mode"), msg.get("freq_temp_mode"))
+        except Exception:
+            return None
+
+    # ---- Calibration points: driven from the broadcaster ----
+    # A failure in here is printed and dropped: it must never take the
+    # broadcaster, and with it every live reading in the GUI, down.
+
+    def _calibration_feed(self, msg: dict):
+        """Pass the readings the settle detector needs on to it."""
+        try:
+            kind = msg.get("type")
+            if kind in ("MeasurementEvent", "TelemetryEvent") and msg.get("timestamp"):
+                self._calibration.add_frequencies(
+                    msg["timestamp"], msg.get("freq_mass_mode"), msg.get("freq_temp_mode"),
+                    bool(msg.get("lock_mass")) and bool(msg.get("lock_temp")))
+            elif kind == "TemperatureEvent" and msg.get("timestamp"):
+                self._calibration.add_temperatures(
+                    msg["timestamp"], bool(msg.get("available")), msg.get("sensors") or [])
+        except Exception as e:
+            print(f"[CAL] Reading not taken in: {e}")
+
+    def _calibration_tick(self):
+        """Evaluate the settle detector and queue its status, and the point it
+        took if it took one, for the clients."""
+        try:
+            status, added = self._calibration.tick(run=self._recording_run())
+            self.event_queue.put(CalibrationStatusEvent(status=status))
+            if added:
+                self._queue_calibration_points(added)
+        except Exception as e:
+            print(f"[CAL] Settle check failed: {e}")
+
+    def _queue_calibration_points(self, added: dict | None = None):
+        contents = self._calibration.contents()
+        self.event_queue.put(CalibrationPointsEvent(
+            points=contents["points"], settings=contents["settings"], added=added))
+
+    def _recording_run(self) -> str | None:
+        """The run being recorded right now, by its base name, or None."""
+        return run_base(self._current_run) if self._recording and self._current_run else None
 
     @staticmethod
     def _serialise_event(event) -> dict:
@@ -791,6 +942,11 @@ class RestServer:
             await ws.send_json({"type": "StateEvent", "state": self._last_state})
             if self._last_opc_status:
                 await ws.send_json(self._last_opc_status)
+            if self._last_temperatures:
+                await ws.send_json(self._last_temperatures)
+            await ws.send_json({"type": "CalibrationPointsEvent", **self._calibration.contents(),
+                                "added": None})
+            await ws.send_json({"type": "CalibrationStatusEvent", "status": self._calibration.status()})
             try:
                 while True:
                     await ws.receive_text()   # keep connection alive; we only push, not receive
@@ -806,12 +962,16 @@ class RestServer:
         # ---- Measurement control ----
 
         @app.post("/measurement/start")
-        def start_measurement(ambient_temp: float, mat_dens: float = 19320.0, z_ratio: float = 1.0):
+        def start_measurement(ambient_temp: float, mat_dens: float = 19320.0, z_ratio: float = 1.0,
+                              t_start_source: str | None = None):
             # Remember the params so OPC-triggered starts reuse them, and persist.
+            # Without t_start_source the stored choice stands.
+            self._set_t_start_source(t_start_source)
             self._ambient_temp, self._mat_dens, self._z_ratio = ambient_temp, mat_dens, z_ratio
             self._save_settings()
             self.command_queue.put(StartMeasurementCommand(
-                ambient_temp=ambient_temp, mat_dens=mat_dens, z_ratio=z_ratio))
+                ambient_temp=ambient_temp, mat_dens=mat_dens, z_ratio=z_ratio,
+                t_start_source=self._t_start_source))
             return {"status": "ok"}
 
         @app.post("/cap_adjust/start")
@@ -966,6 +1126,20 @@ class RestServer:
             self._save_settings()
             return {"status": "ok"}
 
+        @app.post("/settings/measurement_mode")
+        def set_measurement_mode(mode: str):
+            """"compensated" (both modes locked, temperature solved from fT) or
+            "uncompensated" (mass mode only: GET LOCK locks just the mass mode,
+            parks the temp oscillator, and the run reports the uncompensated
+            thickness with no temperature). GET LOCK picks it up straight away; a
+            run in progress keeps the mode it started in."""
+            if mode not in MEASUREMENT_MODES:
+                raise HTTPException(400, f"mode must be one of {', '.join(MEASUREMENT_MODES)}")
+            self._measurement_mode = mode
+            self.command_queue.put(SetMeasurementModeCommand(mode == "compensated"))
+            self._save_settings()
+            return {"status": "ok"}
+
         @app.post("/settings/freq_tracking")
         def set_freq_tracking(enabled: bool, interval: float = 10.0):
             """Follow the locked frequencies: while both modes are locked, the
@@ -996,10 +1170,12 @@ class RestServer:
 
         @app.post("/settings/measurement_params")
         def set_measurement_params(ambient_temp: float, mat_dens: float, z_ratio: float,
-                                   target_thickness: float | None = None):
+                                   target_thickness: float | None = None,
+                                   t_start_source: str | None = None):
             # Film/run parameters shown in the settings panel. /measurement/start
             # also captures these from the live form; persisting them on APPLY too
             # means an edit survives a restart even with no measurement in between.
+            self._set_t_start_source(t_start_source)
             self._ambient_temp, self._mat_dens, self._z_ratio = ambient_temp, mat_dens, z_ratio
             if target_thickness is not None:
                 self._set_target_thickness(target_thickness)
@@ -1013,6 +1189,38 @@ class RestServer:
             self._set_target_thickness(value)
             self._save_settings()
             return {"status": "ok", "target_thickness": self._target_thickness}
+
+        @app.post("/settings/rate_window")
+        def set_rate_window(seconds: float):
+            """Seconds of thickness the deposition rate is fitted over: a longer
+            window gives a quieter rate that follows a change more slowly. Takes
+            effect immediately, mid-run included."""
+            if not RATE_WINDOW_MIN <= seconds <= RATE_WINDOW_MAX:
+                raise HTTPException(400, f"rate window must be {RATE_WINDOW_MIN:g} to {RATE_WINDOW_MAX:g} s")
+            self._rate_window = seconds
+            self.command_queue.put(SetRateWindowCommand(seconds))
+            self._save_settings()
+            return {"status": "ok", "rate_window": self._rate_window}
+
+        @app.post("/settings/acquisition")
+        def set_acquisition(sample_rate: float, publish_rate: float,
+                            log_rate: float = acq.DEFAULT_LOG_RATE):
+            """How often the worker samples (Hz), how often the GUI and the PLC
+            are sent a sample (Hz), and how often the run log takes one (Hz,
+            0 = every sample). The deposition rate is fitted to every sample.
+            A new sample rate waits for a run in progress to end; the other two
+            take effect at once."""
+            limits = (("sample_rate", sample_rate, acq.MIN_SAMPLE_RATE, acq.MAX_SAMPLE_RATE),
+                      ("publish_rate", publish_rate, acq.MIN_PUBLISH_RATE, acq.MAX_PUBLISH_RATE),
+                      ("log_rate", log_rate, 0.0, acq.MAX_LOG_RATE))
+            for name, value, lo, hi in limits:
+                if not lo <= value <= hi:
+                    raise HTTPException(400, f"{name} must be {lo:g} to {hi:g} Hz")
+            self._sample_rate, self._publish_rate, self._log_rate = sample_rate, publish_rate, log_rate
+            self.command_queue.put(SetAcquisitionCommand(sample_rate, publish_rate, log_rate))
+            self._save_settings()
+            return {"status": "ok", "acquisition": {
+                "sample_rate": sample_rate, "publish_rate": publish_rate, "log_rate": log_rate}}
 
         @app.get("/measurement/target")
         def get_target():
@@ -1052,10 +1260,23 @@ class RestServer:
                 "oscillators":      self._osc_settings,
                 "output_mode":      self._output_mode,
                 "measurement": {
+                    "mode":             self._measurement_mode,
                     "ambient_temp":     self._ambient_temp,
+                    "t_start_source":   self._t_start_source,
                     "mat_dens":         self._mat_dens,
                     "z_ratio":          self._z_ratio,
                     "target_thickness": self._target_thickness,
+                    "rate_window":      self._rate_window,
+                },
+                "acquisition": {
+                    "sample_rate":  self._sample_rate,
+                    "publish_rate": self._publish_rate,
+                    "log_rate":     self._log_rate,
+                    "limits": {
+                        "sample_rate":  [acq.MIN_SAMPLE_RATE, acq.MAX_SAMPLE_RATE],
+                        "publish_rate": [acq.MIN_PUBLISH_RATE, acq.MAX_PUBLISH_RATE],
+                        "log_rate":     [0.0, acq.MAX_LOG_RATE],
+                    },
                 },
                 # Derived from the PLL capture window so the UI never hard-codes it.
                 "pll": {
@@ -1325,9 +1546,30 @@ class RestServer:
         # ---- Sweep ----
 
         @app.post("/sweep/start")
-        def start_sweep(oscillator_idx: int, start_freq: float, stop_freq: float, step_size: float, settle_time: float):
+        def start_sweep(oscillator_idx: int, step_size: float, settle_time: float,
+                        center_freq: float | None = None, span: float | None = None,
+                        start_freq: float | None = None, stop_freq: float | None = None):
+            """Sweep one oscillator open-loop. Give the range as `center_freq` +
+            `span` (what the web UI sends) or as `start_freq` + `stop_freq`.
+
+            A centred sweep is laid out symmetrically on the step grid around the
+            centre, so the centre is always one of the points: a span that is not
+            a whole number of steps loses the remainder at both ends equally,
+            rather than all of it at the top."""
+            if step_size <= 0:
+                raise HTTPException(400, "step_size must be greater than 0")
+            if center_freq is not None and span is not None:
+                if span < 0:
+                    raise HTTPException(400, "span must not be negative")
+                half = math.floor(span / 2 / step_size) * step_size
+                start_freq, stop_freq = center_freq - half, center_freq + half
+            elif start_freq is None or stop_freq is None:
+                raise HTTPException(400, "give center_freq and span, or start_freq and stop_freq")
+            if start_freq < 0 or stop_freq < start_freq:
+                raise HTTPException(400, "the sweep must run upwards from 0 Hz or more")
             self.command_queue.put(StartSweepCommand(oscillator_idx, start_freq, stop_freq, step_size, settle_time))
-            return {"status": "ok"}
+            return {"status": "ok", "start_freq": start_freq, "stop_freq": stop_freq,
+                    "n_points": int(math.floor((stop_freq - start_freq) / step_size)) + 1}
 
         @app.post("/sweep/abort")
         def abort_sweep():
@@ -1383,12 +1625,73 @@ class RestServer:
         def get_state():
             return {"state": self._last_state}
 
+        @app.get("/temperatures")
+        def get_temperatures():
+            """The latest read of the LTC2986 temperature sensors (°C), or why
+            there is none. See domain/temperature_sensors.py for the channels."""
+            if self._last_temperatures is None:
+                return {"available": False, "sensors": [], "error": "no reading yet",
+                        "timestamp": None}
+            return {k: v for k, v in self._last_temperatures.items() if k != "type"}
+
+        # ---- Calibration points (CALIBRATE tab) ----
+        # Kept on the Pitaya, with the settle detector that takes them; see
+        # domain/calibration_recorder.py. Every change is also pushed to all
+        # clients as a CalibrationPointsEvent.
+
+        @app.get("/calibration")
+        def get_calibration():
+            return {**self._calibration.contents(), "status": self._calibration.status()}
+
+        @app.post("/calibration/settings")
+        def set_calibration_settings(source: str | None = None, window_s: float | None = None,
+                                     max_ft_drift: float | None = None,
+                                     max_temp_drift: float | None = None,
+                                     hold_s: float | None = None, auto_capture: bool | None = None):
+            """Change any of the settings; the ones not given stay as they are."""
+            try:
+                settings = self._calibration.update_settings(
+                    source=source, window_s=window_s, max_ft_drift=max_ft_drift,
+                    max_temp_drift=max_temp_drift, hold_s=hold_s, auto_capture=auto_capture)
+            except ValueError as e:
+                raise HTTPException(400, str(e))
+            self._queue_calibration_points()
+            return settings
+
+        @app.post("/calibration/points")
+        def add_calibration_point(temperature: float | None = None):
+            """Take a point now from the last window, settled or not. The
+            temperature is needed with the manual source and ignored otherwise."""
+            try:
+                point = self._calibration.capture(temperature, run=self._recording_run())
+            except ValueError as e:
+                raise HTTPException(409, str(e))
+            self._queue_calibration_points(point)
+            return point
+
+        @app.delete("/calibration/points/{point_id}")
+        def delete_calibration_point(point_id: int):
+            if not self._calibration.delete(point_id):
+                raise HTTPException(404, "No such point")
+            self._queue_calibration_points()
+            return {"status": "ok"}
+
+        @app.delete("/calibration/points")
+        def clear_calibration_points():
+            self._calibration.clear()
+            self._queue_calibration_points()
+            return {"status": "ok"}
+
         # ---- OPC-UA connection management ----
 
         @app.get("/opc/settings")
         def get_opc_settings():
             c = self._wago_client
             return {
+                # `available` is false only when the server was started with
+                # --no-opcua; `enabled` is the on/off setting.
+                "available": self._opc_worker is not None,
+                "enabled":   self._opc_enabled,
                 "url":       c.url       if c else "",
                 "user":      c.user      if c else "",
                 "base_node": c.base_node_path if c else "",
@@ -1398,11 +1701,26 @@ class RestServer:
                 "has_password": bool(c.password) if c else False,
             }
 
+        @app.post("/opc/enabled")
+        def set_opc_enabled(enabled: bool):
+            """Switch the OPC-UA bridge on or off, immediately and persistently.
+            Off (the default) it holds no connection, so the PLC can neither read
+            the QCM nor trigger GET LOCK / START / STOP. The connection settings
+            are kept either way."""
+            if not self._opc_worker:
+                raise HTTPException(503, "OPC-UA bridge not available (server started with --no-opcua)")
+            self._opc_enabled = enabled
+            self._opc_worker.set_enabled(enabled)
+            self._save_settings()
+            return {"status": "ok", "enabled": enabled}
+
         @app.post("/opc/connect")
         def opc_connect(url: str, user: str = "", password: str | None = None,
                         base_node: str | None = None):
+            """Set the connection and reconnect with it. With the bridge switched
+            off the settings are saved and used once it is switched on."""
             if not self._wago_client:
-                raise HTTPException(503, "OPC-UA bridge not enabled")
+                raise HTTPException(503, "OPC-UA bridge not available (server started with --no-opcua)")
             if base_node is not None:
                 self._wago_client.set_base_node_path(base_node)
             # An omitted password means "keep the stored one". The UI never
@@ -1412,7 +1730,7 @@ class RestServer:
             pwd = self._wago_client.password if password is None else password
             self._wago_client.set_connection(url, user, pwd)
             self._save_settings()
-            return {"status": "ok", "url": url}
+            return {"status": "ok", "url": url, "enabled": self._opc_enabled}
 
         @app.get("/opc/nodes")
         def opc_nodes():
@@ -1467,11 +1785,13 @@ class RestServer:
         # host: on Linux from /etc/mime.types, on Windows from the registry —
         # where .js can come back as text/plain and .woff2 as nothing at all
         # (starlette then sends text/plain). Browsers tolerate that today only
-        # because these responses carry no nosniff header. Nail the two types the
+        # because these responses carry no nosniff header. Nail the types the
         # vendored offline assets depend on, so the UI does not rest on the MIME
-        # database of whichever box happens to be serving it.
+        # database of whichever box happens to be serving it. SVG is never
+        # sniffed: served as anything else, the tab icon silently goes blank.
         mimetypes.add_type("text/javascript", ".js")
         mimetypes.add_type("font/woff2", ".woff2")
+        mimetypes.add_type("image/svg+xml", ".svg")
 
         static_dir = os.path.join(os.path.dirname(__file__), "..", "static")
         app.mount("/", StaticFiles(directory=static_dir, html=True), name="static")

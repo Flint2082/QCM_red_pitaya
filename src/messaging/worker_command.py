@@ -30,6 +30,11 @@ class StartMeasurementCommand(WorkerCommand):
     ambient_temp: float
     mat_dens: float = 19320.0  # kg/m^3 — deposited film density
     z_ratio: float = 1.0       # quartz/film acoustic impedance ratio
+    # "manual": T start is ambient_temp. An LTC2986 sensor key: T start is that
+    # sensor's reading when the run starts, ambient_temp if it has none.
+    # "crystal": the crystal's own absolute temperature from its two modes when
+    # the run starts, ambient_temp if they do not give one.
+    t_start_source: str = "manual"
 
 @dataclass
 class StopMeasurementCommand(WorkerCommand):
@@ -104,6 +109,13 @@ class SetAutoRelockCommand(WorkerCommand):
     enabled: bool  # re-acquire automatically when lock is lost mid-measurement
 
 @dataclass
+class SetMeasurementModeCommand(WorkerCommand):
+    """Compensated (both modes locked, temperature solved from fT) or
+    uncompensated (mass mode only; the temp oscillator is parked). Read at GET
+    LOCK and at run start, so a run keeps the mode it was started in."""
+    compensated: bool
+
+@dataclass
 class SetTempHoldCommand(WorkerCommand):
     """Hold the last calculated temperature while the temp-mode lock is lost,
     instead of solving the compensation from an untrustworthy fT."""
@@ -130,6 +142,19 @@ class SetSensorParamsCommand(WorkerCommand):
     sens_area: float
     freq_virgin: float = 0.0  # Hz — pristine crystal frequency, 0 = unset
     tooling_ratio: float = 1.0  # proportional scaling of reported thickness
+
+@dataclass
+class SetAcquisitionCommand(WorkerCommand):
+    """Acquisition timing (domain/acquisition.py). A new sample rate waits for a
+    run in progress to end; the other two take effect at once."""
+    sample_rate: float   # Hz the worker samples at
+    publish_rate: float  # Hz the GUI and the PLC are sent samples at
+    log_rate: float      # Hz the run log takes samples at; 0 = every sample
+
+@dataclass
+class SetRateWindowCommand(WorkerCommand):
+    """Seconds of thickness the deposition rate is fitted over."""
+    window: float
 
 @dataclass
 class SetTargetThicknessCommand(WorkerCommand):

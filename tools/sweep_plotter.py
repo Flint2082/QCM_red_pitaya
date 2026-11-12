@@ -16,6 +16,10 @@ strongest well-separated maxima are marked, which is the same "peak / 2nd peak"
 the web UI reports — use them to read off the resonance and whatever else the
 crystal is doing nearby.
 
+The phase is unwrapped by default, as on the web UI's ANALYSIS tab: the ±2π
+jumps where the measured phase passes ±π are removed. Untick "Unwrap phase" for
+the phase as measured.
+
 Usage:
     python tools/sweep_plotter.py [path/to/qcm_sweep.csv]
 
@@ -119,6 +123,18 @@ def format_settings(settings, notes):
     return text
 
 
+def unwrap_phase(phase):
+    """The phase with its ±2π jumps removed: every step taken the short way
+    round, as the web UI does. Missing samples stay missing without breaking the
+    continuity of the rest (np.unwrap alone would carry a NaN forward). A step
+    of more than π is ambiguous and the short way is a guess, so the result is
+    only as good as the step is fine compared with the resonance width."""
+    out = np.full_like(phase, np.nan)
+    ok = np.isfinite(phase)
+    out[ok] = np.unwrap(phase[ok])
+    return out
+
+
 def find_peaks(freqs, amps, count=2):
     """The `count` highest well-separated maxima, tallest first.
 
@@ -169,8 +185,10 @@ def main():
     plt.subplots_adjust(left=0.26, right=0.90, bottom=0.10, top=0.93)
 
     ax_phase = ax.twinx()
+    unwrapped = unwrap_phase(phase)
     (amp_line,)   = ax.plot(freqs, amps, color=AMP_COLOR, linewidth=1.4, label="Amplitude")
-    (phase_line,) = ax_phase.plot(freqs, phase, color=PHASE_COLOR, linewidth=1.0,
+    # One trace; "Unwrap phase" picks which phase it shows (see redraw).
+    (phase_line,) = ax_phase.plot(freqs, unwrapped, color=PHASE_COLOR, linewidth=1.0,
                                   alpha=0.75, label="Phase")
 
     ax.set_xlabel("Frequency (Hz)")
@@ -200,19 +218,25 @@ def main():
     settings_box.set_visible(False)
 
     # --- options check boxes -------------------------------------------------
-    ax_opts = fig.add_axes([0.02, 0.55, 0.20, 0.30])
+    ax_opts = fig.add_axes([0.02, 0.52, 0.20, 0.35])
     ax_opts.set_title("Options", fontsize=10)
     options_check = CheckButtons(
         ax_opts,
-        ["Amplitude", "Phase", "Peaks", "Show settings", "Log amplitude", "Log X axis"],
-        [True, True, bool(peak_artists), False, True, False],
+        ["Amplitude", "Phase", "Unwrap phase", "Peaks", "Show settings", "Log amplitude", "Log X axis"],
+        [True, True, True, bool(peak_artists), False, True, False],
     )
 
     def redraw(_=None):
-        (show_amp, show_phase, show_peaks, show_settings,
+        (show_amp, show_phase, unwrap, show_peaks, show_settings,
          log_amp, log_x) = options_check.get_status()
         amp_line.set_visible(show_amp)
         phase_line.set_visible(show_phase)
+        phase_line.set_ydata(unwrapped if unwrap else phase)
+        ax_phase.set_ylabel("Phase (rad, unwrapped)" if unwrap else "Phase (rad)", color=PHASE_COLOR)
+        # Rescale to the phase shown: unwrapped it can run whole turns outside
+        # ±π, measured it never leaves ±π.
+        ax_phase.relim()
+        ax_phase.autoscale_view()
         for artist in peak_artists:
             artist.set_visible(show_peaks)
         settings_box.set_visible(show_settings)

@@ -71,6 +71,20 @@ class QCMClient:
         """{target_thickness, enabled, reached, reached_at, thickness_at_target}."""
         return self._get("/measurement/target")
 
+    def set_rate_window(self, seconds: float):
+        """Seconds of thickness the deposition rate is fitted over (0.1-300,
+        default 1). Longer is quieter but follows a change more slowly. Takes
+        effect immediately, mid-run included."""
+        return self._post("/settings/rate_window", seconds=seconds)
+
+    def set_acquisition(self, sample_rate: float, publish_rate: float = 10.0, log_rate: float = 10.0):
+        """How often the instrument samples (1-100 Hz), how often the GUI, this
+        stream and the PLC get a sample (1-25 Hz), and how often the run log
+        takes one (Hz, 0 = every sample). A new sample rate waits for a run in
+        progress to end."""
+        return self._post("/settings/acquisition", sample_rate=sample_rate,
+                          publish_rate=publish_rate, log_rate=log_rate)
+
     # -------------------------------------------------- oscillator / lock settings
     def set_frequency(self, oscillator_idx: int, frequency: float):
         return self._post("/settings/frequency", oscillator_idx=oscillator_idx, frequency=frequency)
@@ -126,6 +140,17 @@ class QCMClient:
         only the thermal correction freezes — the compensated thickness carries
         on following the film. Held samples are the ones with lock_temp = 0."""
         return self._post("/settings/temp_hold", enabled=bool(enabled))
+
+    def set_opc_enabled(self, enabled: bool):
+        """Switch the OPC-UA bridge to the PLC on or off (off by default)."""
+        return self._post("/opc/enabled", enabled=bool(enabled))
+
+    def set_measurement_mode(self, mode: str):
+        """"compensated" (default: both modes locked, temperature solved from
+        fT) or "uncompensated" (mass mode only — GET LOCK locks just the mass
+        mode and the run reports the uncompensated thickness, no temperature).
+        A run in progress keeps the mode it started in."""
+        return self._post("/settings/measurement_mode", mode=mode)
 
     def set_freq_tracking(self, enabled: bool, interval: float = 10.0):
         """Follow the locked frequencies (default on, every 10 s): while both
@@ -226,6 +251,14 @@ class QCMClient:
         return self._post("/sweep/start", oscillator_idx=oscillator_idx, start_freq=start_freq,
                           stop_freq=stop_freq, step_size=step_size, settle_time=settle_time)
 
+    def start_sweep_centered(self, oscillator_idx: int, center_freq: float, span: float,
+                             step_size: float, settle_time: float):
+        """Sweep `span` Hz centred on `center_freq`, as the web UI does. The
+        points sit symmetrically on the step grid around the centre; the reply
+        says the start and stop frequencies that came out of it."""
+        return self._post("/sweep/start", oscillator_idx=oscillator_idx, center_freq=center_freq,
+                          span=span, step_size=step_size, settle_time=settle_time)
+
     def abort_sweep(self):
         return self._post("/sweep/abort")
 
@@ -244,11 +277,12 @@ class QCMClient:
         centre = freqs["mass"] if oscillator_idx == 1 else freqs["temp"]
         if not centre:
             raise RuntimeError(f"No lock frequency set for oscillator {oscillator_idx}")
-        start = centre - self.MODE_SWEEP_WINDOW / 2
-        stop = centre + self.MODE_SWEEP_WINDOW / 2
-        self.start_sweep(oscillator_idx, start, stop, self.MODE_SWEEP_STEP, settle_time)
-        return {"oscillator_idx": oscillator_idx, "start_freq": start, "stop_freq": stop,
-                "step_size": self.MODE_SWEEP_STEP, "settle_time": settle_time}
+        r = self.start_sweep_centered(oscillator_idx, centre, self.MODE_SWEEP_WINDOW,
+                                      self.MODE_SWEEP_STEP, settle_time)
+        return {"oscillator_idx": oscillator_idx, "center_freq": centre,
+                "span": self.MODE_SWEEP_WINDOW, "start_freq": r.get("start_freq"),
+                "stop_freq": r.get("stop_freq"), "step_size": self.MODE_SWEEP_STEP,
+                "settle_time": settle_time}
 
     # --------------------------------------------------------- server-side sweeps
     def sweeps(self) -> list:

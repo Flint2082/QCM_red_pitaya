@@ -60,6 +60,185 @@ unit accordingly. It runs as `root` (required for `/dev/mem` and the FPGA
 bitstream load), waits for the network, and restarts automatically if the
 process exits.
 
+### What a start does
+
+On every start the service writes the saved settings to the FPGA, applies the
+active crystal profile, and then locks the PLLs on that profile's start
+frequencies, exactly as GET LOCK does. In uncompensated mode only the mass mode
+is locked, and a mode whose start frequency is 0 Hz stays parked. If the lock
+fails, the instrument waits in IDLE for a GET LOCK, as it did before this
+start-up lock existed.
+
+The start frequencies follow the lock (frequency tracking, and the update at
+the end of a run) only once a lock attempt has aimed the loops. From power-up
+until then, the NCOs run from 0 Hz and their phase can pass the lock test, and
+a fresh start used to overwrite the start frequencies with 0 Hz that way. A
+sweep or a capacitor adjustment also leaves the loops open, so tracking stops
+after either one until the next lock.
+
+## Front-panel LEDs
+
+The bitstream wires the 4-bit `led_control` register straight to the LEDs, and
+the control software drives it ([`domain/status_leds.py`](domain/status_leds.py)):
+
+| LED | meaning |
+|---|---|
+| 1 | on while the software runs on a loaded bitstream; **flashes** while a run has a problem: a lost lock (the temp mode only counts in a compensated run), a re-lock in progress, recording failed, or no thickness coming out |
+| 2 | mass-mode PLL locked |
+| 3 | temp-mode PLL locked (dark while parked) |
+| 4 | yellow, not assigned yet |
+
+The lock LEDs stay dark through a sweep and a capacitor adjustment, which open
+the loops. All four go dark when the service stops.
+
+## Temperature sensors (LTC2986)
+
+The V2 board carries an LTC2986 on the SPI pins of the E2 connector
+(`/dev/spidev2.0`), wired for a 4-wire PT100 and a thermocouple whose cold
+junction is a TSic 501F on the board. A background thread
+([`workers/temperature_worker.py`](workers/temperature_worker.py)) reads all
+three once a second; the readings, with any fault the chip flags, show in the
+**TEMP SENSORS** tab and at `GET /temperatures`. A box without the board just
+shows them as unavailable, with the reason.
+
+The channel map, and the values the schematic does not give (the sense resistor
+R22, the thermocouple type), are at the top of
+[`domain/temperature_sensors.py`](domain/temperature_sensors.py). The PT100
+reads in proportion to the sense resistor, so set it to the fitted value.
+
+The same thread reads the Zynq's own die temperature from its XADC
+([`domain/zynq_temperature.py`](domain/zynq_temperature.py)), board or no
+board. It stands in for the Pitaya's 125 MHz reference oscillator: a drift in
+that clock shifts both modes by the same fraction, which the compensation
+cannot tell from mass. It takes one conversion a second and reports the mean
+of the last minute; a burst of conversions dips both mode frequencies for as
+long as it lasts.
+
+Every run log also carries the newest readings beside each sample, in
+`pt100_c`, `thermocouple_c`, `cold_junction_c` and `zynq_die_c` (°C), with any
+LTC2986 fault named in `temp_sensor_faults`. They are blank while there is no
+current reading. `temperature_c` is something else: the crystal temperature the
+compensation solves from the two modes.
+
+A run's start temperature (T start, the crystal temperature the compensation
+starts from) can come from one of these sensors instead of the typed-in ambient
+temperature: **Settings → Measurement → T Start Source**, or `t_start_source`
+on `POST /measurement/start` and `/settings/measurement_params`. The QCM worker
+reads the sensor the moment the run starts, so a PLC-triggered start does the
+same. Without a current, fault-free reading it starts from the ambient
+temperature rather than not at all. Either way the run log records the value
+and its origin, in the SETTINGS row and as `T_source=` in `RUN_START`.
+
+T start can also come from the crystal itself (`crystal`). The calibration fit
+gives both modes' whole curves, constants `fM_0`/`fT_0` included, so the two
+frequencies say the temperature without a thermometer and without its lag.
+`absolute_temperature` in `processing/TempCompAlgorithm.py` solves it from
+fT − ρ·fM with ρ = fT_0/fM_0: deposited film and reference-clock errors
+cancel in that combination. A shift of one mode alone does not (1 Hz on fM is
+about 0.01 °C). The worker takes it only with both modes locked and on
+resonance in the newest sample, and falls back like a thermometer otherwise.
+It needs a profile whose constants come from a calibration of this crystal;
+TRANSFER TO CRYSTAL in the CALIBRATE tab copies them along with the slopes.
+Every telemetry and measurement message on `/ws` carries the current reading as
+`crystal_temp` (null unless both modes are locked), and the Settings row shows
+it next to the PT100.
+
+## Deposition rate
+
+The MAIN tab shows the deposition rate of both thicknesses, in nm/s, beside the
+thicknesses themselves. A difference between successive samples is mostly
+noise, so the worker fits a straight line through the last **Rate Window**
+seconds of each thickness and takes its slope
+([`processing/deposition_rate.py`](processing/deposition_rate.py)). The window
+is set under **Settings → Measurement → Rate Window** (default 1 s, or
+`POST /settings/rate_window`). A longer window gives a quieter rate that lags a
+change by about half the window. The rate stays blank until half a window of
+the run has been taken, and again for half the new window when the window is
+lengthened mid-run.
+
+Every run log carries it in `rate_comp_nm_s` and `rate_uncomp_nm_s`, beside the
+thickness columns, and records the window in its SETTINGS row.
+`tools/csv_plotter.py` works the rate out from the thickness for a log written
+before these columns existed, by the same rule.
+
+## Sampling
+
+The FPGA updates its frequency registers far faster than the software reads
+them, so how often the instrument samples is a software setting:
+**Settings → Measurement → Sample Rate**, 1–100 Hz (default 100). Every sample
+goes into the deposition rate, the target check and the lock automation. Two
+slower streams take a subset of them, each on its own schedule
+([`domain/acquisition.py`](domain/acquisition.py)):
+
+- **Display / PLC Rate** (1–25 Hz, default 10): the samples sent to the
+  browsers over `/ws` and written to the PLC. Each is the newest sample, its
+  rate fitted to every sample before it.
+- **Log Rate** (0–100 Hz, default 10; 0 = every sample): the samples written
+  to the run log, each with the rate fitted to every sample. A row is about 300
+  bytes: about 250 MB a day at 10 Hz, 2.6 GB if every sample at 100 Hz is
+  logged.
+
+The same is `POST /settings/acquisition`. A new sample rate waits for a run in
+progress to end, so a run log has one rate throughout; the other two take
+effect at once, and a change during a run is written to the log as an
+`ACQUISITION` row. Every run's SETTINGS row records all three.
+
+What a higher rate buys is a short Rate Window that still holds enough samples:
+a 0.2 s window needs about 25 Hz. It does little for the noise at a given
+window. A 30 kHz capture of the frequency registers (rp-f0ea58, idle and
+locked, 10 Nov 2026) shows the noise is mostly slow wander below 5 Hz, and the
+rate noise for gold came out at 1.6e-4, 8e-5, 4.3e-5 and 7e-6 nm/s for 0.2, 0.5,
+1 and 5 s windows, the same at 25, 50 and 100 Hz.
+
+On the Pitaya's own CPU (10 Nov 2026, against a fake FPGA, logging every sample,
+one browser at 10 Hz) the service held 10, 50 and 100 Hz exactly, using 18 %,
+34 % and 52 % of one core; at 100 Hz the samples came 10.0 ms apart, 12.7 ms at
+the 99th percentile.
+
+That extra load warms the board, and the reference clock with it: the minute of
+that test warmed the Zynq die by 0.5 degC and moved both modes of a live run up
+by ~35 ppb, a ~2 pm dip in its compensated thickness. A steady rate is a steady
+load and does no harm, but change the sample rate a few minutes before a run
+rather than just before it.
+
+Lock detection and the drive-gain servo keep their timing at any rate: the lock
+window spans 1.2 s and a loss is called after 0.2 s of out-of-limit samples
+(`LOCK_WINDOW_S`, `LOCK_LOSS_S` in `domain/qcm_interface.py`), and the AGC steps
+10 times a second. The footer of the page shows the rate actually achieved. A
+run that falls more than 10 % behind the set rate says so in its log
+(`SAMPLE_RATE_LOW`, then `SAMPLE_RATE_OK`).
+
+## Calibration points
+
+The **CALIBRATE** tab's points are taken and kept on the Pitaya
+([`domain/calibration_recorder.py`](domain/calibration_recorder.py)), in
+`data/calibration/points.json`, so they survive a page reload and a restart.
+A settle detector watches the readings and shows on the tab's SETTLE row whether
+the crystal is ready for a point. Over the last WINDOW, both modes must stay
+locked, fT must drift less than the limit in Hz/min (over the whole window and
+over its last third), and, with a sensor as the
+TEMP source, that sensor must report no fault and drift less than its limit in
+°C/min. All of that has to hold for HOLD.
+
+Each point is the average of fM, fT and the temperature over the window. With a
+sensor as the source and AUTO on, the point is taken by itself once the crystal
+has settled, and the page signals that it is time to set the next temperature.
+The next one waits until fT has left that temperature (100 Hz, about 0.7 °C,
+for 10 s in a row) and then for a whole window recorded after that, so it is
+never averaged partly on the old plateau. With the
+Manual source, the page signals when the crystal has settled, and you enter the
+temperature and press ADD POINT. ADD POINT before the crystal has settled asks
+first. The same is available at `GET /calibration`,
+`POST /calibration/settings`, `POST /calibration/points` and
+`DELETE /calibration/points[/{id}]`.
+
+## OPC-UA
+
+The bridge to the WAGO PLC is **off by default**: switch it on under Settings →
+OPC-UA (or `POST /opc/enabled?enabled=true`). The setting is remembered across
+restarts, and RESTORE DEFAULTS leaves it alone. `--no-opcua` on the command line
+leaves the bridge out entirely.
+
 ## Versions
 
 The web UI shows what the box is running in the header badge, with details

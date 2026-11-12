@@ -1,5 +1,49 @@
 import csv
+import math
 import numpy as np
+
+
+# A root counts as real when its imaginary part is within this of zero, as
+# np.isclose(roots.imag, 0) decided it when the solves used np.roots.
+_REAL_ROOT_TOL = 1e-8
+
+
+def _real_quadratic_roots(a, b, c):
+    """Real roots of a*x^2 + b*x + c; a zero leading coefficient drops the degree."""
+    if a == 0:
+        return [] if b == 0 else [-c / b]
+    disc = b * b - 4 * a * c
+    if disc < 0:
+        # A near-double root, split off the real axis by rounding.
+        return [-b / (2 * a)] if math.sqrt(-disc) / (2 * abs(a)) <= _REAL_ROOT_TOL else []
+    q = -0.5 * (b + math.copysign(math.sqrt(disc), b))
+    if q == 0:
+        return [0.0, 0.0]
+    return [q / a, c / q]
+
+
+def real_cubic_roots(a, b, c, d, guess=0.0):
+    """Real roots of a*x^3 + b*x^2 + c*x + d, the ones np.roots would give, in
+    pure Python: Newton's method from `guess` finds one real root (a cubic
+    always has one), and the quadratic left after dividing it out gives the
+    others. np.roots takes the eigenvalues of the companion matrix, ~1.4 ms on
+    the Pitaya's A9; this is tens of microseconds. Leading zero coefficients
+    drop the degree, as np.roots does. Falls back to np.roots in the rare case
+    that Newton does not settle (it can cycle)."""
+    if a == 0:
+        return _real_quadratic_roots(b, c, d)
+    x = float(guess)
+    for _ in range(60):
+        slope = (3 * a * x + 2 * b) * x + c
+        if slope == 0:
+            break
+        step = (((a * x + b) * x + c) * x + d) / slope
+        x -= step
+        if abs(step) <= 1e-12 * max(1.0, abs(x)):
+            q = b + a * x
+            return [x] + _real_quadratic_roots(a, q, c + q * x)
+    roots = np.roots([a, b, c, d])
+    return [float(r.real) for r in roots if abs(r.imag) <= _REAL_ROOT_TOL]
 
 class TempCompAlgorithm:
     def __init__(self, coefficients, T_start, fT_start, fM_start,
@@ -49,13 +93,26 @@ class TempCompAlgorithm:
         through the crystal's calibrated mass sensitivity: Nq*rho_q = |ms| * f_v^2.
         Reduces to linear Sauerbrey for small loads and Z=1 (arctan(tan(x)) = x)."""
         Nq_rho_q = abs(self.mass_sensitivity) * self.f_virgin**2  # kg*Hz/m^2
-        x = np.pi * (self.f_virgin - f_loaded) / self.f_virgin
-        return (Nq_rho_q / (np.pi * self.z_ratio * f_loaded)) * np.arctan(self.z_ratio * np.tan(x))
+        x = math.pi * (self.f_virgin - f_loaded) / self.f_virgin
+        # math rather than numpy: four calls per sample, on scalars, where
+        # numpy's per-call overhead is most of the cost.
+        return (Nq_rho_q / (math.pi * self.z_ratio * f_loaded)) * math.atan(self.z_ratio * math.tan(x))
 
     def freq_to_thickness(self, f_from, f_to):
         """Film thickness [m] deposited while the (temperature-clean) mass-mode
         frequency moved from f_from to f_to, via the Z-match equation."""
         return (self._zmatch_areal_mass(f_to) - self._zmatch_areal_mass(f_from)) / self.mat_dens
+
+    def FreqToThickness(self, fM):
+        """Uncompensated thickness [nm] from the mass mode alone, for a run with
+        no temperature mode: the whole frequency shift since the start is taken
+        as film, so it is only as good as the crystal's temperature is steady.
+        None on failure, like FreqToTemp, so a bad sample cannot stop the loop."""
+        try:
+            return self.freq_to_thickness(self.fM_start, fM) * 1e9 * self.tooling_ratio
+        except Exception as e:
+            print(f"Error in FreqToThickness: {e}")
+            return None
         
         
          
@@ -93,23 +150,23 @@ class TempCompAlgorithm:
                 # d coefficient for the cubic equation a*T_dif^3 + b*T_dif^2 + c*T_dif + d = 0
                 d = self.fM_0*(fT_dif-fT_d) - self.fT_0*(fM_dif - fM_d)
 
-                # calculate the roots of the cubic equation
-                roots = np.roots([self.a, self.b, self.c, d])
-                real_roots = roots[np.isclose(roots.imag, 0)].real  # physical temperatures are real
+                # The real roots of the cubic (physical temperatures are real),
+                # searched from the last temperature.
+                real_roots = real_cubic_roots(self.a, self.b, self.c, d, guess=self._last_T)
 
                 # The cubic can have up to three real roots but only one is physical.
-                # np.roots returns them in no meaningful order, so pick the root closest
-                # to the last known temperature (T_start on the first sample). This keeps
-                # the solve on the correct, continuous branch instead of latching onto a
-                # spurious root, which would corrupt the temperature and the compensated
-                # thickness while leaving the uncompensated value untouched.
-                if real_roots.size == 0:
+                # Pick the root closest to the last known temperature (T_start on
+                # the first sample). This keeps the solve on the correct, continuous
+                # branch instead of latching onto a spurious root, which would
+                # corrupt the temperature and the compensated thickness while
+                # leaving the uncompensated value untouched.
+                if not real_roots:
                     # No real solution — frequencies inconsistent with the calibration.
                     # Hold the previous temperature rather than crash the running loop.
                     print("FreqToTemp: no real root; holding last temperature")
                     T = self._last_T
                 else:
-                    T = float(real_roots[np.argmin(np.abs(real_roots - self._last_T))])
+                    T = min(real_roots, key=lambda r: abs(r - self._last_T))
                 self._last_T = T
 
             # Calculate the compensated mass change using the found temperature
@@ -128,9 +185,59 @@ class TempCompAlgorithm:
         except Exception as e:
             print(f"Error in FreqToTemp: {e}")
             return None, None, None, None
-        
-        
-    
+
+
+# The crystal's absolute temperature is looked for in this range. Outside it the
+# calibration cubics have extrapolated too far to be believed, and the mass-free
+# combination below can turn over, giving a second root: for infi2439_SC_1 it
+# does near -12 degC.
+ABSOLUTE_T_RANGE = (-10.0, 120.0)
+
+
+def absolute_temperature(coefficients, fM, fT, near=25.0):
+    """The crystal's temperature (degC) from its two mode frequencies alone: no
+    T start, no thermometer. None when the frequencies do not give one.
+
+    FreqToTemp works from changes since the run start and needs T start for
+    that. The calibration fit, though, gives both modes' whole curves,
+    f(T) = f_0 + f_1*T + f_2*T^2 + f_3*T^3, so with the constants fM_0 and fT_0
+    the frequencies say the temperature by themselves.
+
+    fT alone would do on a clean crystal, but deposited film lowers fT too (by
+    about fT/fM times what it lowers fM), and 1 nm of gold would read 1-1.5 degC
+    hot. The combination fT - rho*fM is the mass-free one FreqToTemp solves, and
+    with rho = fT_0/fM_0:
+      - film shifts both modes in that ratio, so it cancels;
+      - the constants cancel by the choice of rho, leaving
+        fT - rho*fM = pT(T) - rho*pM(T), with pT, pM the cubics without constants;
+      - a reference-clock error scales both modes alike. That scales the
+        combination, which is only a few kHz, so it drops out as well.
+    What does not cancel is a shift of one mode alone: 1 Hz on fM moves the
+    answer by about 0.01 degC.
+
+    The constants have to come from a calibration of this crystal; the defaults
+    of a new profile describe a different one. near picks between roots if the
+    range holds more than one."""
+    try:
+        fM_0, fT_0 = float(coefficients["fM_0"]), float(coefficients["fT_0"])
+        fM, fT = float(fM), float(fT)
+    except (KeyError, TypeError, ValueError):
+        return None
+    if not (fM_0 > 0 and fT_0 > 0 and fM > 0 and fT > 0 and np.isfinite(fM) and np.isfinite(fT)):
+        return None
+    rho = fT_0 / fM_0
+    roots = real_cubic_roots(coefficients["fT_3"] - rho * coefficients["fM_3"],
+                             coefficients["fT_2"] - rho * coefficients["fM_2"],
+                             coefficients["fT_1"] - rho * coefficients["fM_1"],
+                             -(fT - rho * fM), guess=near)
+    lo, hi = ABSOLUTE_T_RANGE
+    T = [r for r in roots if lo <= r <= hi]
+    if not T:
+        return None
+    return float(min(T, key=lambda r: abs(r - near)))
+
+
+
 def calculateCoeffecients(calibration_file, coeffecient_file):
     # matplotlib is imported here rather than at the top of the module because
     # this is the only thing in src/ that needs it, and it is an interactive

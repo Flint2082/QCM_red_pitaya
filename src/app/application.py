@@ -41,6 +41,8 @@ class Application(threading.Thread):
         opc_status_queue:  queue.Queue | None = None,
         # Readings from the temperature worker (optional)
         temperature_queue: queue.Queue | None = None,
+        # Status of the TEC temperature loop (optional)
+        tec_queue: queue.Queue | None = None,
 
         system_state=None,
     ):
@@ -52,6 +54,7 @@ class Application(threading.Thread):
         self._event_queues:   list[queue.Queue] = [q for q in (api_event_queue,   opc_event_queue)   if q]
         self._opc_status_queue: queue.Queue | None = opc_status_queue
         self._temperature_queue: queue.Queue | None = temperature_queue
+        self._tec_queue: queue.Queue | None = tec_queue
         self.system_state = system_state
         self.running = True
 
@@ -103,19 +106,20 @@ class Application(threading.Thread):
         return did_work
 
     # --------------------------------------------------
-    # Inbound: temperature readings → forward to REST/WS clients
+    # Inbound: temperature readings and TEC status → forward to REST/WS clients
     # --------------------------------------------------
 
     def _process_temperatures(self) -> bool:
-        if self._temperature_queue is None:
-            return False
         did_work = False
-        try:
-            while True:
-                self._emit(self._temperature_queue.get_nowait())
-                did_work = True
-        except queue.Empty:
-            pass
+        for q in (self._temperature_queue, self._tec_queue):
+            if q is None:
+                continue
+            try:
+                while True:
+                    self._emit(q.get_nowait())
+                    did_work = True
+            except queue.Empty:
+                pass
         return did_work
 
     # --------------------------------------------------

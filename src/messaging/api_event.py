@@ -136,6 +136,12 @@ class CalibrationStatusEvent(ApiEvent):
     status: dict
 
 @dataclass
+class TecStatusEvent(ApiEvent):
+    """Every step of the TEC temperature loop, and once a second while it is
+    off. See workers/tec_worker.py for the fields."""
+    status: dict
+
+@dataclass
 class CalibrationPointsEvent(ApiEvent):
     """The calibration points and settings, after any change. `added` is the
     point just taken, when that is what changed them."""

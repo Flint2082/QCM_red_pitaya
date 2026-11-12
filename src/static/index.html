@@ -435,6 +435,18 @@ footer { height: 24px; background: var(--surface); border-top: 1px solid var(--b
       <span class="toolbar-label" title="How long both have to stay within the limits">HOLD</span>
       <div class="num-input-wrap"><input id="cal-hold" type="number" min="0" max="60" step="0.5" onchange="setCalSetting('hold_s', this.value * 60)"><span class="num-input-unit">min</span></div>
     </div>
+    <!-- TEC temperature loop on the Pitaya; its settings are under Settings → TEC Control. -->
+    <div class="toolbar">
+      <span class="toolbar-label">TEC</span>
+      <div class="status-pill idle" id="cal-tec-pill">—</div>
+      <label title="Drive the Peltier to hold the setpoint (Settings → TEC Control)" style="display:flex;align-items:center;gap:6px;font-family:'DM Mono',monospace;font-size:10px;color:var(--text-dim);cursor:pointer;user-select:none">
+        <input type="checkbox" id="cal-tec-on" onchange="setTecEnabled(this.checked)" style="accent-color:var(--blue)"> ON
+      </label>
+      <span class="toolbar-label" title="Temperature the TEC holds">SETPOINT</span>
+      <div class="num-input-wrap"><input id="cal-tec-setpoint" type="number" step="0.5" onkeydown="if (event.key === 'Enter') setTecSetpoint()"><span class="num-input-unit">°C</span></div>
+      <button class="btn btn-blue" onclick="setTecSetpoint()" title="Send the setpoint to the Pitaya (Enter does the same)">SET</button>
+      <span id="cal-tec-live" style="font-family:'DM Mono',monospace;font-size:10px;color:var(--text-dim)"></span>
+    </div>
     <div class="stat-bar">
       <div class="stat"><div class="stat-label">Mass Mode Freq</div><div class="stat-value" id="val-cal-fM" style="color:var(--green)">—</div><div class="stat-unit">Hz</div></div>
       <div class="stat"><div class="stat-label">Temp Mode Freq</div><div class="stat-value" id="val-cal-fT" style="color:var(--blue)">—</div><div class="stat-unit">Hz</div></div>
@@ -484,6 +496,7 @@ footer { height: 24px; background: var(--surface); border-top: 1px solid var(--b
         <div class="settings-nav-section">GENERAL</div>
         <div class="settings-nav-item active" onclick="switchSettings('meas',this)">Measurement</div>
         <div class="settings-nav-item" onclick="switchSettings('crystals',this)">Crystal</div>
+        <div class="settings-nav-item" onclick="switchSettings('tec',this)">TEC Control</div>
         <div class="settings-nav-section">SYSTEM</div>
         <div class="settings-nav-item" onclick="switchSettings('system',this)">System</div>
         <div class="settings-nav-item" onclick="switchSettings('opc',this)">OPC-UA</div>
@@ -718,6 +731,50 @@ footer { height: 24px; background: var(--surface); border-top: 1px solid var(--b
           </div>
         </div>
 
+        <!-- TEC CONTROL: the calibration Peltier's temperature loop, run on the
+             Pitaya (workers/tec_worker.py). The setpoint is on the CALIBRATE tab. -->
+        <div class="settings-panel" id="spanel-tec">
+          <div class="settings-section-title">CONTROL</div>
+          <div class="settings-group">
+            <div class="settings-row"><div><div class="settings-row-label">Temperature Control</div><div class="settings-row-desc">Drives the Peltier through the H-bridge to hold the setpoint set on the CALIBRATE tab. Takes effect at once, like the ON box there, rather than waiting for APPLY. Never remembered: after a restart of the service the TEC is always off. It also switches itself off when the feedback temperature (or the PT100, whatever the source) leaves the safety limits below, or when there has been no reading for a minute; a FAULT then says why, and switching it on again clears it</div></div><div></div><div style="display:flex;align-items:center;gap:6px"><select class="settings-input" id="s-tec-enabled" style="width:150px;text-align:left" onchange="setTecEnabled(this.value === '1')"><option value="0">Disabled</option><option value="1">Enabled</option></select></div></div>
+            <div class="settings-row"><div><div class="settings-row-label">Status</div><div class="settings-row-desc">What the loop is doing, the feedback temperature, the setpoint and the drive (positive heats)</div></div><div></div><div style="display:flex;align-items:center;gap:8px"><div class="status-pill idle" id="tec-pill">—</div><span id="tec-live" style="font-family:'DM Mono',monospace;font-size:11px;color:var(--text-dim)"></span></div></div>
+          </div>
+
+          <div class="settings-section-title">FEEDBACK</div>
+          <div class="settings-group">
+            <div class="settings-row"><div><div class="settings-row-label">Feedback Source</div><div class="settings-row-desc">The temperature the loop regulates. <b>PT100</b> sits on the holder and reads once a second. <b>Crystal</b> is the crystal's own temperature solved from its two locked modes with the active calibration: no lag behind the crystal, but it needs both modes locked and a profile calibrated on this crystal, so it is no use while calibrating a new one. Without a fault-free reading the drive drops to zero</div></div><div></div><div style="display:flex;align-items:center;gap:6px"><select class="settings-input" id="s-tec-source" style="width:150px;text-align:left"><option value="pt100">PT100</option><option value="thermocouple">Thermocouple</option><option value="cold_junction">Cold junction</option><option value="crystal">Crystal</option></select></div></div>
+          </div>
+
+          <div class="settings-section-title">PWM</div>
+          <div class="settings-group">
+            <div class="settings-row"><div><div class="settings-row-label">PWM Frequency</div><div class="settings-row-desc">Switching frequency of the bridge (FPGA register PWM_freq). The holder smooths the temperature at any of these; without an output filter the TEC losses are the same at any frequency, and a lower one has fewer edges to radiate toward the crystal. 100 Hz – 100 kHz</div></div><div></div><div style="display:flex;align-items:center;gap:6px"><input class="settings-input" type="number" id="s-tec-freq" value="1000" step="100" min="100" max="100000"><span class="settings-unit">Hz</span></div></div>
+            <div class="settings-row"><div><div class="settings-row-label">Maximum Drive</div><div class="settings-row-desc">Cap on the duty cycle either way. The bench supply's current limit is the hardware limit; this one is for a gentler loop. 0–100 %</div></div><div></div><div style="display:flex;align-items:center;gap:6px"><input class="settings-input" type="number" id="s-tec-max" value="100" step="5" min="0" max="100"><span class="settings-unit">%</span></div></div>
+            <div class="settings-row"><div><div class="settings-row-label">Heating Direction</div><div class="settings-row-desc">Which PWM_dir heats. It depends on how the TEC is wired and which face touches the holder: find it once with a small drive, watching which way the PT100 goes. The wrong way round the loop runs away, until it trips on a safety limit</div></div><div></div><div style="display:flex;align-items:center;gap:6px"><select class="settings-input" id="s-tec-heat-dir" style="width:150px;text-align:left"><option value="0">PWM_dir = 0</option><option value="1">PWM_dir = 1</option></select></div></div>
+          </div>
+
+          <div class="settings-section-title">PID</div>
+          <div class="settings-group">
+            <div class="settings-row"><div><div class="settings-row-label">Kp</div><div class="settings-row-desc">Proportional gain: drive per degree of error</div></div><div></div><div style="display:flex;align-items:center;gap:6px"><input class="settings-input" type="number" id="s-tec-kp" value="20" step="any" min="0"><span class="settings-unit">%/°C</span></div></div>
+            <div class="settings-row"><div><div class="settings-row-label">Ki</div><div class="settings-row-desc">Integral gain: drive added per second per degree of error. It stops growing while the drive is at its cap, so a long ramp does not wind it up</div></div><div></div><div style="display:flex;align-items:center;gap:6px"><input class="settings-input" type="number" id="s-tec-ki" value="0.2" step="any" min="0"><span class="settings-unit">%/(°C·s)</span></div></div>
+            <div class="settings-row"><div><div class="settings-row-label">Kd</div><div class="settings-row-desc">Derivative gain: drive per °C/s that the temperature moves. It acts on the temperature, not the error, so a new setpoint does not kick the drive, and it is smoothed over 5 s</div></div><div></div><div style="display:flex;align-items:center;gap:6px"><input class="settings-input" type="number" id="s-tec-kd" value="0" step="any" min="0"><span class="settings-unit">%·s/°C</span></div></div>
+          </div>
+
+          <div class="settings-section-title">SAFETY LIMITS</div>
+          <div class="settings-group">
+            <div class="settings-row"><div><div class="settings-row-label">Minimum Temperature</div><div class="settings-row-desc">Below this the loop switches itself off. The setpoint has to lie between the two limits</div></div><div></div><div style="display:flex;align-items:center;gap:6px"><input class="settings-input" type="number" id="s-tec-tmin" value="5" step="1"><span class="settings-unit">°C</span></div></div>
+            <div class="settings-row"><div><div class="settings-row-label">Maximum Temperature</div><div class="settings-row-desc">Above this the loop switches itself off, on the feedback temperature and, with another source, on the PT100 too. Keep it below the bimetal thermostat on the holder, which is what stops a runaway when the software cannot</div></div><div></div><div style="display:flex;align-items:center;gap:6px"><input class="settings-input" type="number" id="s-tec-tmax" value="75" step="1"><span class="settings-unit">°C</span></div></div>
+          </div>
+
+          <div class="settings-section-title">AUTOTUNE</div>
+          <div class="settings-group">
+            <div class="settings-row"><div><div class="settings-row-label">Relay Amplitude</div><div class="settings-row-desc">The autotune drives ± this much around the drive needed to hold the setpoint, switching each time the temperature crosses it, so the loop oscillates at its natural period. It measures the period and the swing, works out the gains, takes them and goes on holding the setpoint. Run it at a setpoint in the middle of the range you use, with the temperature already close to it; it takes four or more oscillations, often 20–60 min</div></div><div></div><div style="display:flex;align-items:center;gap:6px"><input class="settings-input" type="number" id="s-tec-at-amp" value="30" step="5" min="1" max="100"><span class="settings-unit">%</span></div></div>
+            <div class="settings-row"><div><div class="settings-row-label">Hysteresis</div><div class="settings-row-desc">How far past the setpoint the temperature has to go before the relay switches: comfortably above the sensor noise</div></div><div></div><div style="display:flex;align-items:center;gap:6px"><input class="settings-input" type="number" id="s-tec-at-hyst" value="0.1" step="0.05" min="0" max="5"><span class="settings-unit">°C</span></div></div>
+            <div class="settings-row"><div><div class="settings-row-label">Tuning Rule</div><div class="settings-row-desc">How the measured loop becomes gains. <b>Tyreus-Luyben</b> is gentle and robust, the usual choice for a thermal loop. <b>No overshoot</b> is slower still on the proportional gain. <b>Ziegler-Nichols</b> is fast and overshoots by about a quarter</div></div><div></div><div style="display:flex;align-items:center;gap:6px"><select class="settings-input" id="s-tec-at-rule" style="width:200px;text-align:left"><option value="tyreus_luyben">Tyreus-Luyben (gentle)</option><option value="no_overshoot">No overshoot</option><option value="ziegler_nichols">Ziegler-Nichols (fast)</option></select></div></div>
+            <div class="settings-row"><div><div class="settings-row-label">Autotune</div><div class="settings-row-desc">Progress of a test in progress, or the result of the last one</div></div><div></div><span id="tec-at-status" style="font-family:'DM Mono',monospace;font-size:11px;color:var(--text-dim);max-width:340px;text-align:right">—</span></div>
+          </div>
+          <button class="btn btn-blue" id="btn-tec-autotune" onclick="toggleTecAutotune()" style="margin-bottom:28px">START AUTOTUNE</button>
+        </div>
+
         <!-- NOTIFICATIONS -->
         <div class="settings-panel" id="spanel-notif">
           <div class="settings-section-title">NOTIFICATIONS</div>
@@ -794,6 +851,13 @@ footer { height: 24px; background: var(--surface); border-top: 1px solid var(--b
                 <div class="notif-desc">The CALIBRATE tab took a point by itself (set the next temperature), or the crystal has settled and is waiting for one</div>
               </div>
               <label class="toggle-switch"><input type="checkbox" id="notif-calPoint" checked onchange="setNotifOption('calPoint',this.checked)"><span class="toggle-slider"></span></label>
+            </div>
+            <div class="notif-row">
+              <div class="notif-row-info">
+                <div class="notif-label">TEC Switched Off</div>
+                <div class="notif-desc">The temperature loop tripped on a safety limit, a lost reading or an error, and the Peltier is no longer driven</div>
+              </div>
+              <label class="toggle-switch"><input type="checkbox" id="notif-tecFault" checked onchange="setNotifOption('tecFault',this.checked)"><span class="toggle-slider"></span></label>
             </div>
           </div>
           <button class="btn" onclick="testNotifSound()" style="margin-right:8px">TEST SOUND</button>
@@ -1930,6 +1994,7 @@ function connect() {
       if (ev.type === 'TemperatureEvent')   onTemperature(ev);
       if (ev.type === 'CalibrationPointsEvent') onCalibrationPoints(ev);
       if (ev.type === 'CalibrationStatusEvent') onCalibrationStatus(ev.status);
+      if (ev.type === 'TecStatusEvent')     onTecStatus(ev.status);
       if (ev.type === 'LockFailedEvent')    document.getElementById('modal-lock-failed').style.display = 'flex';
       if (ev.type === 'LockStatusEvent')    onLockStatus(ev);
       if (ev.type === 'StartFreqAutoUpdatedEvent') onStartFreqAutoUpdated(ev);
@@ -1957,7 +2022,7 @@ function showToast(msg, isError = false, isWarning = false) {
 // Preferences are per-browser (two operators on two laptops want their own), so
 // they persist to localStorage rather than to the instrument's settings.json.
 const NOTIF_STORE_KEY = 'qcm.notifications';
-const notifConfig = { enabled: false, sound: true, lockLost: true, sweepComplete: true, opcLost: true, wsLost: true, recFailed: true, storageReclaim: true, targetReached: true, calPoint: true };
+const notifConfig = { enabled: false, sound: true, lockLost: true, sweepComplete: true, opcLost: true, wsLost: true, recFailed: true, storageReclaim: true, targetReached: true, calPoint: true, tecFault: true };
 let _audioCtx = null;
 
 function setNotifOption(key, value) {
@@ -1984,7 +2049,8 @@ function loadNotifConfig() {
         lockLost: 'notif-lockLost', sweepComplete: 'notif-sweepComplete',
         targetReached: 'notif-targetReached', opcLost: 'notif-opcLost',
         wsLost: 'notif-wsLost', recFailed: 'notif-recFailed',
-        storageReclaim: 'notif-storageReclaim', calPoint: 'notif-calPoint' })) {
+        storageReclaim: 'notif-storageReclaim', calPoint: 'notif-calPoint',
+        tecFault: 'notif-tecFault' })) {
     const el = document.getElementById(id);
     if (el) el.checked = notifConfig[k];
   }
@@ -2055,6 +2121,11 @@ function playNotifSound(eventType) {
       playBeep(880, 0.2);
       playBeep(660, 0.35, 0.25, 0.24);
       break;
+    case 'tecFault':
+      // Low falling pair: the temperature loop has let go.
+      playBeep(440, 0.25);
+      playBeep(330, 0.4, 0.25, 0.3);
+      break;
   }
 }
 
@@ -2066,7 +2137,7 @@ function testNotifSound() {
 function sendNotif(title, body, eventType) {
   if (!notifConfig[eventType]) return;
   playNotifSound(eventType);
-  showToast(title, eventType === 'lockLost' || eventType === 'opcLost' || eventType === 'wsLost', false);
+  showToast(title, eventType === 'lockLost' || eventType === 'opcLost' || eventType === 'wsLost' || eventType === 'tecFault', false);
   if (notifConfig.enabled && 'Notification' in window && Notification.permission === 'granted') {
     try { new Notification(title, { body, silent: true }); } catch(e) {}
   }
@@ -2636,6 +2707,7 @@ async function loadInitialSettings() {
     document.getElementById('target-pill').style.display = _targetReached ? 'flex' : 'none';
   } catch(e) { /* older backend without the target endpoint */ }
   updateTargetStatus();
+  await loadTecSettings();
   snapshotBaseline();   // everything just loaded is the clean baseline
 }
 loadInitialSettings();
@@ -3165,6 +3237,163 @@ async function applyAllSettings() {
   // be in the form — and re-activated it — quietly overwriting a stored
   // calibration with a stale one.
   if (isDirty(CRYSTAL_SETTING_IDS)) await applyCrystal();
+  if (isDirty(TEC_SETTING_IDS)) await applyTecSettings();
+}
+
+// ---- TEC temperature loop (Settings → TEC Control, CALIBRATE tab) ----
+// The loop runs on the Pitaya (workers/tec_worker.py). Its settings go through
+// APPLY like the rest of the panel; ON/OFF, the setpoint and the autotune act at once.
+const TEC_FIELDS = {   // settings field -> /tec/settings parameter
+  's-tec-source': 'source', 's-tec-freq': 'pwm_freq', 's-tec-max': 'max_output',
+  's-tec-heat-dir': 'heat_dir', 's-tec-kp': 'kp', 's-tec-ki': 'ki', 's-tec-kd': 'kd',
+  's-tec-tmin': 't_min', 's-tec-tmax': 't_max',
+  's-tec-at-amp': 'at_amplitude', 's-tec-at-hyst': 'at_hysteresis', 's-tec-at-rule': 'at_rule',
+};
+const TEC_SETTING_IDS = Object.keys(TEC_FIELDS);
+const TEC_MODES = {   // mode -> [pill text, pill class]
+  off:      ['OFF',      'idle'],
+  pid:      ['HOLDING',  'running'],
+  autotune: ['AUTOTUNE', 'sweeping'],
+  fault:    ['FAULT',    'error'],
+};
+let _tec = null;               // latest TecStatusEvent status
+let _tecSetpointShown = null;  // what the SETPOINT box was last filled with
+
+async function loadTecSettings() {
+  try {
+    const r = await fetch(`${API_URL}/tec`);
+    if (!r.ok) return;   // a backend without TEC control
+    const d = await r.json();
+    for (const [id, key] of Object.entries(TEC_FIELDS)) {
+      const el = document.getElementById(id);
+      if (el && d.settings[key] != null) el.value = d.settings[key];
+    }
+    onTecStatus(d.status);
+  } catch(e) { /* backend not reachable yet */ }
+}
+
+async function applyTecSettings() {
+  const params = [];
+  for (const [id, key] of Object.entries(TEC_FIELDS)) {
+    const v = fieldValue(id);
+    const el = document.getElementById(id);
+    if (el.tagName === 'INPUT' && isNaN(parseFloat(v))) {
+      const label = el.closest('.settings-row').querySelector('.settings-row-label');
+      throw new Error(`TEC ${label ? label.textContent : key} must be a number`);
+    }
+    params.push(`${key}=${encodeURIComponent(v)}`);
+  }
+  await postOrThrow(`${API_URL}/tec/settings?${params.join('&')}`);
+}
+
+async function setTecEnabled(on) {
+  try {
+    await postOrThrow(`${API_URL}/tec/enabled?enabled=${on}`);
+    showToast(on ? `TEC on — holding ${_tec ? _tec.setpoint : '?'} °C` : 'TEC off');
+  } catch(e) {
+    showToast(`TEC not switched ${on ? 'on' : 'off'} — ${e.message || e}`, true);
+    if (_tec) onTecStatus(_tec);   // put the switches back
+  }
+}
+
+async function setTecSetpoint() {
+  const v = parseFloat(fieldValue('cal-tec-setpoint'));
+  if (isNaN(v)) { showToast('Enter a setpoint temperature', true); return; }
+  try {
+    await postOrThrow(`${API_URL}/tec/settings?setpoint=${v}`);
+    _tecSetpointShown = String(v);
+    showToast(`TEC setpoint ${v} °C` + (_tec && _tec.enabled ? '' : ' — switch the TEC on to go there'));
+  } catch(e) { showToast(`Setpoint not set — ${e.message || e}`, true); }
+}
+
+async function toggleTecAutotune() {
+  if (_tec && _tec.mode === 'autotune') {
+    try { await postOrThrow(`${API_URL}/tec/autotune/abort`); }
+    catch(e) { showToast(`Autotune not stopped — ${e.message || e}`, true); }
+    return;
+  }
+  if (isDirty(TEC_SETTING_IDS)) { showToast('APPLY the TEC changes first: the autotune runs on the applied settings', true); return; }
+  const sp = _tec ? _tec.setpoint : '?';
+  if (!confirm(`Autotune the TEC loop at ${sp} °C?\n\n`
+             + `The Peltier is switched on and driven ±${fieldValue('s-tec-at-amp')} % each time the temperature `
+             + `crosses the setpoint, until the oscillation repeats itself, typically 20–60 min. The gains it `
+             + `finds replace the current ones, and the loop then goes on holding ${sp} °C.\n\n`
+             + `Change the setpoint on the CALIBRATE tab first if this is not mid-range.`)) return;
+  try { await postOrThrow(`${API_URL}/tec/autotune/start`); }
+  catch(e) { showToast(`Autotune not started — ${e.message || e}`, true); }
+}
+
+function onTecStatus(st) {
+  if (!st) return;
+  const prev = _tec;
+  _tec = st;
+  let [text, cls] = TEC_MODES[st.mode] || [String(st.mode).toUpperCase(), 'idle'];
+  if (!st.available) { text = 'N/A'; cls = 'idle'; }
+  for (const id of ['tec-pill', 'cal-tec-pill']) {
+    const pill = document.getElementById(id);
+    pill.className = 'status-pill ' + cls;
+    pill.textContent = text;
+  }
+
+  let live;
+  if (!st.available) live = st.reason || 'not available';
+  else {
+    const t = st.temperature == null ? '—' : `${st.temperature.toFixed(2)} °C`;
+    live = `${st.source_name} ${t} · set ${st.setpoint.toFixed(2)} °C · drive ${st.output >= 0 ? '+' : ''}${st.output.toFixed(1)} %`;
+    const note = st.fault || st.message || (st.temperature == null ? st.reading_problem : null) || st.save_error;
+    if (note) live += ` · ${note}`;
+  }
+  for (const id of ['tec-live', 'cal-tec-live']) {
+    const el = document.getElementById(id);
+    el.textContent = live;
+    el.style.color = st.mode === 'fault' ? 'var(--red)' : '';
+  }
+
+  const on = document.getElementById('cal-tec-on');
+  on.checked = !!st.enabled;
+  on.disabled = !st.available;
+  const sel = document.getElementById('s-tec-enabled');
+  sel.value = st.enabled ? '1' : '0';
+  sel.disabled = !st.available;
+
+  // The SETPOINT box follows the Pitaya unless it is being edited.
+  const spIn = document.getElementById('cal-tec-setpoint');
+  if (spIn !== document.activeElement && (spIn.value === '' || spIn.value === _tecSetpointShown)) {
+    spIn.value = st.setpoint;
+    _tecSetpointShown = spIn.value;
+  }
+
+  const btn = document.getElementById('btn-tec-autotune');
+  btn.textContent = st.mode === 'autotune' ? 'ABORT AUTOTUNE' : 'START AUTOTUNE';
+  btn.className = 'btn ' + (st.mode === 'autotune' ? 'btn-orange' : 'btn-blue');
+  btn.disabled = !st.available;
+  let at = '—';
+  const a = st.autotune, lt = st.last_tune;
+  if (a) {
+    at = `${a.phase}, cycle ${a.cycles}/${a.needed}+ · ${Math.round(a.elapsed / 60)} min`
+       + (a.period != null ? ` · period ${Math.round(a.period)} s` : '')
+       + (a.amplitude != null ? ` · swing ±${a.amplitude.toFixed(2)} °C` : '')
+       + ` · bias ${a.bias >= 0 ? '+' : ''}${a.bias.toFixed(1)} %`;
+  } else if (lt) {
+    at = `last: Ku ${lt.ku.toPrecision(3)} %/°C, Tu ${Math.round(lt.tu)} s → Kp ${lt.kp.toPrecision(3)}, `
+       + `Ki ${lt.ki.toPrecision(3)}, Kd ${lt.kd.toPrecision(3)}`;
+  }
+  setText('tec-at-status', at);
+
+  // A finished autotune has written new gains: show them, unless the form is mid-edit.
+  if (prev && prev.mode === 'autotune' && st.mode === 'pid') {
+    const msg = st.message || 'Autotune finished';
+    showToast(msg, msg.indexOf('autotune stopped') === 0);
+    if (!isDirty(TEC_SETTING_IDS)) {
+      loadTecSettings().then(() => {
+        for (const id of TEC_SETTING_IDS) _baseline[id] = fieldValue(id);
+        updateDirtyState();
+      });
+    }
+  }
+  if (st.mode === 'fault' && !(prev && prev.mode === 'fault')) {
+    sendNotif('QCM — TEC switched off', st.fault || 'temperature loop fault', 'tecFault');
+  }
 }
 
 // ---- Dirty-state tracking for the unified APPLY / UNDO buttons ----
@@ -3187,6 +3416,7 @@ const SETTING_IDS = [
   's-freq-track', 's-freq-track-interval', 's-output-mode',
   's-prune-runs', 's-trim-run',
   ...CRYSTAL_SETTING_IDS,
+  ...TEC_SETTING_IDS,
 ];
 let _baseline = {};            // last applied / loaded values
 let _baselineReady = false;

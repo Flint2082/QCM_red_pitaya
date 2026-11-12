@@ -304,7 +304,7 @@ class ConnectionManager:
 
 class RestServer:
     def __init__(self, api_command_queue: queue.Queue, api_event_queue: queue.Queue,
-                 wago_client=None, opc_worker=None, version=None):
+                 wago_client=None, opc_worker=None, version=None, tec=None):
         self.command_queue = api_command_queue
         self.event_queue = api_event_queue
         self._wago_client = wago_client  # optional reference for live reconfiguration
@@ -316,6 +316,10 @@ class RestServer:
         # link to a coater that does rely on it.
         self._opc_enabled: bool = False
         self._version = version  # domain.version.VersionInfo, served by GET /version
+        # TEC temperature loop (workers/tec_worker.py), or None. It keeps its own
+        # settings in data/tec.json, outside DEFAULT_SETTINGS: its gains are
+        # tuned to this rig, so RESTORE DEFAULTS leaves them alone.
+        self._tec = tec
         self.manager = ConnectionManager()
         self._thread: threading.Thread | None = None
         self._loop: asyncio.AbstractEventLoop | None = None
@@ -783,6 +787,8 @@ class RestServer:
                 msg = self._serialise_event(event)
                 if msg.get("type") in ("TelemetryEvent", "MeasurementEvent"):
                     msg["crystal_temp"] = self._crystal_temp(msg)
+                    if self._tec:
+                        self._tec.feed_crystal(msg.get("timestamp"), msg["crystal_temp"])
                 self._calibration_feed(msg)
 
                 if msg.get("type") == "StateEvent":
@@ -1681,6 +1687,65 @@ class RestServer:
             self._calibration.clear()
             self._queue_calibration_points()
             return {"status": "ok"}
+
+        # ---- TEC temperature control (Settings -> TEC, CALIBRATE tab) ----
+        # The loop runs in workers/tec_worker.py; every step is also pushed to
+        # all clients as a TecStatusEvent.
+
+        def _tec():
+            if self._tec is None:
+                raise HTTPException(503, "TEC control not available")
+            return self._tec
+
+        @app.get("/tec")
+        def get_tec():
+            """Settings, live status, and the sources, tuning rules and limits
+            the settings can take."""
+            return _tec().contents()
+
+        @app.post("/tec/settings")
+        def set_tec_settings(pwm_freq: float | None = None, kp: float | None = None,
+                             ki: float | None = None, kd: float | None = None,
+                             source: str | None = None, max_output: float | None = None,
+                             heat_dir: int | None = None, setpoint: float | None = None,
+                             t_min: float | None = None, t_max: float | None = None,
+                             at_amplitude: float | None = None, at_hysteresis: float | None = None,
+                             at_rule: str | None = None):
+            """Change any of the settings; the ones not given stay as they are.
+            Takes effect from the loop's next step and is saved at once."""
+            try:
+                return _tec().update_settings(
+                    pwm_freq=pwm_freq, kp=kp, ki=ki, kd=kd, source=source, max_output=max_output,
+                    heat_dir=heat_dir, setpoint=setpoint, t_min=t_min, t_max=t_max,
+                    at_amplitude=at_amplitude, at_hysteresis=at_hysteresis, at_rule=at_rule)
+            except ValueError as e:
+                raise HTTPException(400, str(e))
+
+        @app.post("/tec/enabled")
+        def set_tec_enabled(enabled: bool):
+            """Switch the loop on (it then holds the setpoint) or off (bridge
+            open). Not remembered: after a restart the TEC is always off."""
+            try:
+                _tec().set_enabled(enabled)
+            except RuntimeError as e:
+                raise HTTPException(409, str(e))
+            return _tec().status()
+
+        @app.post("/tec/autotune/start")
+        def start_tec_autotune():
+            """Relay-test the loop at the current setpoint and take the gains it
+            gives. Switches the loop on."""
+            try:
+                _tec().start_autotune()
+            except RuntimeError as e:
+                raise HTTPException(409, str(e))
+            return _tec().status()
+
+        @app.post("/tec/autotune/abort")
+        def abort_tec_autotune():
+            """Stop an autotune and go on holding the setpoint on the old gains."""
+            _tec().abort_autotune()
+            return _tec().status()
 
         # ---- OPC-UA connection management ----
 

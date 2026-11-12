@@ -232,6 +232,69 @@ first. The same is available at `GET /calibration`,
 `POST /calibration/settings`, `POST /calibration/points` and
 `DELETE /calibration/points[/{id}]`.
 
+## TEC temperature control
+
+The calibration Peltier can be driven by the Pitaya itself, through an H-bridge
+(an X-NUCLEO-IHM04A1) on E1 pins that the FPGA switches with a PWM. A PID loop
+on the Pitaya ([`workers/tec_worker.py`](workers/tec_worker.py), logic in
+[`domain/tec_controller.py`](domain/tec_controller.py)) holds a setpoint on a
+feedback temperature, by default the PT100. The setpoint and an ON box are on
+the **CALIBRATE** tab; everything else is under **Settings → TEC Control**.
+
+The software sets four registers:
+
+| register | meaning |
+|---|---|
+| `PWM_en` | 1 = drive the bridge, 0 = everything off |
+| `PWM_freq` | 27 bits: step of a 27-bit phase accumulator at 125 MHz, so f = `PWM_freq` · 125 MHz / 2^27, 0.93 Hz per unit (1 kHz = 1074) |
+| `PWM_thresh` | 27 bits: duty × 2^27; the output is high while the accumulator is below it |
+| `PWM_dir` | which way the current runs; **Heating Direction** says which value heats |
+
+`pwm_words()` in `domain/tec_controller.py` is the one place that turns a
+frequency and a duty cycle into those words. Full drive is written as
+2^27 − 1: the register is 27 bits wide, so 2^27 would wrap to 0 and full drive
+would come out as none. A bitstream without the registers shows the TEC as
+unavailable and refuses to switch it on.
+
+**Safety.** The loop is off after every start of the service, whatever it was
+doing before. It switches itself off, and shows FAULT with the reason, when the
+feedback temperature leaves the safety limits (default 5–75 °C), when the PT100
+does with another source, after a minute without a usable reading, or on an
+error in the loop; ON clears it. Without a reading for 5 s the drive goes to
+zero until one comes back. Stopping the service switches the bridge off.
+**The bitstream has no watchdog**: if the process dies without switching off,
+the FPGA keeps the last drive, and the bimetal thermostat on the holder is then
+what stops a runaway. A watchdog in the FPGA that drops `PWM_en` when the
+registers have not been written for a few seconds would close that gap.
+
+**Feedback sources:** an LTC2986 sensor (PT100 by default, read once a second),
+or the crystal's own absolute temperature from its two locked modes (T start
+from the crystal, above), which follows the crystal without the PT100's lag but
+needs a calibrated profile and both modes locked.
+
+**PID.** Gains are in % of drive: Kp per °C, Ki per °C·s, Kd per °C/s. The
+derivative acts on the temperature rather than the error (a new setpoint does
+not kick the drive) and is smoothed over 5 s; the integral stops growing while
+the drive is at its cap.
+
+**Autotune** (relay method, Åström–Hägglund). The drive switches between
+bias ± the relay amplitude each time the temperature crosses the setpoint by
+more than the hysteresis, so the loop oscillates at its natural period Tu; the
+swing gives the ultimate gain Ku, and the chosen rule (Tyreus–Luyben by
+default) turns those into gains, which replace the old ones. Started away from
+the setpoint it first gets there on the PID and takes the PID's integral as the
+bias; the bias is also nudged when one side of the relay cannot reach the
+setpoint, and evened out after every cycle so heating and cooling take equally
+long. It needs four or more agreeing cycles, so 20–60 min on a real holder, and
+gives up after 12 cycles, 3 h, or an hour without the relay switching. Run it
+at a setpoint mid-range.
+
+The settings are kept in `data/tec.json`, apart from DEFAULT_SETTINGS: the
+gains belong to this rig, so RESTORE DEFAULTS leaves them alone. The same is
+available at `GET /tec`, `POST /tec/settings`, `POST /tec/enabled`,
+`POST /tec/autotune/start` and `/abort`; every step of the loop is pushed to
+the browsers as a `TecStatusEvent`.
+
 ## OPC-UA
 
 The bridge to the WAGO PLC is **off by default**: switch it on under Settings →

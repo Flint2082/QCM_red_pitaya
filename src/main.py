@@ -9,6 +9,7 @@ from domain.qcm_interface import QCMInterface
 from domain.version import VersionInfo
 from workers.qcm_worker import QCMWorker
 from workers.temperature_worker import TemperatureWorker
+from workers.tec_worker import TECWorker
 from app.application import Application
 from api.server import RestServer
 from plc.wago_client import WagoClient
@@ -51,6 +52,13 @@ def build_system(enable_opcua: bool = True):
     temperature_queue = queue.Queue()
     temperature_worker = TemperatureWorker(event_queue=temperature_queue)
 
+    # Temperature loop of the calibration Peltier, through the FPGA's PWM
+    # registers; see workers/tec_worker.py. Off until switched on, whatever it
+    # was doing before the restart.
+    tec_queue = queue.Queue()
+    tec_worker = TECWorker(fpga=fpga, event_queue=tec_queue,
+                           temperatures=lambda: temperature_worker.latest)
+
     qcm_worker = QCMWorker(
         qcm=qcm,
         command_queue=worker_command_queue,
@@ -89,6 +97,7 @@ def build_system(enable_opcua: bool = True):
         opc_event_queue=opc_event_queue,
         opc_status_queue=opc_status_queue,
         temperature_queue=temperature_queue,
+        tec_queue=tec_queue,
     )
 
     rest_server = RestServer(
@@ -97,6 +106,7 @@ def build_system(enable_opcua: bool = True):
         wago_client=wago if enable_opcua else None,
         opc_worker=opc_worker,
         version=version,
+        tec=tec_worker,
     )
     # OPC-triggered actions take their parameters from the REST settings.
     if opc_worker:
@@ -109,6 +119,7 @@ def build_system(enable_opcua: bool = True):
         version=version,
         qcm_worker=qcm_worker,
         temperature_worker=temperature_worker,
+        tec_worker=tec_worker,
         application=application,
         rest_server=rest_server,
         worker_command_queue=worker_command_queue,
@@ -119,6 +130,7 @@ def build_system(enable_opcua: bool = True):
         opc_event_queue=opc_event_queue,
         opc_status_queue=opc_status_queue,
         temperature_queue=temperature_queue,
+        tec_queue=tec_queue,
     )
     if opc_worker:
         system["opc_worker"] = opc_worker
@@ -148,6 +160,7 @@ def run_normal(system: dict):
 
     system["qcm_worker"].start()
     system["temperature_worker"].start()
+    system["tec_worker"].start()
     system["application"].start()
     if "opc_worker" in system:
         system["opc_worker"].start()
@@ -170,6 +183,9 @@ def run_normal(system: dict):
         # Stop the REST server first — prevents new WebSocket/HTTP connections
         # while the rest of the system is shutting down
         system["rest_server"].stop()
+        # The TEC first: it switches the bridge off on its way out.
+        system["tec_worker"].stop()
+        system["tec_worker"].join()
         if "opc_worker" in system:
             system["opc_worker"].stop()
             system["opc_worker"].join()

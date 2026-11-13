@@ -317,21 +317,72 @@ the FPGA keeps the last drive, and the bimetal thermostat on the holder is then
 what stops a runaway. A watchdog in the FPGA that drops `PWM_en` when the
 registers have not been written for a few seconds would close that gap.
 
-**Feedback sources:** an LTC2986 sensor (PT100 by default, read once a second),
-or the crystal's own absolute temperature from its two locked modes (T start
-from the crystal, above), which follows the crystal without the PT100's lag but
-needs a calibrated profile and both modes locked.
+**Feedback sources:**
+- An LTC2986 sensor: the PT100 by default, read once a second.
+- The crystal's own absolute temperature from its two locked modes (T start
+  from the crystal, above). It follows the crystal without the PT100's lag, but
+  needs a calibrated profile and both modes locked.
+- **PT100 + crystal**, which combines the two.
 
-**PID.** Gains are in % of drive: Kp per °C, Ki per °C·s, Kd per °C/s. The
-derivative acts on the temperature rather than the error (a new setpoint does
-not kick the drive) and is smoothed over 5 s; the integral stops growing while
-the drive is at its cap.
+**PT100 + crystal** (`Fusion` in `domain/tec_controller.py`). The loop
+regulates on the crystal's temperature plus an offset: PT100 − crystal,
+averaged over the **Averaging Time** (default 900 s).
+- **Slower than that, the PT100 decides.** It ends up at the setpoint and
+  stays the reference for every calibration point.
+- **Faster, the loop follows the crystal.** The crystal reads ten times a
+  second with next to no noise, runs ahead of the PT100 (it sits closer to the
+  Peltier), and feels what the PT100 never sees, such as heat lost to the air.
+- **Only the crystal's changes count, never its absolute reading.** So the
+  calibration being made does not decide the temperature: a profile that is
+  off only scales the short-term corrections by its slope error.
+- **The PT100's lag is allowed for.** The PT100 is compared with the crystal
+  delayed by the **PT100 Delay** (default 20 s; measured 12 s at 45 °C and
+  24 s at 65 °C on the infi2439 holder), so its lag during a ramp is not taken
+  for a change in the offset.
+
+The crystal is dropped and the loop runs on the PT100 alone when:
+- either mode is unlocked;
+- the crystal reading jumps by more than 0.5 °C between two samples (a mode
+  hop or a false lock);
+- it reads more than 5 °C from the PT100.
+
+The PT100 alone then uses the ordinary PID gains. The crystal is used again
+after 30 s of steady readings (three PT100 Delays, if longer). The offset is
+worked out afresh over that wait: the delay filter starts at once, and the
+average starts after two delays. The average starts as a running mean whose
+span grows to the Averaging Time, so a rejoin in the middle of a ramp washes
+out within minutes. PT100 + crystal
+has gains of its own (`fused_kp`/`ki`/`kd`): an autotune on this source sets
+those and leaves the PT100 ones alone. Settings saved before it existed start
+it from the PT100 gains. An autotune on PT100 + crystal is refused while the
+crystal is not in use, and fails if the crystal drops out during it.
+
+Why combine them (13 Nov 2026 calibration, on the PT100 alone):
+- The crystal wandered ±20–40 mK while the PT100 looked flat.
+- About half of that wander never reached the PT100, more the hotter the
+  holder (8 mK rms at 45 °C, 17 mK at 65 °C).
+- A crude model of the holder predicts the crystal's wander drops from about
+  18 to 6 mK rms with both sensors.
+
+**PID.** Gains are in % of drive: Kp per °C, Ki per °C·s, Kd per °C/s.
+- The derivative acts on the temperature rather than the error, so a new
+  setpoint does not kick the drive, and it is smoothed over 5 s.
+- The integral stops growing while the drive is at its cap.
+- The integral only moves within the **Integral Band** of the setpoint
+  (default 1 °C; 0 = everywhere), or outside it when the temperature has
+  stalled short of the setpoint. Stalled means it would not get there within
+  one integral time Kp/Ki at its current pace. On the way to a new setpoint the
+  integral holds the drive that held the last one, instead of piling up the
+  error of the whole approach and overshooting by it. The stall rule matters
+  from a cold start: Kp alone can settle further from the setpoint than the
+  band.
 
 **Autotune** (relay method, Åström–Hägglund). The drive switches between
 bias ± the relay amplitude each time the temperature crosses the setpoint by
 more than the hysteresis, so the loop oscillates at its natural period Tu; the
 swing gives the ultimate gain Ku, and the chosen rule (Tyreus–Luyben by
-default) turns those into gains, which replace the old ones. Started away from
+default) turns those into gains, which replace the old ones (on PT100 + crystal,
+its own). Started away from
 the setpoint it first gets there on the PID and takes the PID's integral as the
 bias; the bias is also nudged when one side of the relay cannot reach the
 setpoint, and evened out after every cycle so heating and cooling take equally

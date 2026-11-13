@@ -1806,14 +1806,23 @@ class RestServer:
                              heat_dir: int | None = None, setpoint: float | None = None,
                              t_min: float | None = None, t_max: float | None = None,
                              at_amplitude: float | None = None, at_hysteresis: float | None = None,
-                             at_rule: str | None = None):
+                             at_rule: str | None = None, i_band: float | None = None,
+                             fused_kp: float | None = None, fused_ki: float | None = None,
+                             fused_kd: float | None = None, fuse_tau_s: float | None = None,
+                             fuse_lag_s: float | None = None):
             """Change any of the settings; the ones not given stay as they are.
-            Takes effect from the loop's next step and is saved at once."""
+            Takes effect from the loop's next step and is saved at once.
+            fused_kp/ki/kd are the gains on the PT100 + crystal source, which
+            keeps kp/ki/kd for when the crystal drops out; fuse_tau_s is how
+            long it averages PT100 - crystal over, fuse_lag_s how far the PT100
+            lags the crystal."""
             try:
                 return _tec().update_settings(
                     pwm_freq=pwm_freq, kp=kp, ki=ki, kd=kd, source=source, max_output=max_output,
                     heat_dir=heat_dir, setpoint=setpoint, t_min=t_min, t_max=t_max,
-                    at_amplitude=at_amplitude, at_hysteresis=at_hysteresis, at_rule=at_rule)
+                    at_amplitude=at_amplitude, at_hysteresis=at_hysteresis, at_rule=at_rule,
+                    i_band=i_band, fused_kp=fused_kp, fused_ki=fused_ki, fused_kd=fused_kd,
+                    fuse_tau_s=fuse_tau_s, fuse_lag_s=fuse_lag_s)
             except ValueError as e:
                 raise HTTPException(400, str(e))
 

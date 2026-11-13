@@ -16,9 +16,10 @@ those words. PWM_thresh being 27 bits wide, full drive is 2^27 - 1: 2^27 itself
 would wrap to 0 and turn full drive into none.
 
 This module is the logic: the settings and their limits, a PID controller on a
-temperature reading, and a relay autotuner that measures the loop and proposes
-gains. workers/tec_worker.py runs it: it reads the thermometer, steps the
-controller and writes the registers.
+temperature reading, the PT100 + crystal combination it can regulate on, and a
+relay autotuner that measures the loop and proposes gains.
+workers/tec_worker.py runs it: it reads the thermometers, steps the controller
+and writes the registers.
 
 The controller works in percent of full drive, positive = heating. Which
 PWM_dir heats depends on how the TEC is wired and which face is on the holder;
@@ -43,10 +44,10 @@ SETTINGS_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "
 REGISTERS = ("PWM_en", "PWM_freq", "PWM_thresh", "PWM_dir")
 PHASE_BITS = 27   # width of the PWM's phase accumulator, PWM_freq and PWM_thresh
 
-# What the loop can regulate on: an LTC2986 sensor, or the crystal's own
-# absolute temperature from its two locked modes (see absolute_temperature in
-# processing/TempCompAlgorithm.py).
-SOURCES = {**{s.key: s.name for s in SENSORS}, "crystal": "Crystal"}
+# What the loop can regulate on: an LTC2986 sensor, the crystal's own absolute
+# temperature from its two locked modes (see absolute_temperature in
+# processing/TempCompAlgorithm.py), or the two combined (see Fusion).
+SOURCES = {**{s.key: s.name for s in SENSORS}, "crystal": "Crystal", "fused": "PT100 + crystal"}
 
 # Tuning rules for the relay autotuner, as multiples of the ultimate gain Ku and
 # the ultimate period Tu: Kp = a·Ku, Ti = b·Tu, Td = c·Tu.
@@ -68,6 +69,12 @@ LIMITS = {
     "t_max":         (-20.0, 100.0),       # °C
     "at_amplitude":  (1.0, 100.0),         # %
     "at_hysteresis": (0.0, 5.0),           # °C
+    "i_band":        (0.0, 100.0),         # °C, 0 = no band
+    "fused_kp":      (0.0, 1000.0),        # as kp, ki and kd
+    "fused_ki":      (0.0, 100.0),
+    "fused_kd":      (0.0, 100_000.0),
+    "fuse_tau_s":    (30.0, 7200.0),       # s
+    "fuse_lag_s":    (0.0, 300.0),         # s
 }
 
 
@@ -86,6 +93,27 @@ class Settings:
     at_amplitude: float = 30.0      # %, relay step of the autotuner
     at_hysteresis: float = 0.1      # °C, relay hysteresis: above the sensor noise
     at_rule: str = "tyreus_luyben"  # a key of RULES
+    i_band: float = 1.0             # °C: the integral only moves this close to the setpoint (0 = always)
+    # PT100 + crystal: its own gains (kp, ki and kd above stay for the single
+    # sensors, and for the PT100 alone when the crystal drops out), how long
+    # the PT100 - crystal offset is averaged over, and how far the PT100 lags
+    # the crystal.
+    fused_kp: float = 20.0
+    fused_ki: float = 0.2
+    fused_kd: float = 0.0
+    fuse_tau_s: float = 900.0       # s
+    fuse_lag_s: float = 20.0        # s
+
+
+GAINS = ("kp", "ki", "kd")
+
+
+def with_gains(s: Settings, fused: bool) -> Settings:
+    """s with the gains the loop runs on: the PT100 + crystal ones while the
+    crystal is in use, the single-sensor ones otherwise."""
+    if not fused:
+        return s
+    return Settings(**{**asdict(s), **{k: getattr(s, "fused_" + k) for k in GAINS}})
 
 
 def validated(current: dict, changes: dict) -> dict:
@@ -140,6 +168,11 @@ def load_settings(path: str = SETTINGS_FILE) -> Settings:
                 settings = validated(settings, {key: value})
             except (TypeError, ValueError) as e:
                 print(f"[TEC] Ignoring saved setting {key}={value!r}: {e}")
+    # Settings from before PT100 + crystal: start its gains from the tuned
+    # single-sensor ones rather than the defaults.
+    for k in GAINS:
+        if "fused_" + k not in saved:
+            settings["fused_" + k] = settings[k]
     return Settings(**settings)
 
 
@@ -177,7 +210,10 @@ class PID:
     not the error, so a setpoint change does not kick the output, and it is
     low-pass filtered. The integral stops growing while the output is saturated
     in the direction it would push (conditional integration), so it does not
-    wind up during a long ramp."""
+    wind up during a long ramp. It also only moves within i_band of the
+    setpoint, or where the temperature has stalled short of it: on the way to
+    a new setpoint it holds the drive that held the last one, rather than
+    piling up the error of the whole approach and overshooting by it."""
 
     D_FILTER_S = 5.0   # time constant of the low-pass on the derivative, s
 
@@ -204,13 +240,138 @@ class PID:
         umax = s.max_output
         self.p = s.kp * e
         self.d = -s.kd * self._slope
-        i = _clamp(self.i + s.ki * e * dt, -umax, umax)
+        i = _clamp(self.i + (s.ki * e * dt if self._integrates(s, e) else 0.0), -umax, umax)
         u = self.p + i + self.d
         if (u > umax and e > 0) or (u < -umax and e < 0):
             i = _clamp(self.i, -umax, umax)
             u = self.p + i + self.d
         self.i = i
         return _clamp(u, -umax, umax)
+
+    def _integrates(self, s: Settings, e: float) -> bool:
+        """Whether the integral moves this step: within i_band of the setpoint,
+        or outside it while the temperature has stalled short of the setpoint,
+        heading there too slowly to arrive within one integral time Kp/Ki. The
+        proportional term alone settles short of the setpoint, by more than the
+        band when the drive held at the last setpoint is far off, and the
+        integral then has to carry it in."""
+        if s.i_band <= 0 or abs(e) <= s.i_band or s.ki <= 0 or s.kp <= 0:
+            return True
+        toward = self._slope if e > 0 else -self._slope   # °C/s towards the setpoint
+        return toward * (s.kp / s.ki) < abs(e)
+
+
+class Fusion:
+    """The PT100 + crystal feedback: the PT100 says where the temperature is,
+    the crystal how it moves.
+
+    The loop is fed crystal + offset, the offset being PT100 - crystal averaged
+    over fuse_tau_s. Slower than that the PT100 decides: the offset makes the
+    two agree on average, so the PT100 ends up at the setpoint. Faster, the loop
+    follows the crystal, which reads ten times a second with next to no noise,
+    leads the PT100 (it sits closer to the Peltier), and feels what the PT100
+    never sees, such as the heat it loses to the air around it. Only the
+    crystal's changes count, never its absolute reading, so a calibration that
+    is off, or one still being made, only scales the short-term corrections by
+    the error in its slope.
+
+    The PT100 is compared with the crystal passed through a first-order lag of
+    fuse_lag_s, standing in for the PT100's own lag: during a ramp the PT100
+    running behind is then not taken for a change in the offset.
+
+    A crystal reading is not trusted when it jumps by more than JUMP_C between
+    two samples (a mode hop or a false lock moves it by degrees at once; a real
+    temperature cannot), or when it is more than APART_C from the PT100. It is
+    then dropped until it has read steadily, with neither, for REJOIN_S (or
+    three PT100 delays, if longer), and meanwhile the loop runs on the PT100
+    alone. The offset is worked out afresh over that wait (see _filter).
+    """
+
+    JUMP_C = 0.5      # °C between two crystal samples
+    APART_C = 5.0     # °C between the crystal and the PT100
+    REJOIN_S = 30.0   # s of steady crystal readings before it is used again
+
+    def __init__(self):
+        self.reset()
+
+    def reset(self):
+        self.offset: float | None = None    # PT100 - lagged crystal, averaged; None while not in use
+        self.dropped: str | None = "waiting for a steady crystal reading"   # None while in use
+        self.crystal: float | None = None   # the newest crystal reading taken in
+        self._lagged: float | None = None   # the crystal through the PT100's lag
+        self._estimate: float | None = None # the running PT100 - lagged crystal average
+        self._t: float | None = None        # timestamp the filters last stepped to
+        self._last: tuple[float, float] | None = None   # (timestamp, °C) of the newest crystal sample
+        self._steady_since: float | None = None
+        self._out: tuple[float, float] | None = None    # the newest fused (timestamp, °C)
+
+    @property
+    def in_use(self) -> bool:
+        return self.dropped is None
+
+    def update(self, s: Settings, p_ts: float, p: float, c_ts: float | None, c: float | None,
+               problem: str | None = None) -> tuple[float, float]:
+        """(timestamp, °C) for the loop from the newest PT100 reading (p, taken
+        at p_ts) and crystal reading (c at c_ts; None when there is no current
+        one, with `problem` saying why): the crystal plus the offset while the
+        crystal is in use, the PT100 otherwise. The same crystal sample again
+        changes nothing."""
+        if c is None or c_ts is None:
+            self._drop(problem or "no crystal temperature")
+            return p_ts, p
+        if self._last is not None and c_ts == self._last[0]:
+            return self._out if self.in_use else (p_ts, p)
+        prev, self._last, self.crystal = self._last, (c_ts, c), c
+        if prev is not None and abs(c - prev[1]) > self.JUMP_C:
+            self._drop(f"the crystal reading jumped {c - prev[1]:+.2f} °C (mode hop or false lock?)")
+            return p_ts, p
+        if abs(c - p) > self.APART_C:
+            self._drop(f"the crystal reads {c - p:+.1f} °C from the PT100 (wrong mode?)")
+            return p_ts, p
+        if self._steady_since is None:
+            # The first sample of a steady stretch: the filters start here.
+            self._steady_since = self._t = c_ts
+            self._lagged = c
+            self._estimate = None
+        else:
+            self._filter(s, c_ts, p, c)
+        if not self.in_use:
+            wait = max(self.REJOIN_S, 3 * s.fuse_lag_s)
+            if c_ts - self._steady_since < wait or self._estimate is None:
+                self.dropped = (f"crystal steady for {c_ts - self._steady_since:.0f} of "
+                                f"{wait:g} s before it is used")
+                return p_ts, p
+            self.dropped = None
+        self.offset = self._estimate
+        self._out = (c_ts, c + self.offset)
+        return self._out
+
+    def _filter(self, s: Settings, ts: float, p: float, c: float):
+        """Step the lag on the crystal and the average of PT100 - lagged crystal.
+        The average only starts once the lag has had 2·fuse_lag_s to catch up,
+        and then as a running mean whose span grows to fuse_tau_s: a start in
+        the middle of a ramp, with the lag not quite matched, washes out within
+        minutes instead of lingering for the whole averaging time."""
+        dt = max(ts - self._t, 0.0)
+        self._t = ts
+        self._lagged = c if s.fuse_lag_s <= 0 else self._lagged + dt / (dt + s.fuse_lag_s) * (c - self._lagged)
+        since = ts - self._steady_since - 2 * s.fuse_lag_s
+        if since < 0:
+            return
+        if self._estimate is None:
+            self._estimate = p - self._lagged
+            return
+        span = min(s.fuse_tau_s, max(since, dt))
+        self._estimate += dt / (dt + span) * (p - self._lagged - self._estimate)
+
+    def _drop(self, reason: str):
+        self.dropped = reason
+        self.offset = None
+        self._steady_since = None
+
+    def status(self) -> dict:
+        return {"in_use": self.in_use, "dropped": self.dropped, "offset": self.offset,
+                "crystal": self.crystal}
 
 
 class RelayAutotune:

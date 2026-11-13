@@ -2,7 +2,9 @@
 #
 # running the calibration Peltier's temperature loop (domain/tec_controller.py)
 # reading the feedback temperature: an LTC2986 sensor from the temperature
-#   worker, or the crystal's own temperature fed in by the server
+#   worker, the crystal's own temperature fed in by the server, or the PT100
+#   and the crystal combined (domain/tec_controller.Fusion), which falls back
+#   to the PT100 alone, on its own gains, whenever the crystal drops out
 # writing the FPGA's PWM registers
 # switching the TEC off on a limit, a lost reading, an error or a shutdown
 # reporting every step as a TecStatusEvent
@@ -20,8 +22,9 @@ import time
 import traceback
 from dataclasses import asdict
 
-from domain.tec_controller import (LIMITS, PID, REGISTERS, RULES, SETTINGS_FILE, SOURCES, RelayAutotune,
-                                   Settings, load_settings, pwm_words, save_settings, validated)
+from domain.tec_controller import (GAINS, LIMITS, PID, REGISTERS, RULES, SETTINGS_FILE, SOURCES, Fusion,
+                                   RelayAutotune, Settings, load_settings, pwm_words, save_settings,
+                                   validated, with_gains)
 from messaging.api_event import TecStatusEvent
 
 
@@ -59,6 +62,8 @@ class TECWorker(threading.Thread):
         self._tune: RelayAutotune | None = None
         self.last_tune: dict | None = None
         self._crystal: tuple[float | None, float | None] = (None, None)   # (timestamp, °C)
+        self._fusion = Fusion()
+        self._fused = False                      # the crystal was in use at the last reading
         self._last_ts: float | None = None       # timestamp of the reading last stepped on
         self._last_good: float = time.time()     # when a usable reading last came in
         self._reading = (None, None, "no reading yet")   # (timestamp, °C, problem)
@@ -95,7 +100,8 @@ class TECWorker(threading.Thread):
 
     def _tick(self, now: float):
         ts, pv, problem = self._reading = self._read(now)
-        fresh = (pv is not None and ts != self._last_ts
+        self._watch_fusion()
+        fresh =(pv is not None and ts != self._last_ts
                  and (self._last_ts is None or ts - self._last_ts >= self.MIN_STEP_S))
         if fresh:
             self._last_good = now
@@ -114,10 +120,35 @@ class TECWorker(threading.Thread):
         if now - self._last_publish >= self.IDLE_PUBLISH_S:
             self._publish(now)
 
+    def _watch_fusion(self):
+        """React to the crystal joining or leaving the PT100 + crystal feedback."""
+        fused = self.settings.source == "fused" and self._fusion.in_use
+        if fused == self._fused:
+            return
+        self._fused = fused
+        # The reading switches between crystal + offset and the PT100 alone, and
+        # the gains with it: start the derivative afresh rather than take the
+        # switch for a step. The integral, being drive, carries straight on.
+        self._pid.forget_measurement()
+        if fused or self.settings.source != "fused":
+            if fused:
+                print(f"[TEC] Crystal in use: PT100 - crystal {self._fusion.offset:+.3f} °C")
+            if self.message and self.message.startswith("crystal dropped"):
+                self.message = None
+            return
+        why = self._fusion.dropped
+        print(f"[TEC] Crystal dropped ({why}): on the PT100 alone")
+        if self.mode == "autotune":
+            # The relay measures the loop it runs on; half on another one is void.
+            self._tune.error = f"the crystal dropped out ({why})"
+            self._tune_failed()
+        elif self.mode == "pid":
+            self.message = f"crystal dropped: {why}; on the PT100 alone"
+
     def _step(self, ts: float, pv: float, now: float):
         dt = min(ts - self._last_ts, self.MAX_DT) if self._last_ts is not None else 0.0
         self._last_ts = ts
-        s = self.settings
+        s = with_gains(self.settings, self._fused)
         over = self._over_limit(pv)
         if over:
             self._trip(over)
@@ -169,15 +200,19 @@ class TECWorker(threading.Thread):
         s = self.settings
         # Three significant figures: the measurement is not good to more, and
         # the settings form stays readable.
-        gains = {k: float(f"{min(max(r[k], LIMITS[k][0]), LIMITS[k][1]):.3g}") for k in ("kp", "ki", "kd")}
-        self.settings = Settings(**{**asdict(s), **gains})
+        gains = {k: float(f"{min(max(r[k], LIMITS[k][0]), LIMITS[k][1]):.3g}") for k in GAINS}
+        # On PT100 + crystal the test measured that loop: its own gains, and
+        # the single-sensor ones stay for when the crystal drops out.
+        prefix = "fused_" if s.source == "fused" else ""
+        self.settings = Settings(**{**asdict(s), **{prefix + k: v for k, v in gains.items()}})
         self.save_error = save_settings(self.settings, self._settings_path)
-        self.last_tune = {**r, **gains, "finished": time.time()}
+        self.last_tune = {**r, **gains, "source": s.source, "finished": time.time()}
         self._pid.reset(integral=r["bias"])
         self._tune = None
         self.mode = "pid"
         self.message = (f"autotune done: Ku {r['ku']:.3g} %/°C, Tu {r['tu']:.0f} s -> "
-                        f"Kp {gains['kp']:.3g}, Ki {gains['ki']:.3g}, Kd {gains['kd']:.3g}")
+                        f"Kp {gains['kp']:.3g}, Ki {gains['ki']:.3g}, Kd {gains['kd']:.3g}"
+                        + (" (PT100 + crystal gains)" if prefix else ""))
         print(f"[TEC] {self.message}")
 
     # ==================================================
@@ -186,6 +221,22 @@ class TECWorker(threading.Thread):
 
     def _read(self, now: float) -> tuple[float | None, float | None, str | None]:
         """(timestamp, °C, None) for the selected source, or (None, None, why not)."""
+        if self.settings.source == "fused":
+            # The PT100 is required; the crystal only while it is current and
+            # trusted, and the PT100 alone stands in otherwise.
+            p_ts, p, p_problem = self._sensor("pt100", now)
+            if p is None:
+                return None, None, f"PT100: {p_problem}"
+            c_ts, c = self._crystal
+            problem = None
+            if c is None or c_ts is None:
+                problem = "crystal temperature not solved (both modes locked?)"
+            elif now - c_ts > self.CRYSTAL_MAX_AGE:
+                problem = "no current crystal temperature"
+            if problem:
+                c_ts = c = None
+            ts, temp = self._fusion.update(self.settings, p_ts, p, c_ts, c, problem)
+            return ts, temp, None
         if self.settings.source == "crystal":
             ts, temp = self._crystal
             if temp is None or ts is None:
@@ -266,6 +317,10 @@ class TECWorker(threading.Thread):
             "temperature": pv, "reading_problem": problem,
             "setpoint": s.setpoint, "output": self.output,
             "p": self._pid.p, "i": self._pid.i, "d": self._pid.d,
+            # PT100 + crystal: whether the crystal is in use (and why not), the
+            # averaged PT100 - crystal and the newest crystal reading.
+            "fusion": self._fusion.status() if s.source == "fused" else None,
+            "gains": "fused" if self._fused else "single",
             "registers": dict(self._written),
             "autotune": self._tune.progress(now) if self._tune else None,
             "last_tune": self.last_tune,
@@ -299,6 +354,7 @@ class TECWorker(threading.Thread):
             updated = validated(asdict(self.settings), changes)
             if updated["source"] != self.settings.source:
                 self._pid.forget_measurement()   # the new reading is not a step in the old one
+                self._fusion.reset()             # PT100 + crystal starts over when chosen again
             self.settings = Settings(**updated)
             self.save_error = save_settings(self.settings, self._settings_path)
             if self.mode in ("pid", "autotune") and self.output != 0:
@@ -338,6 +394,9 @@ class TECWorker(threading.Thread):
                 raise RuntimeError(f"no feedback temperature: {problem}")
             if self.mode == "autotune":
                 return
+            if self.settings.source == "fused" and not self._fusion.in_use:
+                raise RuntimeError(f"the crystal is not in use yet ({self._fusion.dropped}): "
+                                   f"PT100 + crystal can only be tuned with it")
             if self.mode != "pid":
                 self._pid.reset()
                 self._last_ts = None

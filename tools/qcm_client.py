@@ -52,10 +52,23 @@ class QCMClient:
     def get_lock(self):
         return self._post("/measurement/get_lock")
 
-    def start_measurement(self, ambient_temp: float = 23.0, mat_dens: float = 19320.0, z_ratio: float = 1.0):
-        return self._post("/measurement/start", ambient_temp=ambient_temp, mat_dens=mat_dens, z_ratio=z_ratio)
+    def start_measurement(self, ambient_temp: float = 23.0, mat_dens: float = 19320.0, z_ratio: float = 1.0,
+                          zero: bool = True):
+        """Start a run log. The instrument measures whenever the mass mode is
+        locked; this opens the log and, with zero (the default, as a start used
+        to), zeroes the thickness first."""
+        return self._post("/measurement/start", ambient_temp=ambient_temp, mat_dens=mat_dens, z_ratio=z_ratio,
+                          zero=str(zero).lower())
+
+    def zero(self, ambient_temp: float | None = None, mat_dens: float | None = None, z_ratio: float | None = None):
+        """Zero the thickness here, without touching the run log. Parameters
+        left out keep the instrument's stored ones."""
+        params = {k: v for k, v in (("ambient_temp", ambient_temp), ("mat_dens", mat_dens),
+                                    ("z_ratio", z_ratio)) if v is not None}
+        return self._post("/measurement/zero", **params)
 
     def stop_measurement(self):
+        """Close the run log; the measurement carries on."""
         return self._post("/measurement/stop")
 
     def state(self) -> str:

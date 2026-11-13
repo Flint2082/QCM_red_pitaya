@@ -196,8 +196,9 @@ All methods are on `QCMClient`. Frequencies are in Hz unless noted.
 | method | endpoint | notes |
 |--------|----------|-------|
 | `get_lock()` | `POST /measurement/get_lock` | lock both PLLs at the active crystal's frequencies |
-| `start_measurement(ambient_temp, mat_dens=19320.0, z_ratio=1.0)` | `POST /measurement/start` | `ambient_temp` required; `mat_dens` kg/m³ |
-| `stop_measurement()` | `POST /measurement/stop` | |
+| `start_measurement(ambient_temp, mat_dens=19320.0, z_ratio=1.0, zero=True)` | `POST /measurement/start` | opens the run log; `zero` zeroes the thickness first, as a start always did. The instrument measures whether or not a log is open |
+| `zero(ambient_temp=None, mat_dens=None, z_ratio=None)` | `POST /measurement/zero` | thickness back to 0 without touching the log; parameters left out keep the stored ones |
+| `stop_measurement()` | `POST /measurement/stop` | closes the run log; the measurement carries on |
 | `state()` | `GET /state` | returns the state string |
 | `set_target_thickness(value)` | `POST /settings/target_thickness` | nm; 0 = no target |
 | `target()` | `GET /measurement/target` | current target + whether it has been reached |

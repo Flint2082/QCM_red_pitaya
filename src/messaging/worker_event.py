@@ -17,6 +17,7 @@ class ErrorEvent(Event):
 @dataclass
 class StateEvent(Event):
     state: WorkerState
+    recording: bool = False   # the run log is open (START/STOP)
 
 @dataclass
 class SweepPointEvent(Event):
@@ -95,6 +96,16 @@ class StorageReclaimedEvent(Event):
 @dataclass
 class RunLogFailedEvent(Event):
     reason: str  # why the run is not being recorded (disk full, write error, ...)
+
+@dataclass
+class ZeroEvent(Event):
+    """A new thickness reference: the thickness reads 0 from here. auto: taken
+    by the worker after a lock, before any ZERO; compensated: the temp mode was
+    locked, so the thickness is temperature-compensated from this reference."""
+    auto: bool
+    compensated: bool
+    t_start: float
+    t_source: str
 
 @dataclass
 class TargetReachedEvent(Event):

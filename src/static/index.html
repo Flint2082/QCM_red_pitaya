@@ -274,7 +274,8 @@ footer { height: 24px; background: var(--surface); border-top: 1px solid var(--b
       </div>
       <div class="toolbar-sep"></div>
       <button class="btn btn-orange btn-get-lock" onclick="sendCommand('lock')"><svg viewBox="0 0 12 12"><path d="M6 1a3 3 0 0 0-3 3v1H2v6h8V5H9V4a3 3 0 0 0-3-3zm0 1.5a1.5 1.5 0 0 1 1.5 1.5v1h-3V4A1.5 1.5 0 0 1 6 2.5z"/></svg>GET LOCK</button>
-      <button class="btn btn-green" id="btn-start-stop" onclick="toggleStartStop()"><svg viewBox="0 0 12 12"><polygon points="3,2 10,6 3,10"/></svg>START</button>
+      <button class="btn btn-zero" id="btn-zero-1" onclick="sendCommand('zero')" disabled title="Zero the thickness here: a new reference, with T start from the T Start Source and the film parameters in Settings. Needs the mass mode locked; compensated when the temp mode is locked too"><svg viewBox="0 0 12 12"><path d="M6 1.5a4.5 4.5 0 1 0 0 9 4.5 4.5 0 0 0 0-9zm0 1.6a2.9 2.9 0 1 1 0 5.8 2.9 2.9 0 0 1 0-5.8z"/></svg>ZERO</button>
+      <button class="btn btn-green" id="btn-start-stop" onclick="toggleStartStop()" title="Open the run log; the measurement itself runs whenever the mass mode is locked"><svg viewBox="0 0 12 12"><circle cx="6" cy="6" r="3.5"/></svg>START LOG</button>
       <div class="header-spacer"></div>
       <button class="btn" onclick="clearCharts()">CLEAR</button>
     </div>
@@ -316,7 +317,8 @@ footer { height: 24px; background: var(--surface); border-top: 1px solid var(--b
       </div>
       <div class="toolbar-sep"></div>
       <button class="btn btn-orange btn-get-lock" onclick="sendCommand('lock')"><svg viewBox="0 0 12 12"><path d="M6 1a3 3 0 0 0-3 3v1H2v6h8V5H9V4a3 3 0 0 0-3-3zm0 1.5a1.5 1.5 0 0 1 1.5 1.5v1h-3V4A1.5 1.5 0 0 1 6 2.5z"/></svg>GET LOCK</button>
-      <button class="btn btn-green" id="btn-start-stop-2" onclick="toggleStartStop()"><svg viewBox="0 0 12 12"><polygon points="3,2 10,6 3,10"/></svg>START</button>
+      <button class="btn btn-zero" id="btn-zero-2" onclick="sendCommand('zero')" disabled title="Zero the thickness here: a new reference, with T start from the T Start Source and the film parameters in Settings. Needs the mass mode locked; compensated when the temp mode is locked too"><svg viewBox="0 0 12 12"><path d="M6 1.5a4.5 4.5 0 1 0 0 9 4.5 4.5 0 0 0 0-9zm0 1.6a2.9 2.9 0 1 1 0 5.8 2.9 2.9 0 0 1 0-5.8z"/></svg>ZERO</button>
+      <button class="btn btn-green" id="btn-start-stop-2" onclick="toggleStartStop()" title="Open the run log; the measurement itself runs whenever the mass mode is locked"><svg viewBox="0 0 12 12"><circle cx="6" cy="6" r="3.5"/></svg>START LOG</button>
       <div class="header-spacer"></div>
       <button class="btn" onclick="clearCharts()">CLEAR</button>
     </div>
@@ -407,7 +409,8 @@ footer { height: 24px; background: var(--surface); border-top: 1px solid var(--b
   <div class="tab-panel" id="panel-calibrate">
     <div class="toolbar">
       <button class="btn btn-orange btn-get-lock" onclick="sendCommand('lock')"><svg viewBox="0 0 12 12"><path d="M6 1a3 3 0 0 0-3 3v1H2v6h8V5H9V4a3 3 0 0 0-3-3zm0 1.5a1.5 1.5 0 0 1 1.5 1.5v1h-3V4A1.5 1.5 0 0 1 6 2.5z"/></svg>GET LOCK</button>
-      <button class="btn btn-green" id="btn-start-stop-3" onclick="toggleStartStop()"><svg viewBox="0 0 12 12"><polygon points="3,2 10,6 3,10"/></svg>START</button>
+      <button class="btn btn-zero" id="btn-zero-3" onclick="sendCommand('zero')" disabled title="Zero the thickness here: a new reference, with T start from the T Start Source and the film parameters in Settings. Needs the mass mode locked; compensated when the temp mode is locked too"><svg viewBox="0 0 12 12"><path d="M6 1.5a4.5 4.5 0 1 0 0 9 4.5 4.5 0 0 0 0-9zm0 1.6a2.9 2.9 0 1 1 0 5.8 2.9 2.9 0 0 1 0-5.8z"/></svg>ZERO</button>
+      <button class="btn btn-green" id="btn-start-stop-3" onclick="toggleStartStop()" title="Open the run log; the measurement itself runs whenever the mass mode is locked"><svg viewBox="0 0 12 12"><circle cx="6" cy="6" r="3.5"/></svg>START LOG</button>
       <div class="toolbar-sep"></div>
       <span class="toolbar-label">TEMP</span>
       <select id="cal-temp-source" onchange="onCalTempSource()" title="Where ADD POINT takes the temperature from: typed in, or the latest reading of an LTC2986 sensor (TEMP SENSORS tab)" style="background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);color:var(--text);font-family:'DM Mono',monospace;font-size:11px;padding:0 8px;height:26px;outline:none;">
@@ -530,7 +533,7 @@ footer { height: 24px; background: var(--surface); border-top: 1px solid var(--b
         <div class="settings-panel active" id="spanel-meas">
           <div class="settings-section-title">MODE</div>
           <div class="settings-group">
-            <div class="settings-row"><div><div class="settings-row-label">Measurement Mode</div><div class="settings-row-desc"><b>Compensated</b> locks both modes and solves the crystal temperature from the temp mode, so the thickness is corrected for it. <b>Uncompensated</b> locks the mass mode only — GET LOCK parks the temp oscillator at 0 Hz — and reports the plain thickness from the mass-mode shift, with no temperature: every frequency change is taken as film, so it is only as good as the crystal's temperature is steady. For a crystal with no usable temp mode or no calibration. GET LOCK uses the new mode straight away; a run in progress keeps the mode it was started in. Either mode is also parked by setting its lock frequency to 0 Hz</div></div><div></div><div style="display:flex;align-items:center;gap:6px"><select class="settings-input" id="s-meas-mode" style="width:150px;text-align:left"><option value="compensated">Compensated</option><option value="uncompensated">Uncompensated</option></select></div></div>
+            <div class="settings-row"><div><div class="settings-row-label">Measurement Mode</div><div class="settings-row-desc"><b>Compensated</b> locks both modes and solves the crystal temperature from the temp mode, so the thickness is corrected for it. <b>Uncompensated</b> locks the mass mode only — GET LOCK parks the temp oscillator at 0 Hz — and reports the plain thickness from the mass-mode shift, with no temperature: every frequency change is taken as film, so it is only as good as the crystal's temperature is steady. For a crystal with no usable temp mode or no calibration. GET LOCK uses the new mode straight away. Switched to Uncompensated, the thickness is the uncompensated one from the current reference at once; back to Compensated, GET LOCK (to lock the temp mode) and ZERO for a compensated reference. Either mode is also parked by setting its lock frequency to 0 Hz</div></div><div></div><div style="display:flex;align-items:center;gap:6px"><select class="settings-input" id="s-meas-mode" style="width:150px;text-align:left"><option value="compensated">Compensated</option><option value="uncompensated">Uncompensated</option></select></div></div>
           </div>
 
           <div class="settings-section-title">MATERIAL PROPERTIES</div>
@@ -541,7 +544,7 @@ footer { height: 24px; background: var(--surface); border-top: 1px solid var(--b
 
           <div class="settings-section-title">TEMPERATURE</div>
           <div class="settings-group">
-            <div class="settings-row"><div><div class="settings-row-label">T Start Source</div><div class="settings-row-desc">Where a run's starting reference temperature comes from, read the moment the run starts (from the GUI or the PLC). Crystal solves it from the two locked modes with the active crystal's calibration, constants fM_0/fT_0 included, so it needs a profile calibrated on this crystal. A thermometer is read directly. Without a current reading the run starts from Ambient Temperature instead and the run log says so</div></div><div></div><div style="display:flex;align-items:center;gap:6px"><span id="s-tstart-live" style="font-family:'DM Mono',monospace;font-size:11px;color:var(--text-dim)"></span><select class="settings-input" id="s-tstart-source" onchange="updateTStartLive()" style="width:150px;text-align:left"><option value="manual">Manual</option><option value="crystal">Crystal</option><option value="pt100">PT100</option><option value="thermocouple">Thermocouple</option><option value="cold_junction">Cold junction</option></select></div></div>
+            <div class="settings-row"><div><div class="settings-row-label">T Start Source</div><div class="settings-row-desc">Where the thickness reference's temperature (T start) comes from, read the moment the reference is taken: at ZERO, at the PLC's start, and after a lock before any ZERO. Crystal solves it from the two locked modes with the active crystal's calibration, constants fM_0/fT_0 included, so it needs a profile calibrated on this crystal. A thermometer is read directly. Without a current reading T start is Ambient Temperature instead, and the log says so</div></div><div></div><div style="display:flex;align-items:center;gap:6px"><span id="s-tstart-live" style="font-family:'DM Mono',monospace;font-size:11px;color:var(--text-dim)"></span><select class="settings-input" id="s-tstart-source" onchange="updateTStartLive()" style="width:150px;text-align:left"><option value="manual">Manual</option><option value="crystal">Crystal</option><option value="pt100">PT100</option><option value="thermocouple">Thermocouple</option><option value="cold_junction">Cold junction</option></select></div></div>
             <div class="settings-row"><div><div class="settings-row-label">Ambient Temperature</div><div class="settings-row-desc">Starting reference temperature when T Start Source is Manual, and the fallback for the other sources</div></div><div></div><div style="display:flex;align-items:center;gap:6px"><input class="settings-input" type="number" id="s-amb-temp" value="23" step="0.5"><span class="settings-unit">°C</span></div></div>
           </div>
 
@@ -1065,7 +1068,8 @@ let _prevOpcConnected = null;
 let _prevWsConnected = false;
 let _isRunning = false;       // true while state === RUNNING (drops during a mid-run re-lock)
 let _runActive = false;       // true for the whole run, spanning RUNNING -> LOCKING -> RUNNING re-locks
-let _startRequested = false;  // set when the user presses START, consumed on the next RUNNING transition
+let _startRequested = false;  // set when the user presses START LOG, consumed on the next RUNNING transition
+let _measuring = false;       // the sensor is measuring (a lock and a reference), logged or not
 let _sweepRunning = false;
 let _runPoints = 0;  // measurement points received this run (drives the download button + row count)
 let _runStartFm = null;  // first mass-mode freq of the current run — virgin reference when Virgin Freq is 0
@@ -2048,7 +2052,8 @@ function connect() {
       const ev = JSON.parse(msg.data);
       if (ev.type === 'MeasurementEvent')   onMeasurement(ev);
       if (ev.type === 'TelemetryEvent')     onTelemetry(ev);
-      if (ev.type === 'StateEvent')         onStateChange(ev.state);
+      if (ev.type === 'StateEvent')         onStateChange(ev.state, !!ev.measuring);
+      if (ev.type === 'ZeroEvent')          onZero(ev);
       if (ev.type === 'SweepPointEvent')    onSweepPoint(ev);
       if (ev.type === 'SweepCompleteEvent') onSweepComplete(ev);
       if (ev.type === 'CapAdjustEvent')     onCapAdjust(ev);
@@ -2849,6 +2854,8 @@ function setCapAmp(id, amp, gain) {
   el.style.color = `hsl(${(120 * (1 - a)).toFixed(0)}, 70%, 55%)`;
 }
 
+// START LOG / STOP LOG open and close the run log; the sensor measures either
+// way. A log can start once there is something to log (a lock and a reference).
 function updateStartStopBtns(state) {
   const ids = ['btn-start-stop', 'btn-start-stop-2', 'btn-start-stop-3'];
   ids.forEach(id => {
@@ -2856,17 +2863,16 @@ function updateStartStopBtns(state) {
     if (!btn) return;
     if (state === 'RUNNING') {
       btn.className = 'btn btn-red';
-      btn.innerHTML = '<svg viewBox="0 0 12 12"><rect x="2.5" y="2.5" width="7" height="7"/></svg>STOP';
-      btn.disabled = false;
-    } else if (state === 'IDLE') {
-      btn.className = 'btn btn-green';
-      btn.innerHTML = '<svg viewBox="0 0 12 12"><polygon points="3,2 10,6 3,10"/></svg>START';
+      btn.innerHTML = '<svg viewBox="0 0 12 12"><rect x="2.5" y="2.5" width="7" height="7"/></svg>STOP LOG';
       btn.disabled = false;
     } else {
-      btn.className = 'btn';
-      btn.innerHTML = '<svg viewBox="0 0 12 12"><polygon points="3,2 10,6 3,10"/></svg>START';
-      btn.disabled = true;
+      btn.className = state === 'IDLE' && _measuring ? 'btn btn-green' : 'btn';
+      btn.innerHTML = '<svg viewBox="0 0 12 12"><circle cx="6" cy="6" r="3.5"/></svg>START LOG';
+      btn.disabled = !(state === 'IDLE' && _measuring);
     }
+  });
+  document.querySelectorAll('.btn-zero').forEach(btn => {
+    btn.disabled = !(_measuring && (state === 'IDLE' || state === 'RUNNING'));
   });
 }
 
@@ -2900,17 +2906,21 @@ function setLockBtnState(locking) {
   });
 }
 
-function onStateChange(state) {
+function onStateChange(state, measuring) {
+  _measuring = !!measuring;
+  // RUNNING is a run being logged; IDLE while measuring is the sensor running
+  // without a log.
+  const label = state === 'RUNNING' ? 'LOGGING' : (state === 'IDLE' && _measuring ? 'MEASURING' : state);
   const pill = document.getElementById('status-pill');
-  pill.className = 'status-pill ' + state.toLowerCase();
-  document.getElementById('state-label').textContent = state.toUpperCase();
+  pill.className = 'status-pill ' + (label === 'MEASURING' ? 'sweeping' : state.toLowerCase());
+  document.getElementById('state-label').textContent = label;
 
   const wasRunning = _isRunning;
   _isRunning = state === 'RUNNING';
 
-  // Nothing is being compensated outside a run, so a hold marker left over from
-  // the last sample of the previous run would be claiming something untrue.
-  if (!_isRunning) setTempHeld(false);
+  // Nothing is being compensated without a measurement, so a hold marker left
+  // over from the last sample would be claiming something untrue.
+  if (!_measuring) setTempHeld(false);
 
   // Sweep button: ABORT while sweeping, disabled while running, RUN SWEEP otherwise
   const sweepBtn = document.getElementById('btn-sweep-toggle');
@@ -2962,27 +2972,25 @@ function toggleStartStop() {
   const btn = document.getElementById('btn-start-stop');
   if (btn && btn.classList.contains('btn-red')) {
     sendCommand('stop');
+  } else if (!_measuring) {
+    showToast('Nothing is being measured yet: GET LOCK first', true);
   } else {
-    // An uncompensated run needs the mass mode alone.
-    const needTemp = _measMode !== 'uncompensated';
-    if (!lockMass || (needTemp && !lockTemp)) {
-      const status = (locked, parked) => locked ? '✓ LOCKED' : (parked ? '✗ PARKED' : '✗ UNLOCKED');
-      document.getElementById('confirm-mass-status').textContent = status(lockMass, _parked.mass);
-      document.getElementById('confirm-temp-status').textContent = needTemp
-        ? status(lockTemp, _parked.temp) : '— not used (uncompensated)';
-      document.getElementById('confirm-mass-status').style.color = lockMass ? 'var(--green)' : 'var(--red)';
-      document.getElementById('confirm-temp-status').style.color = !needTemp ? 'var(--text-dim)'
-        : (lockTemp ? 'var(--green)' : 'var(--red)');
-      document.getElementById('modal-confirm-start').style.display = 'flex';
-    } else {
-      sendCommand('start');
-    }
+    sendCommand('start');
   }
 }
 
-function doStartAnyway() {
-  document.getElementById('modal-confirm-start').style.display = 'none';
-  sendCommand('start');
+// A new thickness reference, from ZERO, the PLC's start or the worker after a
+// lock (before any ZERO). The thickness charts start again with it, so the
+// drop to 0 does not squash their scale.
+function onZero(ev) {
+  for (const c of [charts.mainComp, charts.mainUncomp, charts.mainRate, charts.mainRateUncomp, charts.compA, charts.tempA]) {
+    if (!c) continue;
+    c.data.labels = []; c.data.datasets.forEach(d => d.data = []); c.update('none');
+  }
+  _runStartFm = null;
+  const how = ev.compensated ? 'compensated' : 'UNCOMPENSATED: the temp mode was not locked';
+  if (ev.auto) showToast(`Thickness reference taken after the lock (${how}) — ZERO sets your own`, false, !ev.compensated);
+  else showToast(`Thickness zeroed at T start ${Number(ev.t_start).toFixed(2)} °C (${ev.t_source}), ${how}`, false, !ev.compensated);
 }
 
 // Throttled heartbeat: keeps the dots and the quality tiles honest while the
@@ -3073,20 +3081,27 @@ async function setOpcEnabled(enabled) {
 async function sendCommand(action) {
   let url;
   if (action === 'start') {
+    _startRequested = true;  // marks this RUNNING transition as a fresh log (resets the row count)
+    url = `${API_URL}/measurement/start`;
+  } else if (action === 'zero') {
+    if (!lockMass) { showToast('ZERO needs the mass mode locked', true); return; }
+    if (_isRunning && !confirm('Zero the thickness in the middle of this log?\n\nThe log carries on, with a ZERO row where the reference changed.')) return;
     const t = parseFloat(document.getElementById('s-amb-temp').value);
     if (isNaN(t)) { showToast('Set a valid ambient temperature in Settings.', true); return; }
-    // T start from a thermometer is read by the Pitaya as the run starts; warn
-    // here when it is going to fall back to the typed-in value.
+    // T start from a thermometer is read by the Pitaya as the reference is
+    // taken; warn here when it is going to fall back to the typed-in value.
     const src = fieldValue('s-tstart-source') || 'manual';
     if (src !== 'manual' && tStartReading(src) == null) {
       const opt = document.querySelector(`#s-tstart-source option[value="${src}"]`);
-      showToast(`${opt ? opt.textContent : src} has no current reading — the run starts from the typed-in ${t} °C`, false, true);
+      showToast(`${opt ? opt.textContent : src} has no current reading — T start is the typed-in ${t} °C`, false, true);
     }
-    _startRequested = true;  // marks this RUNNING transition as a fresh run (clears the buffer)
-    // Film material parameters from the Measurement settings (per-run values)
+    if (_measMode !== 'uncompensated' && !lockTemp) {
+      showToast('The temp mode is not locked: this reference is uncompensated until the next ZERO', false, true);
+    }
+    // Film material parameters from the Measurement settings
     const dens = parseFloat(fieldValue('s-mat-dens'));
     const zr   = parseFloat(fieldValue('s-mat-zratio'));
-    url = `${API_URL}/measurement/start?ambient_temp=${t}&t_start_source=${encodeURIComponent(src)}`
+    url = `${API_URL}/measurement/zero?ambient_temp=${t}&t_start_source=${encodeURIComponent(src)}`
         + (isNaN(dens) ? '' : `&mat_dens=${dens}`)
         + (isNaN(zr)   ? '' : `&z_ratio=${zr}`);
   } else if (action === 'stop') {
@@ -4303,25 +4318,6 @@ function clearLogs() {
   </div>
 </div>
 
-<!-- Start confirmation when PLL not locked -->
-<div id="modal-confirm-start" class="modal-overlay" style="display:none">
-  <div class="modal">
-    <div class="modal-title">⚠ PLL NOT LOCKED</div>
-    <div class="modal-body">
-      One or both PLLs are not locked. Data quality will be unreliable.<br><br>
-      <span style="font-family:'DM Mono',monospace;font-size:11px;display:block;margin-top:6px">
-        Mass mode: <span id="confirm-mass-status" style="font-weight:500">—</span><br>
-        Temp mode: <span id="confirm-temp-status" style="font-weight:500">—</span>
-      </span>
-    </div>
-    <div class="modal-footer">
-      <button class="btn btn-orange" onclick="sendCommand('lock');document.getElementById('modal-confirm-start').style.display='none'">GET LOCK FIRST</button>
-      <button class="btn btn-red" onclick="doStartAnyway()">START ANYWAY</button>
-      <button class="btn" onclick="document.getElementById('modal-confirm-start').style.display='none'">CANCEL</button>
-    </div>
-  </div>
-</div>
-
 <!-- Transfer coefficients comparison prompt -->
 <div id="modal-transfer-coeffs" class="modal-overlay" style="display:none">
   <div class="modal" style="max-width:680px">
@@ -4393,7 +4389,7 @@ function clearLogs() {
       <br>
       The measurement is still running and the flag is set on the OPC server
       (<span style="font-family:'DM Mono',monospace;font-size:11px">GVL_QCM.READ.TargetReached</span>)
-      and the REST API. It clears when the next run starts.
+      and the REST API. It clears at the next ZERO.
     </div>
     <div class="modal-footer">
       <button class="btn btn-red" id="target-stop-btn" onclick="stopFromTarget()">STOP MEASUREMENT</button>

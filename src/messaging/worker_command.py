@@ -26,15 +26,34 @@ class SetCoefficientsCommand(WorkerCommand):
     fT_3: float
 
 @dataclass
-class StartMeasurementCommand(WorkerCommand):
+class ReferenceParams(WorkerCommand):
+    """What a thickness reference is taken with (QCMWorker._take_reference)."""
     ambient_temp: float
     mat_dens: float = 19320.0  # kg/m^3 — deposited film density
     z_ratio: float = 1.0       # quartz/film acoustic impedance ratio
     # "manual": T start is ambient_temp. An LTC2986 sensor key: T start is that
-    # sensor's reading when the run starts, ambient_temp if it has none.
-    # "crystal": the crystal's own absolute temperature from its two modes when
-    # the run starts, ambient_temp if they do not give one.
+    # sensor's reading when the reference is taken, ambient_temp if it has none.
+    # "crystal": the crystal's own absolute temperature from its two modes at
+    # that moment, ambient_temp if they do not give one.
     t_start_source: str = "manual"
+
+@dataclass
+class StartMeasurementCommand(ReferenceParams):
+    """Start logging: open the run log. The measurement itself runs whenever
+    the mass mode is locked. zero takes a new reference first, with these
+    parameters (the PLC's start); without it they are not used."""
+    zero: bool = False
+
+@dataclass
+class ZeroCommand(ReferenceParams):
+    """Take a new thickness reference: the thickness reads 0 from here."""
+    pass
+
+@dataclass
+class SetReferenceParamsCommand(ReferenceParams):
+    """The parameters an automatic reference (after a lock, before any ZERO)
+    is taken with: the current measurement settings."""
+    pass
 
 @dataclass
 class StopMeasurementCommand(WorkerCommand):

@@ -882,14 +882,14 @@ class QCMInterface:
         print(f"[QCM] Coefficients updated")
 
     def setMeasurementReference(self, T = 23, mat_dens=19320, z_ratio=1.0, compensated=True):
-        """Take the run's starting point. `compensated` False is a run on the mass
-        mode alone: no temperature is solved, and the thickness is the
-        uncompensated one (see getMeasurement)."""
+        """Take the thickness reference: the thickness reads 0 from here.
+        `compensated` False is a reference on the mass mode alone: no temperature
+        is solved, and the thickness is the uncompensated one (see getMeasurement)."""
         fM = self.getFreq(1)
         if not fM > 0:
             # Every thickness is a ratio against this, so a run cannot start from
             # it — say why here rather than divide by zero further down.
-            raise ValueError("mass-mode frequency reads 0 Hz — lock the mass mode before starting a run")
+            raise ValueError("mass-mode frequency reads 0 Hz — lock the mass mode before taking a reference")
         self.compensated = bool(compensated)
         self.fM_start = fM
         self.fT_start = self.getFreq(2) if self.compensated else 0.0
@@ -934,18 +934,19 @@ class QCMInterface:
             quality_temp=self.getLockQuality(2),
         )
 
-    def getMeasurement(self, hold_temp: bool = False) -> MeasurementData:
+    def getMeasurement(self, hold_temp: bool = False, compensated: bool = True) -> MeasurementData:
         """One compensated sample. hold_temp carries the last solved temperature
         forward instead of solving it from fT — see TempCompAlgorithm.FreqToTemp.
         The caller decides when to use it (the worker does, on a lost temp-mode
         lock), so the policy lives with the automation rather than in here.
 
-        An uncompensated run (see setMeasurementReference) has no temperature:
-        calculated_thickness is then the uncompensated thickness, so the target,
-        the PLC and the charts all carry on reading the one figure there is, and
-        `compensated` False on the sample says which it is."""
+        A reference taken without the temp mode (see setMeasurementReference),
+        or compensated=False, gives no temperature: calculated_thickness is then
+        the uncompensated thickness, so the target, the PLC and the charts all
+        carry on reading the one figure there is, and `compensated` False on the
+        sample says which it is."""
         t = self.getTelemetry()
-        if not self.compensated:
+        if not (self.compensated and compensated):
             thickness = self.temp_comp.FreqToThickness(t.freq_mass_mode)
             if np.isfinite(t.freq_mass_mode):
                 self.setMockSigFreq(t.freq_mass_mode)

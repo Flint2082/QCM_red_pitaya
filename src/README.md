@@ -65,9 +65,9 @@ process exits.
 On every start the service writes the saved settings to the FPGA, applies the
 active crystal profile, and then locks the PLLs on that profile's start
 frequencies, exactly as GET LOCK does. In uncompensated mode only the mass mode
-is locked, and a mode whose start frequency is 0 Hz stays parked. If the lock
-fails, the instrument waits in IDLE for a GET LOCK, as it did before this
-start-up lock existed.
+is locked, and a mode whose start frequency is 0 Hz stays parked. Once the mass
+mode is locked the instrument measures straight away (see below). If the lock
+fails, it waits in IDLE for a GET LOCK.
 
 The start frequencies follow the lock (frequency tracking, and the update at
 the end of a run) only once a lock attempt has aimed the loops. From power-up
@@ -75,6 +75,55 @@ until then, the NCOs run from 0 Hz and their phase can pass the lock test, and
 a fresh start used to overwrite the start frequencies with 0 Hz that way. A
 sweep or a capacitor adjustment also leaves the loops open, so tracking stops
 after either one until the next lock.
+
+## Measuring, logging and ZERO
+
+The sensor measures all the time: from the moment the mass mode is locked, every
+sample's thickness, rate and temperature are worked out and shown, whether or
+not anything is being logged. **START LOG** and **STOP LOG** only open and close
+the run log. Everything that used to run only during a run now runs whenever
+the instrument measures:
+
+- **The capture windows follow the locked frequencies.** They used to stay put
+  outside a run, so a calibration walked the B-mode (about −106 Hz/°C, −221 at
+  64 °C) out of its ±2 kHz window and lost the lock.
+- **Automatic re-lock** when the mass mode is lost. A failed automatic attempt
+  raises no LOCK FAILED dialog and is retried every 30 s.
+- **The drive-gain servo and frequency tracking**, as before.
+
+What is shown depends on the locks:
+
+- mass mode not locked: no thickness, rate or temperature, on the page, to the
+  PLC or in the log, until it is back;
+- both locked: the compensated thickness;
+- the temp mode lost after the reference was taken: the temperature is held as
+  before (**Hold Temperature On Lock Loss**), so the thickness stays compensated;
+- the reference taken without the temp mode (or uncompensated mode): the
+  uncompensated thickness, with no temperature, until the next ZERO.
+
+**ZERO** sets the thickness back to 0: the mass-mode frequency now becomes the
+reference, T start is read from the T Start Source, and the film parameters are
+those in Settings. It is compensated when the temp mode is locked at that
+moment. Logging never moves the reference, so a log can start or stop mid-
+deposition; a ZERO during a log is written to it as a `ZERO` row. Before the
+first ZERO the reference is taken automatically after every successful lock
+(and retaken, compensated, once the temp mode locks), so the readout starts
+from 0 at every GET LOCK; after a ZERO, re-locks keep the deposition baseline
+and only ZERO moves it. Every new reference is announced as a `ZeroEvent` on
+`/ws`. The target flag clears at a ZERO.
+
+The PLC's StartMeasurement is the start of a deposition: it zeroes and opens
+the log; StopMeasurement closes it. For the PLC and `GET /state` the state
+keeps its old meaning, RUNNING while a log is open and IDLE while none is;
+`measuring` says whether the sensor is producing a thickness meanwhile. The
+page shows MEASURING and LOGGING. Over REST, `POST /measurement/start` opens the
+log (`zero=true` zeroes first), `POST /measurement/zero` zeroes, and
+`POST /measurement/stop` closes the log. `tools/qcm_client.py`'s
+`start_measurement()` still zeroes by default, as a start always did.
+
+A sweep or a capacitor adjustment can be run while the sensor measures, as long
+as nothing is being logged; both open the loops, so measuring resumes at the
+next GET LOCK. A new sample rate waits for a log in progress to end.
 
 ## Front-panel LEDs
 
@@ -120,14 +169,15 @@ LTC2986 fault named in `temp_sensor_faults`. They are blank while there is no
 current reading. `temperature_c` is something else: the crystal temperature the
 compensation solves from the two modes.
 
-A run's start temperature (T start, the crystal temperature the compensation
-starts from) can come from one of these sensors instead of the typed-in ambient
-temperature: **Settings → Measurement → T Start Source**, or `t_start_source`
-on `POST /measurement/start` and `/settings/measurement_params`. The QCM worker
-reads the sensor the moment the run starts, so a PLC-triggered start does the
-same. Without a current, fault-free reading it starts from the ambient
-temperature rather than not at all. Either way the run log records the value
-and its origin, in the SETTINGS row and as `T_source=` in `RUN_START`.
+The reference's start temperature (T start, the crystal temperature the
+compensation starts from) can come from one of these sensors instead of the
+typed-in ambient temperature: **Settings → Measurement → T Start Source**, or
+`t_start_source` on `POST /measurement/zero` and `/settings/measurement_params`.
+The QCM worker reads the sensor the moment the reference is taken (ZERO, the
+PLC's start, or the automatic reference after a lock). Without a current,
+fault-free reading it starts from the ambient temperature rather than not at
+all. Either way the run log records the value and its origin, in the SETTINGS
+row and as `T_source=` in `RUN_START` (and in `ZERO` rows).
 
 T start can also come from the crystal itself (`crystal`). The calibration fit
 gives both modes' whole curves, constants `fM_0`/`fT_0` included, so the two
@@ -152,8 +202,8 @@ seconds of each thickness and takes its slope
 ([`processing/deposition_rate.py`](processing/deposition_rate.py)). The window
 is set under **Settings → Measurement → Rate Window** (default 1 s, or
 `POST /settings/rate_window`). A longer window gives a quieter rate that lags a
-change by about half the window. The rate stays blank until half a window of
-the run has been taken, and again for half the new window when the window is
+change by about half the window. The rate stays blank until half a window has
+been taken since the last reference (ZERO), and again for half the new window when the window is
 lengthened mid-run.
 
 Every run log carries it in `rate_comp_nm_s` and `rate_uncomp_nm_s`, beside the

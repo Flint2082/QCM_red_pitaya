@@ -64,8 +64,9 @@ class _LockAttempt:
     """A GET LOCK (or automatic re-lock) in progress — see QCMWorker._start_lock."""
     active: tuple          # oscillators being locked (the rest are parked)
     started: float         # time.time() when the loops were released
-    resume: bool           # a run was in progress: back to MEASURING afterwards
+    resume: bool           # the run log was open: RELOCK rows go into it
     settled: bool = False  # past LOCK_SETTLE: the lock windows now hold judging samples
+    auto: bool = False     # the automatic re-lock, not GET LOCK: a failure is not popped up
 
 
 class QCMWorker(threading.Thread):
@@ -73,7 +74,7 @@ class QCMWorker(threading.Thread):
     # in the queue until it was done; a lock that runs alongside the acquisition
     # holds them back until it ends instead, so none is dropped for arriving
     # mid-lock (an OPC GetLock followed straight by StartMeasurement, say).
-    _DEFER_WHILE_LOCKING = (StartMeasurementCommand, StartSweepCommand, StartCapAdjustCommand)
+    _DEFER_WHILE_LOCKING = (StartMeasurementCommand, ZeroCommand, StartSweepCommand, StartCapAdjustCommand)
 
     def __init__(self, qcm: QCMInterface, command_queue: queue.Queue, event_queue: queue.Queue,
                  version=None, temperatures=None):
@@ -100,6 +101,20 @@ class QCMWorker(threading.Thread):
         # to repeat, so it does not warrant its own alarm in the GUI.
         self.sweep_logger = SweepLogger()
         self._run_command = None  # last StartMeasurementCommand, for RetryRunLogCommand
+        # Always measuring. Once a lock has aimed the loops and a thickness
+        # reference has been taken, every sample is measured (MEASURING) and sent
+        # out, logged or not; without a mass-mode lock its thickness is blank.
+        # START/STOP only open and close the run log (recording). The reference
+        # is taken automatically after a lock until the operator presses ZERO
+        # (or the PLC starts a run, which zeroes too), and from then on only by
+        # ZERO: a re-lock keeps the deposition baseline.
+        self.recording = False
+        self._ref_set = False          # a reference exists: thickness can be measured
+        self._ref_auto = True          # taken by the worker, not by ZERO: the next lock retakes it
+        self._ref_compensated = False  # taken with the temp mode locked
+        self._ref_params = None        # the ReferenceParams it was taken with, T start resolved
+        # The measurement settings, for automatic references (sent by the server).
+        self._ref_defaults = SetReferenceParamsCommand(ambient_temp=23.0)
         # The newest TemperatureEvent, for a run's T start from a thermometer.
         self._temperatures = temperatures
         self._t_start_from = "manual"  # where the current run's T start came from
@@ -123,6 +138,11 @@ class QCMWorker(threading.Thread):
         # measurement, re-acquire around the last lock frequencies. A temp-only
         # loss that the temperature hold covers does not count — see update().
         self.AUTO_RELOCK_AFTER = 1.0  # seconds
+        # After an automatic attempt has failed, the next waits this long: with
+        # no crystal, or one that will not lock, a retry every few seconds would
+        # do nothing but hammer the loops (and the log).
+        self.AUTO_RELOCK_RETRY = 30.0  # seconds
+        self._relock_failures = 0
         self.auto_relock = True  # configurable; when off a lost lock is left alone
         self._lock_freqs: tuple | None = None  # (mass, temp) from the last GET LOCK
         self._lock_lost_since: float | None = None
@@ -137,10 +157,9 @@ class QCMWorker(threading.Thread):
         self._deferred: list = []          # _DEFER_WHILE_LOCKING commands held back
         # Measurement mode. Compensated locks both modes and solves the
         # temperature from fT; uncompensated locks the mass mode alone and parks
-        # the temp oscillator. A run keeps the mode it started in, re-locks
-        # included, whatever the setting does meanwhile.
+        # the temp oscillator. The output is compensated only while the mode is
+        # compensated and the reference was taken with the temp mode locked.
         self.compensated = True
-        self._run_compensated = True
         self._comp_ok = True  # last sample produced a thickness (LED 1 flashes if not)
         # Temperature hold: while the temp-mode lock is lost, carry the last
         # solved temperature into the compensation instead of solving it from an
@@ -234,33 +253,34 @@ class QCMWorker(threading.Thread):
 
     def _set_state(self, new_state: WorkerState):
         self.state = new_state
-        self.event_queue.put(StateEvent(state=new_state))
+        self.event_queue.put(StateEvent(state=new_state, recording=self.recording))
 
     def _in_run(self) -> bool:
-        """A run is in progress: measuring, or re-locking in the middle of one."""
-        return self.state == WorkerState.MEASURING or (self._lock is not None and self._lock.resume)
+        """A run is in progress: the run log is open (re-locks included)."""
+        return self.recording
 
-    def _compensated_now(self) -> bool:
-        """The measurement mode in force: the run's own while one is going."""
-        return self._run_compensated if self._in_run() else self.compensated
+    def _settled_state(self) -> WorkerState:
+        """Where the worker rests outside a lock attempt, sweep or capacitor
+        adjustment: measuring once there is a reference to measure against."""
+        return WorkerState.MEASURING if self._ref_set and self._loops_aimed else WorkerState.IDLE
 
     # ============================
     # Locking
     # ============================
 
-    def _start_lock(self, mass: float, temp: float):
+    def _start_lock(self, mass: float, temp: float, auto: bool = False):
         """Release the loops around (mass, temp) for a single lock attempt and
-        return at once; update() carries it to the end (_advance_lock). If a run
-        is in progress it re-locks without stopping it: the measurement reference
-        is left alone, so the deposition baseline carries through. Used by GET
-        LOCK and by the automatic re-lock; a GET LOCK during an attempt starts it
+        return at once; update() carries it to the end (_advance_lock). A
+        reference set by ZERO is left alone, so the deposition baseline carries
+        through a re-lock; an automatic one is retaken. Used by GET LOCK and by
+        the automatic re-lock (auto); a GET LOCK during an attempt starts it
         over. Caches the frequencies for the auto re-lock to reuse.
 
         In uncompensated mode only the mass mode is locked, and either mode is
         parked rather than locked when its start frequency is 0 Hz."""
         self._lock_freqs = (mass, temp)
         resume = self._in_run()
-        oscs = (1, 2) if self._compensated_now() else (1,)
+        oscs = (1, 2) if self.compensated else (1,)
         self._lock = None
         self._loops_aimed = False  # until beginLock has set them up
         try:
@@ -274,9 +294,9 @@ class QCMWorker(threading.Thread):
             self.qcm.finishLock(active, False)  # says why
             self.event_queue.put(LockFailedEvent())
             self._lock_lost_since = None
-            self._set_state(WorkerState.MEASURING if resume else WorkerState.IDLE)
+            self._set_state(self._settled_state())
             return
-        self._lock = _LockAttempt(active=active, started=time.time(), resume=resume)
+        self._lock = _LockAttempt(active=active, started=time.time(), resume=resume, auto=auto)
         if resume:
             self.logger.write_event("RELOCK_START", "re-acquiring osc " + ", ".join(map(str, active)))
         self._set_state(WorkerState.LOCKING)
@@ -299,19 +319,37 @@ class QCMWorker(threading.Thread):
             if all(self.qcm.isLockWindowFull(i) and self.qcm.getLockDetect(i) for i in a.active):
                 self._finish_lock(True)
             elif now - a.started >= self.LOCK_TIMEOUT:
-                self._finish_lock(False)
+                # The mass mode alone is still a measurement: uncompensated, or
+                # compensated by the temperature already held.
+                mass = 1 in a.active and self.qcm.isLockWindowFull(1) and self.qcm.getLockDetect(1)
+                self._finish_lock(mass, partial=mass)
         except Exception as e:
             self._abort_lock(e, a.resume)
 
-    def _finish_lock(self, locked: bool):
+    def _finish_lock(self, locked: bool, partial: bool = False):
         a, self._lock = self._lock, None
         self.qcm.finishLock(a.active, locked)
+        if partial:
+            print("[QCM] The temp mode did not lock: measuring on the mass mode "
+                  + ("with the temperature held" if self._ref_compensated and not self._ref_auto
+                     else "without temperature compensation"))
         if not locked:
-            self.event_queue.put(LockFailedEvent())
+            self._relock_failures = self._relock_failures + 1 if a.auto else 0
+            if not a.auto:
+                self.event_queue.put(LockFailedEvent())
+            elif self._relock_failures == 1:
+                print(f"[QCM] Automatic re-lock failed; retrying every {self.AUTO_RELOCK_RETRY:g} s")
+        else:
+            self._relock_failures = 0
         if a.resume:
-            self.logger.write_event("RELOCK", "lock re-established" if locked else "re-lock failed")
+            self.logger.write_event("RELOCK", ("lock re-established" + (", temp mode not locked" if partial else ""))
+                                    if locked else "re-lock failed")
         self._lock_lost_since = None  # reset the loss timer after any attempt
-        self._set_state(WorkerState.MEASURING if a.resume else WorkerState.IDLE)
+        # Before any ZERO the reference follows the lock, so the readout starts
+        # from 0 at every GET LOCK; never in the middle of a log.
+        if locked and (not self._ref_set or (self._ref_auto and not self.recording)):
+            self._take_reference(self._ref_defaults, auto=True)
+        self._set_state(self._settled_state())
         self._replay_deferred()
 
     def _abort_lock(self, error, resume: bool):
@@ -333,7 +371,7 @@ class QCMWorker(threading.Thread):
         if resume:
             self.logger.write_event("RELOCK", f"re-lock aborted: {error}")
         self._lock_lost_since = None
-        self._set_state(WorkerState.MEASURING if resume else WorkerState.IDLE)
+        self._set_state(self._settled_state())
         self._replay_deferred()
 
     def _replay_deferred(self):
@@ -364,8 +402,9 @@ class QCMWorker(threading.Thread):
 
     def _settings_snapshot(self, command) -> dict:
         """Everything that affects how a run is acquired: the loop/lock config the
-        QCM owns, plus the worker's own automation flags, this run's material
-        parameters and the firmware version. Recorded once at run start."""
+        QCM owns, plus the worker's own automation flags, the reference's
+        material parameters and the firmware version. Recorded once at run
+        start. command: the ReferenceParams the reference was taken with."""
         snapshot = self.qcm.getSettingsSnapshot()
         snapshot["auto_relock"] = self.auto_relock
         snapshot["temp_hold"] = self.temp_hold
@@ -379,7 +418,8 @@ class QCMWorker(threading.Thread):
         }
         snapshot["acquisition"] = self._acquisition_settings()
         snapshot["measurement"] = {
-            "mode":             "compensated" if self._run_compensated else "uncompensated",
+            "mode":             "compensated" if self._output_compensated() else "uncompensated",
+            "reference":        "automatic" if self._ref_auto else "zero",
             "ambient_temp":     command.ambient_temp,
             "t_start_source":   self._t_start_from,
             "mat_dens":         command.mat_dens,
@@ -415,7 +455,7 @@ class QCMWorker(threading.Thread):
         if not self.logger.start():
             return False
         self.logger.write_settings(self._settings_snapshot(command))
-        mode = "compensated" if self._run_compensated else "uncompensated"
+        mode = "compensated" if self._output_compensated() else "uncompensated"
         self.logger.write_event("RUN_START", f"T={command.ambient_temp} mat_dens={command.mat_dens} z_ratio={command.z_ratio} mode={mode} "
                                              f"T_source={self._t_start_from}")
         return True
@@ -429,7 +469,7 @@ class QCMWorker(threading.Thread):
         is pulling in, and a temp mode a few hundred Hz off resonance solves to a
         plausible but wrong temperature."""
         if not self.compensated:
-            return None, "uncompensated run"
+            return None, "uncompensated mode"
         if not all(self.qcm.getLockDetect(i) and self.qcm.isPhaseTrusted(i) for i in (1, 2)):
             return None, "modes not on resonance"
         coefficients = self.qcm.getCoefficients()
@@ -439,6 +479,76 @@ class QCMWorker(threading.Thread):
         if T is None:
             return None, "frequencies outside the calibration"
         return T, ""
+
+    def _output_compensated(self) -> bool:
+        """Whether the thickness is temperature-compensated: the mode is
+        compensated and the reference was taken with the temp mode locked."""
+        return self.compensated and self._ref_compensated
+
+    def _take_reference(self, params, auto: bool) -> bool:
+        """Zero the thickness here: the mass-mode frequency now becomes the
+        reference, with T start from params' source. Compensated when the mode
+        is compensated and the temp mode is locked and on resonance now;
+        otherwise the thickness is the uncompensated one until the next
+        reference. auto: taken by the worker after a lock, not by ZERO, so the
+        next lock retakes it. Returns whether it was taken."""
+        compensated = bool(self.compensated and not self.qcm.isParked(2)
+                           and self.qcm.getLockDetect(2) and self.qcm.isPhaseTrusted(2))
+        T, source = start_temperature(
+            params.t_start_source, params.ambient_temp,
+            self._temperatures() if self._temperatures else None, time.time(),
+            self._crystal_temperature() if params.t_start_source == "crystal" else None)
+        try:
+            self.qcm.setMeasurementReference(T=T, mat_dens=params.mat_dens,
+                                             z_ratio=params.z_ratio, compensated=compensated)
+        except Exception as e:
+            print(f"[QCM] No reference taken: {e}")
+            return False
+        self._ref_set, self._ref_auto, self._ref_compensated = True, auto, compensated
+        self._ref_params = replace(params, ambient_temp=T)
+        self._t_start_from = source
+        self._set_target_reached(False)  # the thickness starts again from 0
+        self._temp_held = False
+        self._comp_ok = True
+        self._rate_comp.reset()
+        self._rate_uncomp.reset()
+        mode = "compensated" if compensated else (
+            "uncompensated, temp mode not locked" if self.compensated else "uncompensated")
+        print(f"[QCM] {'Automatic reference' if auto else 'ZERO'}: T start {T:g} degC from {source}, {mode}")
+        if self.recording:
+            self.logger.write_event("ZERO", f"T={T} T_source={source} mat_dens={params.mat_dens} "
+                                            f"z_ratio={params.z_ratio} mode={mode} auto={auto}")
+        self.event_queue.put(ZeroEvent(auto=auto, compensated=compensated, t_start=T, t_source=source))
+        return True
+
+    def _start_logging(self, command: StartMeasurementCommand):
+        """Open the run log. With command.zero the thickness is zeroed first."""
+        if command.zero and not self._take_reference(command, auto=False):
+            print("[QCM] Logging without a new reference")
+        if not self._ref_set:
+            self.event_queue.put(ErrorEvent("nothing is being measured yet: GET LOCK first"))
+            return
+        if self._pending_sample_rate is not None:  # set since the last sample
+            self._set_sample_rate(self._pending_sample_rate)
+        self.recording = True
+        self._run_command = command
+        self._start_run_log(self._ref_params)
+        self._set_state(self.state)   # tells everyone the log is open
+
+    def _stop_logging(self):
+        # Auto-update start frequencies to current locked frequencies (rounded
+        # to 100 Hz) — if a lock attempt aimed the loops; see _loops_aimed.
+        if (self.state == WorkerState.MEASURING and self._loops_aimed
+                and all(self.qcm.getLockDetect(i) for i in self._lock_active)):
+            freq_mass, freq_temp = self._held_lock_freqs()
+            self.event_queue.put(StartFreqAutoUpdatedEvent(
+                freq_mass=freq_mass, freq_temp=freq_temp, source="run_stop"))
+        self.logger.write_event("RUN_STOP")
+        self.logger.stop()
+        self.recording = False
+        if self._lock is not None:
+            self._lock.resume = False   # the attempt carries on, out of the log
+        self._set_state(self.state)
 
     def handle_command(self, command: WorkerCommand):
 
@@ -453,8 +563,10 @@ class QCMWorker(threading.Thread):
         if isinstance(command, StartupPLLCommand):
             self._start_lock(command.start_freq_mass, command.start_freq_temp)
 
-        # Capacitor adjustment (open-loop tones for nulling the trim cap)
-        elif isinstance(command, StartCapAdjustCommand) and self.state == WorkerState.IDLE:
+        # Capacitor adjustment (open-loop tones for nulling the trim cap). It
+        # opens the loops, so measuring stops until the next lock.
+        elif (isinstance(command, StartCapAdjustCommand) and not self.recording
+              and self.state in (WorkerState.IDLE, WorkerState.MEASURING)):
             self._loops_aimed = False  # open-loop tones, and standby after them
             self.qcm.startCapAdjust(command.freq_mass, command.freq_temp)
             self._set_state(WorkerState.CAP_ADJUST)
@@ -463,58 +575,36 @@ class QCMWorker(threading.Thread):
             self.qcm.standby(2)
             self._set_state(WorkerState.IDLE)
 
-        # Start measurement
-        elif isinstance(command, StartMeasurementCommand) and self.state == WorkerState.IDLE:
-            # T start from a thermometer, or from the crystal itself, is read
-            # now, as the run starts. The command then carries the value used, so
-            # a log re-opened mid-run (RetryRunLogCommand) records the same one.
-            T, self._t_start_from = start_temperature(
-                command.t_start_source, command.ambient_temp,
-                self._temperatures() if self._temperatures else None, time.time(),
-                self._crystal_temperature() if command.t_start_source == "crystal" else None)
-            command = replace(command, ambient_temp=T)
-            print(f"[QCM] T start {T:g} degC from {self._t_start_from}")
-            if self._pending_sample_rate is not None:  # set since the last sample
-                self._set_sample_rate(self._pending_sample_rate)
-            self.qcm.setMeasurementReference(T=command.ambient_temp, mat_dens=command.mat_dens,
-                                             z_ratio=command.z_ratio, compensated=self.compensated)
-            self._run_compensated = self.compensated
-            self._run_command = command
-            self._set_target_reached(False)  # a fresh run starts below its target again
-            self._temp_held = False          # nothing to hold over from the previous run
-            self._comp_ok = True
-            self._rate_comp.reset()          # the thickness starts again from 0
-            self._rate_uncomp.reset()
-            self._start_run_log(command)
-            self._set_state(WorkerState.MEASURING)
+        # Start logging: the measurement runs anyway; this opens the run log.
+        elif isinstance(command, StartMeasurementCommand):
+            if not self.recording:
+                self._start_logging(command)
+
+        # Zero the thickness: a new reference, kept until the next ZERO.
+        elif isinstance(command, ZeroCommand):
+            if not (self._loops_aimed and self.qcm.getLockDetect(1)):
+                self.event_queue.put(ErrorEvent("ZERO needs the mass mode locked"))
+            elif self._take_reference(command, auto=False) and self.state == WorkerState.IDLE:
+                self._set_state(self._settled_state())
+
+        # The measurement settings, for automatic references.
+        elif isinstance(command, SetReferenceParamsCommand):
+            self._ref_defaults = command
 
         # Recording was disabled (usually a full disk) and the operator has since
         # freed space — pick the log back up for the rest of the run.
         elif isinstance(command, RetryRunLogCommand):
-            if self.state == WorkerState.MEASURING and self._run_command and not self.logger.active:
-                if self._start_run_log(self._run_command):
+            if self.recording and self._run_command and not self.logger.active:
+                if self._start_run_log(self._ref_params):
                     self.logger.write_event("RECORDING_RESUMED", "log re-opened mid-run; earlier points are lost")
 
-        # Stop measurement
-        elif isinstance(command, StopMeasurementCommand) and self._in_run():
-            # Auto-update start frequencies to current locked frequencies (rounded
-            # to 100 Hz) — if a lock attempt aimed the loops; see _loops_aimed.
-            if (self.state == WorkerState.MEASURING and self._loops_aimed
-                    and all(self.qcm.getLockDetect(i) for i in self._lock_active)):
-                freq_mass, freq_temp = self._held_lock_freqs()
-                self.event_queue.put(StartFreqAutoUpdatedEvent(
-                    freq_mass=freq_mass, freq_temp=freq_temp, source="run_stop"))
-            self.logger.write_event("RUN_STOP")
-            self.logger.stop()
-            if self._lock is not None:
-                # Stopped mid re-lock: the run ends now, the attempt carries on
-                # and finishes in IDLE.
-                self._lock.resume = False
-            else:
-                self._set_state(WorkerState.IDLE)
+        # Stop logging; the measurement carries on.
+        elif isinstance(command, StopMeasurementCommand) and self.recording:
+            self._stop_logging()
 
-        # Sweep
-        elif isinstance(command, StartSweepCommand) and self.state == WorkerState.IDLE:
+        # Sweep. It opens the loops, so measuring stops until the next lock.
+        elif (isinstance(command, StartSweepCommand) and not self.recording
+              and self.state in (WorkerState.IDLE, WorkerState.MEASURING)):
             self._loops_aimed = False  # the sweep leaves both oscillators open-loop
             self._set_state(WorkerState.SWEEPING)
             self._refresh_leds(False, False, time.time())  # loops open for the whole sweep
@@ -546,11 +636,11 @@ class QCMWorker(threading.Thread):
         elif isinstance(command, SetTempHoldCommand):
             self.temp_hold = bool(command.enabled)
         elif isinstance(command, SetMeasurementModeCommand):
+            changed = bool(command.compensated) != self.compensated
             self.compensated = bool(command.compensated)
-            if self._in_run() and self.compensated != self._run_compensated:
-                print(f"[QCM] Measurement mode set to "
-                      f"{'compensated' if self.compensated else 'uncompensated'} — "
-                      f"applies from the next run; this one stays as it started")
+            if changed and self.compensated and self._ref_set and not self._ref_compensated:
+                print("[QCM] Measurement mode compensated: GET LOCK to lock the temp mode, "
+                      "then ZERO for a compensated reference")
         elif isinstance(command, SetFreqTrackingCommand):
             self.freq_tracking = bool(command.enabled)
             # A sub-second interval would poll the frequency registers as fast as
@@ -781,7 +871,7 @@ class QCMWorker(threading.Thread):
             return
         self.achieved_rate = self._samples / elapsed
         self._samples, self._samples_since = 0, mono
-        low = self.state == WorkerState.MEASURING and self.achieved_rate < 0.9 * self.sample_rate
+        low = self.recording and self.achieved_rate < 0.9 * self.sample_rate
         if low == self._rate_low:
             return
         self._rate_low = low
@@ -827,8 +917,8 @@ class QCMWorker(threading.Thread):
 
         # A lock attempt runs alongside the acquisition rather than instead of
         # it: it advances here, once per cycle, and the readings below keep
-        # streaming while the loops pull in. It may end this cycle, back in
-        # MEASURING or IDLE.
+        # streaming while the loops pull in. It may end this cycle, in MEASURING
+        # (or IDLE when there is still no reference).
         if self.state == WorkerState.LOCKING:
             self._advance_lock(now)
 
@@ -844,7 +934,7 @@ class QCMWorker(threading.Thread):
         elif self.state == WorkerState.MEASURING:
             self._measure(lock_mass, lock_temp, now, mono, publish)
         else:
-            # Not measuring — idle, or locking: push the raw readings anyway.
+            # Not measuring — no lock yet, or locking: push the raw readings anyway.
             # Frequencies, amplitudes, phases and lock quality need neither a
             # measurement reference nor a calibration, so there is no reason for
             # the monitor to sit blank while the operator is locking up or
@@ -866,10 +956,15 @@ class QCMWorker(threading.Thread):
         self._refresh_leds(lock_mass, lock_temp, now)
 
     def _measure(self, lock_mass: bool, lock_temp: bool, now: float, mono: float, publish: bool):
-        """One measurement cycle of a run. Every sample goes into the deposition
-        rate, the target check and the lock automation; the run log and the
-        GUI/PLC take theirs on their own schedules."""
-        compensated = self._run_compensated
+        """One measurement cycle, logged or not. Every sample goes into the
+        deposition rate, the target check and the lock automation; the run log
+        (while it is open) and the GUI/PLC take theirs on their own schedules."""
+        # Before any ZERO the reference follows the lock: one taken while the
+        # temp mode was not locked is retaken once it is, compensated this time.
+        if (self._ref_auto and not self._ref_compensated and self.compensated and not self.recording
+                and lock_mass and lock_temp and self.qcm.isPhaseTrusted(2) and self.qcm.isPhaseTrusted(1)):
+            self._take_reference(self._ref_defaults, auto=True)
+        compensated = self._output_compensated()
         # A lost temp-mode lock leaves fT pointing at nothing in particular.
         # With the hold on, the last solved temperature is carried forward so
         # that only the thermal correction freezes and the compensated thickness
@@ -886,14 +981,21 @@ class QCMWorker(threading.Thread):
         # phase error says straight away that fT has left the resonance, so the
         # temperature held is the last one solved on it.
         hold_temp = compensated and self.temp_hold and not (lock_temp and self.qcm.isPhaseTrusted(2))
-        data = self.qcm.getMeasurement(hold_temp=hold_temp)
-        data.calculated_rate = self._rate_comp.update(data.timestamp, data.calculated_thickness)
-        data.uncompensated_rate = self._rate_uncomp.update(data.timestamp, data.uncompensated_thickness)
+        data = self.qcm.getMeasurement(hold_temp=hold_temp, compensated=compensated)
+        if not lock_mass:
+            # Off resonance the mass-mode readout is no film: no thickness, rate
+            # or temperature is shown, sent or logged until the lock is back.
+            data.calculated_thickness = data.uncompensated_thickness = None
+            data.calculated_temp = data.compensated_freq = None
+            data.calculated_rate = data.uncompensated_rate = None
+        else:
+            data.calculated_rate = self._rate_comp.update(data.timestamp, data.calculated_thickness)
+            data.uncompensated_rate = self._rate_uncomp.update(data.timestamp, data.uncompensated_thickness)
         thickness = data.calculated_thickness
         self._comp_ok = thickness is not None and math.isfinite(thickness)
-        if self._log.due(mono, 1.0 / self.sample_rate):
+        if self.recording and self._log.due(mono, 1.0 / self.sample_rate):
             self.logger.write_measurement(data)  # durable on-disk record (WS-independent)
-        if compensated:
+        if compensated and lock_mass:
             self._note_temp_hold(hold_temp, data)
         self._update_agc(data, lock_mass, lock_temp)
         self._check_target(data)
@@ -927,11 +1029,13 @@ class QCMWorker(threading.Thread):
         if lock_mass or 1 not in self._lock_active:
             self._lock_lost_since = None
         elif self.auto_relock and self._lock_freqs is not None:
+            wait = self.AUTO_RELOCK_RETRY if self._relock_failures else self.AUTO_RELOCK_AFTER
             if self._lock_lost_since is None:
                 self._lock_lost_since = now
-            elif now - self._lock_lost_since >= self.AUTO_RELOCK_AFTER:
-                print(f"[QCM] Mass-mode lock lost > {self.AUTO_RELOCK_AFTER:g} s — attempting automatic re-lock")
-                self._start_lock(*self._lock_freqs)
+            elif now - self._lock_lost_since >= wait:
+                if not self._relock_failures:
+                    print(f"[QCM] Mass-mode lock lost > {wait:g} s — attempting automatic re-lock")
+                self._start_lock(*self._lock_freqs, auto=True)
 
     def _refresh_leds(self, lock_mass: bool, lock_temp: bool, now: float):
         """Front-panel LEDs (see domain/status_leds.py).
@@ -945,7 +1049,7 @@ class QCMWorker(threading.Thread):
         problem = self._in_run() and (
             self.state == WorkerState.LOCKING                 # re-locking mid-run
             or not lock_mass                                 # thickness off resonance
-            or (self._run_compensated and not lock_temp)     # temperature held / unreliable
+            or (self._output_compensated() and not lock_temp)  # temperature held / unreliable
             or not self.logger.active                        # run is not being recorded
             or not self._comp_ok)                            # no thickness came out
         self.qcm.leds.update(lock_mass=closed and lock_mass, lock_temp=closed and lock_temp,

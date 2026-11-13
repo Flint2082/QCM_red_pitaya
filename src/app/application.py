@@ -19,11 +19,20 @@ from messaging.defines import WorkerState
 _STATE_MAP = {
     WorkerState.IDLE:        "IDLE",
     WorkerState.LOCKING:     "LOCKING",
-    WorkerState.MEASURING:   "RUNNING",
+    WorkerState.MEASURING:   "IDLE",      # RUNNING while the run log is open, see _api_state
     WorkerState.SWEEPING:    "SWEEPING",
     WorkerState.CALIBRATING: "IDLE",
     WorkerState.CAP_ADJUST:  "CAP_ADJUST",
 }
+
+
+def _api_state(event) -> str:
+    """The state as the REST API, the GUI and the PLC have always read it:
+    RUNNING means a run is being logged and IDLE that none is, whether or not
+    the sensor is measuring meanwhile (StateEvent.measuring says that)."""
+    if event.recording and event.state == WorkerState.MEASURING:
+        return "RUNNING"
+    return _STATE_MAP.get(event.state, "IDLE")
 
 
 class Application(threading.Thread):
@@ -145,6 +154,14 @@ class Application(threading.Thread):
         if isinstance(command, ac.StartMeasurementCommand):
             self.worker_command_queue.put(wc.StartMeasurementCommand(
                 ambient_temp=command.ambient_temp, mat_dens=command.mat_dens, z_ratio=command.z_ratio,
+                t_start_source=command.t_start_source, zero=command.zero))
+        elif isinstance(command, ac.ZeroCommand):
+            self.worker_command_queue.put(wc.ZeroCommand(
+                ambient_temp=command.ambient_temp, mat_dens=command.mat_dens, z_ratio=command.z_ratio,
+                t_start_source=command.t_start_source))
+        elif isinstance(command, ac.SetReferenceParamsCommand):
+            self.worker_command_queue.put(wc.SetReferenceParamsCommand(
+                ambient_temp=command.ambient_temp, mat_dens=command.mat_dens, z_ratio=command.z_ratio,
                 t_start_source=command.t_start_source))
         elif isinstance(command, ac.StopMeasurementCommand):
             self.worker_command_queue.put(wc.StopMeasurementCommand())
@@ -225,7 +242,12 @@ class Application(threading.Thread):
         Add any business logic here before forwarding.
         """
         if isinstance(event, we.StateEvent):
-            self._emit(ae.StateEvent(state=_STATE_MAP.get(event.state, "IDLE")))
+            self._emit(ae.StateEvent(state=_api_state(event),
+                                     measuring=event.state == WorkerState.MEASURING))
+
+        elif isinstance(event, we.ZeroEvent):
+            self._emit(ae.ZeroEvent(auto=event.auto, compensated=event.compensated,
+                                    t_start=event.t_start, t_source=event.t_source))
 
         elif isinstance(event, we.SweepPointEvent):
             self._emit(ae.SweepPointEvent(

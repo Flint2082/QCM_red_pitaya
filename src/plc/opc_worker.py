@@ -183,12 +183,15 @@ class OPCUAWorker(threading.Thread):
             return {}
 
     def make_start_command(self) -> StartMeasurementCommand:
+        """The PLC's start is the start of a deposition: zero the thickness and
+        open the run log (the GUI's START LOG only opens the log)."""
         p = self._control_params()
         return StartMeasurementCommand(
             ambient_temp=float(p.get("ambient_temp", 23.0)),
             mat_dens=float(p.get("mat_dens", 19320.0)),
             z_ratio=float(p.get("z_ratio", 1.0)),
             t_start_source=str(p.get("t_start_source", "manual")),
+            zero=True,
         )
 
     def make_lock_command(self) -> StartupPLLCommand:

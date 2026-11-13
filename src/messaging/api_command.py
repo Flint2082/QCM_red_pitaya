@@ -27,10 +27,28 @@ class SetCoefficientsCommand(ApiCommand):
 
 @dataclass
 class StartMeasurementCommand(ApiCommand):
+    """Start logging; zero takes a new reference first with these parameters."""
     ambient_temp: float
     mat_dens: float = 19320.0  # kg/m^3 — deposited film density
     z_ratio: float = 1.0       # quartz/film acoustic impedance ratio
     t_start_source: str = "manual"  # T start from ambient_temp, "crystal", or an LTC2986 sensor key
+    zero: bool = False
+
+@dataclass
+class ZeroCommand(ApiCommand):
+    """Zero the thickness: take a new reference with these parameters."""
+    ambient_temp: float
+    mat_dens: float = 19320.0
+    z_ratio: float = 1.0
+    t_start_source: str = "manual"
+
+@dataclass
+class SetReferenceParamsCommand(ApiCommand):
+    """The parameters automatic references are taken with."""
+    ambient_temp: float
+    mat_dens: float = 19320.0
+    z_ratio: float = 1.0
+    t_start_source: str = "manual"
 
 @dataclass
 class StopMeasurementCommand(ApiCommand):

@@ -327,6 +327,7 @@ class RestServer:
         self._server: uvicorn.Server | None = None
         self._broadcaster_started = False  # guards against starting two broadcasters
         self._last_state: str = "IDLE"
+        self._last_measuring: bool = False   # thickness being measured, logged or not
         self._last_opc_status: dict | None = None
         self._last_temperatures: dict | None = None  # latest TemperatureEvent, as sent
         # Calibration points and the settle detector that decides when to take
@@ -598,6 +599,11 @@ class RestServer:
             "lock_freq_temp": self._lock_freq_temp,
         }
 
+    def _reference_defaults(self) -> dict:
+        """The stored measurement parameters a reference is taken with."""
+        return {"ambient_temp": self._ambient_temp, "mat_dens": self._mat_dens,
+                "z_ratio": self._z_ratio, "t_start_source": self._t_start_source}
+
     def _set_target_thickness(self, value: float):
         """Push a new target to the worker (which owns the comparison) and cache
         it here for GET /settings. Negative values mean "no target", same as 0."""
@@ -677,6 +683,7 @@ class RestServer:
         self.command_queue.put(SetTargetThicknessCommand(self._target_thickness))
         self.command_queue.put(SetRateWindowCommand(self._rate_window))
         self.command_queue.put(SetAcquisitionCommand(self._sample_rate, self._publish_rate, self._log_rate))
+        self.command_queue.put(SetReferenceParamsCommand(**self._reference_defaults()))
 
         # Apply the active crystal's coefficients + lock frequencies, if any.
         if self._active_crystal:
@@ -798,6 +805,7 @@ class RestServer:
                 if msg.get("type") == "StateEvent":
                     new_state = msg.get("state", "IDLE")
                     self._last_state = new_state
+                    self._last_measuring = bool(msg.get("measuring"))
                     # A run spans its re-locks, which go RUNNING -> LOCKING ->
                     # RUNNING. Keyed on the bare RUNNING edges, every re-lock used
                     # to close the run's stats and open new ones — adding the
@@ -963,7 +971,8 @@ class RestServer:
             await self.manager.connect(ws)
             opened = time.time()
             client = f"{ws.client.host}:{ws.client.port}" if ws.client else "?"
-            await ws.send_json({"type": "StateEvent", "state": self._last_state})
+            await ws.send_json({"type": "StateEvent", "state": self._last_state,
+                                "measuring": self._last_measuring})
             if self._last_opc_status:
                 await ws.send_json(self._last_opc_status)
             if self._last_temperatures:
@@ -985,17 +994,40 @@ class RestServer:
 
         # ---- Measurement control ----
 
-        @app.post("/measurement/start")
-        def start_measurement(ambient_temp: float, mat_dens: float = 19320.0, z_ratio: float = 1.0,
-                              t_start_source: str | None = None):
-            # Remember the params so OPC-triggered starts reuse them, and persist.
-            # Without t_start_source the stored choice stands.
+        def _reference_params(ambient_temp, mat_dens, z_ratio, t_start_source) -> dict:
+            """The parameters a reference is taken with: those given, the stored
+            ones otherwise. Given ones are remembered (OPC-triggered starts and
+            automatic references reuse them) and persisted."""
             self._set_t_start_source(t_start_source)
-            self._ambient_temp, self._mat_dens, self._z_ratio = ambient_temp, mat_dens, z_ratio
+            if ambient_temp is not None:
+                self._ambient_temp = ambient_temp
+            if mat_dens is not None:
+                self._mat_dens = mat_dens
+            if z_ratio is not None:
+                self._z_ratio = z_ratio
             self._save_settings()
-            self.command_queue.put(StartMeasurementCommand(
-                ambient_temp=ambient_temp, mat_dens=mat_dens, z_ratio=z_ratio,
-                t_start_source=self._t_start_source))
+            self.command_queue.put(SetReferenceParamsCommand(**self._reference_defaults()))
+            return self._reference_defaults()
+
+        @app.post("/measurement/start")
+        def start_measurement(ambient_temp: float | None = None, mat_dens: float | None = None,
+                              z_ratio: float | None = None, t_start_source: str | None = None,
+                              zero: bool = False):
+            """Start logging. The sensor measures whenever the mass mode is
+            locked; this opens the run log. zero=true zeroes the thickness first
+            (what the PLC's start does), with the parameters given or stored."""
+            params = _reference_params(ambient_temp, mat_dens, z_ratio, t_start_source)
+            self.command_queue.put(StartMeasurementCommand(**params, zero=zero))
+            return {"status": "ok"}
+
+        @app.post("/measurement/zero")
+        def zero_measurement(ambient_temp: float | None = None, mat_dens: float | None = None,
+                             z_ratio: float | None = None, t_start_source: str | None = None):
+            """Zero the thickness: take a new reference here, with T start from
+            the T start source and these (or the stored) film parameters. Needs
+            the mass mode locked; compensated if the temp mode is locked too."""
+            params = _reference_params(ambient_temp, mat_dens, z_ratio, t_start_source)
+            self.command_queue.put(ZeroCommand(**params))
             return {"status": "ok"}
 
         @app.post("/cap_adjust/start")
@@ -1204,6 +1236,8 @@ class RestServer:
             if target_thickness is not None:
                 self._set_target_thickness(target_thickness)
             self._save_settings()
+            # Automatic references (before any ZERO) take these from now on.
+            self.command_queue.put(SetReferenceParamsCommand(**self._reference_defaults()))
             return {"status": "ok"}
 
         @app.post("/settings/target_thickness")
@@ -1647,7 +1681,9 @@ class RestServer:
 
         @app.get("/state")
         def get_state():
-            return {"state": self._last_state}
+            """RUNNING while a run is logged, IDLE when none is; measuring says
+            whether the sensor is producing a thickness meanwhile."""
+            return {"state": self._last_state, "measuring": self._last_measuring}
 
         @app.get("/temperatures")
         def get_temperatures():

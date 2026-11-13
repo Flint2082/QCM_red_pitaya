@@ -314,11 +314,14 @@ Each step goes to a setpoint and is one of:
 The generator fills the list from a range, a step and a pattern:
 **interleaved** (every other temperature going up, the ones in between coming
 down, so neighbours are approached from opposite sides and a drift shows up
-instead of tilting the curve), **both ways**, or **up only**. It can put a
-break-in soak and an anneal before the points, and reference points before and
-after the anneal and at the end. The defaults (10–50 °C in 5 °C steps,
-break-in at 25 °C, anneal at 52 °C) give 14 steps with 12 points, about 5 h.
-The list can be edited by hand afterwards.
+instead of tilting the curve), **both ways**, or **up only**. Before the
+points it can put one hot soak that is both break-in and anneal: held a little
+above the highest point for a minimum time and until the mass mode drifts less
+than a limit. Heat speeds up a fresh crystal's break-in, and an irreversible
+shift then happens before the points rather than among them. Reference points
+can follow it and close the run. The defaults (10–50 °C in 5 °C steps, the
+soak at 52 °C for at least 60 min and ≤ 0.02 Hz/min, reference 25 °C) give 12
+steps with 11 points. The list can be edited by hand afterwards.
 
 While a soak runs, and in a point step until the TEMP sensor is within the
 point tolerance of the setpoint, the settle detector's automatic points are

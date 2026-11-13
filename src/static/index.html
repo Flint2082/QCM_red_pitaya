@@ -807,10 +807,9 @@ footer { height: 24px; background: var(--surface); border-top: 1px solid var(--b
             <div class="settings-row"><div><div class="settings-row-label">Temperature Range</div><div class="settings-row-desc">Lowest and highest calibration point. Range matters more than the number of points, and the temperatures you deposit at should sit in the middle of it: points below room temperature are worth the most. Keep the lowest above the room's dew point, or water condenses on the crystal</div></div><div></div><div style="display:flex;align-items:center;gap:6px"><input class="settings-input" type="number" id="cs-gen-tmin" value="10" step="1" style="width:70px"><span class="settings-unit">to</span><input class="settings-input" type="number" id="cs-gen-tmax" value="50" step="1" style="width:70px"><span class="settings-unit">°C</span></div></div>
             <div class="settings-row"><div><div class="settings-row-label">Step</div><div class="settings-row-desc">Spacing of the points. A cubic has four coefficients, so take at least 6–8 distinct temperatures</div></div><div></div><div style="display:flex;align-items:center;gap:6px"><input class="settings-input" type="number" id="cs-gen-step" value="5" step="0.5" min="0.5"><span class="settings-unit">°C</span></div></div>
             <div class="settings-row"><div><div class="settings-row-label">Pattern</div><div class="settings-row-desc"><b>Interleaved</b>: every other temperature on the way up, the ones in between on the way down, so neighbouring points are approached from opposite sides and a drift or a heating/cooling difference shows up instead of tilting the curve. <b>Both ways</b> takes every temperature going up and again coming down: twice the points, and a direct hysteresis check. <b>Up only</b> is a plain staircase, the least robust</div></div><div></div><div style="display:flex;align-items:center;gap:6px"><select class="settings-input" id="cs-gen-pattern" style="width:150px;text-align:left"><option value="interleaved">Interleaved</option><option value="both">Both ways</option><option value="up">Up only</option></select></div></div>
-            <div class="settings-row"><div><div class="settings-row-label">Reference Temperature</div><div class="settings-row-desc">Where the break-in and the reference points are held, and where the TEC goes at the end when At The End says so</div></div><div></div><div style="display:flex;align-items:center;gap:6px"><input class="settings-input" type="number" id="cs-gen-ref" value="25" step="0.5"><span class="settings-unit">°C</span></div></div>
-            <div class="settings-row"><div><div class="settings-row-label">Break-in</div><div class="settings-row-desc">Hold the reference at least this long, and until the mass mode drifts less than this. A freshly mounted crystal sheds mass at ~0.5 Hz/min, falling ~30× over three hours, and points taken through that bake the drift into the curve. Both 0 = no break-in</div></div><div></div><div style="display:flex;align-items:center;gap:6px"><input class="settings-input" type="number" id="cs-gen-breakin-min" value="30" step="5" min="0" style="width:70px"><span class="settings-unit">min,</span><input class="settings-input" type="number" id="cs-gen-breakin-drift" value="0.02" step="0.01" min="0" style="width:70px"><span class="settings-unit">Hz/min</span></div></div>
-            <div class="settings-row"><div><div class="settings-row-label">Anneal</div><div class="settings-row-desc">Hold this temperature for this long before the points, a little above the highest one, so an irreversible shift (like the −3.8 Hz mass-mode step at 60 °C on 2 Nov) happens before the points instead of among them. 0 min = no anneal</div></div><div></div><div style="display:flex;align-items:center;gap:6px"><input class="settings-input" type="number" id="cs-gen-anneal-t" value="52" step="1" style="width:70px"><span class="settings-unit">°C,</span><input class="settings-input" type="number" id="cs-gen-anneal-min" value="30" step="5" min="0" style="width:70px"><span class="settings-unit">min</span></div></div>
-            <div class="settings-row"><div><div class="settings-row-label">Reference Points</div><div class="settings-row-desc">A point at the reference before the anneal, after it, and at the very end. Comparing them shows a drift or a step over the run</div></div><div></div><div style="display:flex;align-items:center;gap:6px"><select class="settings-input" id="cs-gen-refpoints" style="width:150px;text-align:left"><option value="1">Yes</option><option value="0">No</option></select></div></div>
+            <div class="settings-row"><div><div class="settings-row-label">Reference Temperature</div><div class="settings-row-desc">Where the reference points are taken, and where the TEC goes at the end when At The End says so</div></div><div></div><div style="display:flex;align-items:center;gap:6px"><input class="settings-input" type="number" id="cs-gen-ref" value="25" step="0.5"><span class="settings-unit">°C</span></div></div>
+            <div class="settings-row"><div><div class="settings-row-label">Break-in &amp; Anneal</div><div class="settings-row-desc">One soak before the points, at this temperature, for at least this long and until the mass mode drifts less than this. A freshly mounted crystal sheds mass at ~0.5 Hz/min, falling ~30× over three hours at room temperature, and points taken through that bake the drift into the curve; heat speeds that up. Holding a little above the highest point also makes an irreversible shift, like the −3.8 Hz mass-mode step at 60 °C on 2 Nov, happen before the points instead of among them. The drift is judged at this temperature, where the loss runs fastest. For a fresh crystal give Step Timeout room: it counts from the end of the minimum. 0 min and 0 Hz/min = none</div></div><div></div><div style="display:flex;align-items:center;gap:6px"><input class="settings-input" type="number" id="cs-gen-anneal-t" value="52" step="1" style="width:60px"><span class="settings-unit">°C,</span><input class="settings-input" type="number" id="cs-gen-anneal-min" value="60" step="5" min="0" style="width:60px"><span class="settings-unit">min,</span><input class="settings-input" type="number" id="cs-gen-breakin-drift" value="0.02" step="0.01" min="0" style="width:60px"><span class="settings-unit">Hz/min</span></div></div>
+            <div class="settings-row"><div><div class="settings-row-label">Reference Points</div><div class="settings-row-desc">A point at the reference straight after the break-in &amp; anneal, and one at the very end. Comparing them shows a drift or a step over the calibration</div></div><div></div><div style="display:flex;align-items:center;gap:6px"><select class="settings-input" id="cs-gen-refpoints" style="width:150px;text-align:left"><option value="1">Yes</option><option value="0">No</option></select></div></div>
           </div>
           <button class="btn btn-blue" onclick="generateCalSequence()" style="margin-bottom:28px" title="Replace the step list with one made from the settings above">GENERATE STEPS</button>
 
@@ -3465,8 +3464,8 @@ function onTecStatus(st) {
 // second inside the CalibrationStatusEvent.
 const CS_GEN_FIELDS = {   // generator input -> key kept in config.generator
   'cs-gen-tmin': 'tmin', 'cs-gen-tmax': 'tmax', 'cs-gen-step': 'step', 'cs-gen-pattern': 'pattern',
-  'cs-gen-ref': 'reference', 'cs-gen-breakin-min': 'breakin_min', 'cs-gen-breakin-drift': 'breakin_drift',
-  'cs-gen-anneal-t': 'anneal_t', 'cs-gen-anneal-min': 'anneal_min', 'cs-gen-refpoints': 'refpoints',
+  'cs-gen-ref': 'reference', 'cs-gen-anneal-t': 'anneal_t', 'cs-gen-anneal-min': 'anneal_min',
+  'cs-gen-breakin-drift': 'breakin_drift', 'cs-gen-refpoints': 'refpoints',
 };
 const SEQ_STATES = {   // state -> [pill text, pill class]
   idle:    ['IDLE',    'idle'],
@@ -3555,7 +3554,7 @@ function generateCalSequence() {
   const g = {};
   for (const [id, key] of Object.entries(CS_GEN_FIELDS)) g[key] = fieldValue(id);
   const n = k => parseFloat(g[k]);
-  for (const k of ['tmin', 'tmax', 'step', 'reference', 'breakin_min', 'breakin_drift', 'anneal_t', 'anneal_min']) {
+  for (const k of ['tmin', 'tmax', 'step', 'reference', 'breakin_drift', 'anneal_t', 'anneal_min']) {
     if (isNaN(n(k))) { showToast(`Generator: ${k.replace('_', ' ')} must be a number`, true); return; }
   }
   if (!(n('tmax') > n('tmin')) || !(n('step') > 0)) { showToast('Generator: need lowest < highest and a step above 0', true); return; }
@@ -3572,13 +3571,9 @@ function generateCalSequence() {
   }
   const ref = n('reference'), refPoints = g.refpoints === '1';
   const steps = [];
-  if (n('breakin_min') > 0 || n('breakin_drift') > 0)
-    steps.push({ kind: 'soak', setpoint: ref, minutes: n('breakin_min'), max_fm_drift: n('breakin_drift') });
-  const anneal = n('anneal_min') > 0;
-  if (anneal) {
-    if (refPoints) steps.push({ kind: 'point', setpoint: ref });
-    steps.push({ kind: 'soak', setpoint: n('anneal_t'), minutes: n('anneal_min'), max_fm_drift: 0 });
-  }
+  // Break-in and anneal in one hot soak: heat speeds up the break-in.
+  if (n('anneal_min') > 0 || n('breakin_drift') > 0)
+    steps.push({ kind: 'soak', setpoint: n('anneal_t'), minutes: n('anneal_min'), max_fm_drift: n('breakin_drift') });
   if (refPoints) steps.push({ kind: 'point', setpoint: ref });
   for (const t of points) steps.push({ kind: 'point', setpoint: t });
   if (refPoints) steps.push({ kind: 'point', setpoint: ref });

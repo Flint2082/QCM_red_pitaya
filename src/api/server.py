@@ -22,11 +22,12 @@ from contextlib import asynccontextmanager
 
 import app
 import uvicorn
-from fastapi import FastAPI, File, HTTPException, UploadFile, WebSocket, WebSocketDisconnect
+from fastapi import Body, FastAPI, File, HTTPException, UploadFile, WebSocket, WebSocketDisconnect
 from fastapi.responses import FileResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 
 from domain.calibration_recorder import CalibrationRecorder
+from domain.calibration_sequence import CalibrationSequence
 from domain.crystal import CrystalManager, CrystalProfile, sanitize_name
 from domain.qcm_interface import OUTPUT_GAIN_MAX, WINDOW_SIZE
 from domain.run_logger import MIN_FREE_BYTES, RUNS_DIR, part_number, run_base
@@ -333,6 +334,9 @@ class RestServer:
         # evaluated by it once a second; see domain/calibration_recorder.py.
         self._calibration = CalibrationRecorder()
         self._last_cal_tick = 0.0
+        # Automatic calibration: TEC setpoints worked through one by one,
+        # ticked right after the recorder; see domain/calibration_sequence.py.
+        self._sequence = CalibrationSequence()
         # Run log the worker is currently writing (None = not recording). Tracked
         # so the UI downloads the run it just took rather than whichever file in
         # data/runs/ happens to have the newest mtime.
@@ -898,11 +902,25 @@ class RestServer:
         took if it took one, for the clients."""
         try:
             status, added = self._calibration.tick(run=self._recording_run())
+            running = self._sequence.state == "running"
+            try:
+                self._sequence.tick(time.time(), status, added, self._tec, self._calibration,
+                                    self._sequence_capture)
+            except Exception as e:
+                print(f"[SEQ] Step check failed: {e}")
+            status["sequence"] = self._sequence.status()
             self.event_queue.put(CalibrationStatusEvent(status=status))
-            if added:
+            if added or (running and self._sequence.state != "running"):
+                # A sequence that ended may have put AUTO back: send the settings too.
                 self._queue_calibration_points(added)
         except Exception as e:
             print(f"[CAL] Settle check failed: {e}")
+
+    def _sequence_capture(self) -> dict:
+        """A point now, for a sequence step that timed out with on_timeout = take."""
+        point = self._calibration.capture(None, run=self._recording_run())
+        self._queue_calibration_points(point)
+        return point
 
     def _queue_calibration_points(self, added: dict | None = None):
         contents = self._calibration.contents()
@@ -1687,6 +1705,48 @@ class RestServer:
             self._calibration.clear()
             self._queue_calibration_points()
             return {"status": "ok"}
+
+        # ---- Calibration sequence (Settings -> Calibration Sequence) ----
+        # Its progress also goes out once a second inside the
+        # CalibrationStatusEvent, as status.sequence.
+
+        @app.get("/calibration/sequence")
+        def get_calibration_sequence():
+            return self._sequence.contents()
+
+        @app.post("/calibration/sequence")
+        def set_calibration_sequence(config: dict = Body(...)):
+            """Replace the sequence: steps [{kind: point|soak, setpoint, minutes,
+            max_fm_drift}], timeout_min, on_timeout, tolerance, at_end, reference."""
+            try:
+                return self._sequence.update_config(config)
+            except ValueError as e:
+                raise HTTPException(400, str(e))
+            except RuntimeError as e:
+                raise HTTPException(409, str(e))
+
+        @app.post("/calibration/sequence/start")
+        def start_calibration_sequence():
+            """Switch the TEC on and work through the steps. Switches AUTO on."""
+            try:
+                self._sequence.start(self._tec, self._calibration)
+            except RuntimeError as e:
+                raise HTTPException(409, str(e))
+            self._queue_calibration_points()   # AUTO may have changed
+            return self._sequence.status()
+
+        @app.post("/calibration/sequence/stop")
+        def stop_calibration_sequence():
+            """End the sequence; the TEC goes on holding its setpoint."""
+            self._sequence.stop(self._calibration)
+            self._queue_calibration_points()   # AUTO may have changed
+            return self._sequence.status()
+
+        @app.post("/calibration/sequence/skip")
+        def skip_calibration_step():
+            """Give up on the step in progress and go to the next."""
+            self._sequence.skip(self._tec, self._calibration)
+            return self._sequence.status()
 
         # ---- TEC temperature control (Settings -> TEC, CALIBRATE tab) ----
         # The loop runs in workers/tec_worker.py; every step is also pushed to

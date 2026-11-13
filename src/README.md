@@ -295,6 +295,48 @@ available at `GET /tec`, `POST /tec/settings`, `POST /tec/enabled`,
 `POST /tec/autotune/start` and `/abort`; every step of the loop is pushed to
 the browsers as a `TecStatusEvent`.
 
+## Calibration sequence
+
+With the TEC under its control, the Pitaya can take a whole calibration by
+itself ([`domain/calibration_sequence.py`](domain/calibration_sequence.py)).
+The steps are set up under **Settings → Calibration Sequence** and saved with
+SAVE SEQUENCE (not APPLY), in `data/calibration/sequence.json`; START and STOP
+are on the **CALIBRATE** tab's SEQUENCE row, which shows the step in progress.
+
+Each step goes to a setpoint and is one of:
+
+- **point**: wait for the settle detector to take a point there, as AUTO
+  would (same WINDOW, drift limits and HOLD), then go on;
+- **soak**: hold the setpoint for its minutes and, with a drift limit, until
+  the mass mode drifts less than that (Hz/min over the settle window). No
+  point: a break-in, or an anneal.
+
+The generator fills the list from a range, a step and a pattern:
+**interleaved** (every other temperature going up, the ones in between coming
+down, so neighbours are approached from opposite sides and a drift shows up
+instead of tilting the curve), **both ways**, or **up only**. It can put a
+break-in soak and an anneal before the points, and reference points before and
+after the anneal and at the end. The defaults (10–50 °C in 5 °C steps,
+break-in at 25 °C, anneal at 52 °C) give 14 steps with 12 points, about 5 h.
+The list can be edited by hand afterwards.
+
+While a soak runs, and in a point step until the TEMP sensor is within the
+point tolerance of the setpoint, the settle detector's automatic points are
+held back, so it takes nothing during a break-in or on the way to a setpoint.
+Each point step re-arms the detector, so a temperature can be taken again
+after a soak with nothing in between. A step that times out is skipped, taken
+as it stands (marked not settled), or ends the sequence. At the end the TEC
+switches off, goes to the reference temperature, or holds the last setpoint.
+
+START needs a sensor as the TEMP source, switches AUTO on (and off again when
+the sequence ends, if it was off before) and the TEC on, and refuses setpoints
+outside the TEC's safety limits. The TEC switching off, by
+hand or on a fault, ends the sequence, and so does a restart of the service
+(the TEC comes up off); the points taken so far stay. The same is available at
+`GET`/`POST /calibration/sequence` and `POST /calibration/sequence/start`,
+`/stop` and `/skip`; progress goes out once a second as `status.sequence` in
+the `CalibrationStatusEvent`.
+
 ## OPC-UA
 
 The bridge to the WAGO PLC is **off by default**: switch it on under Settings →

@@ -101,6 +101,18 @@ header { height: var(--header-h); background: var(--surface); border-bottom: 1px
 .status-pill.locking  { border-color: var(--orange); color: var(--orange); background: var(--orange-dim); }
 .status-pill.sweeping { border-color: var(--blue);   color: var(--blue);   background: var(--blue-dim); }
 .status-pill.error    { border-color: var(--red);    color: var(--red);    background: var(--red-dim); }
+/* Calibration sequence step list (Settings → Calibration Sequence) */
+.cs-steps { display: flex; flex-direction: column; gap: 1px; background: var(--border); border: 1px solid var(--border); border-radius: var(--radius); margin-bottom: 8px; max-height: 420px; overflow: auto; }
+.cs-row { display: flex; align-items: center; gap: 8px; padding: 4px 10px; background: var(--surface); font-family: 'DM Mono', monospace; font-size: 11px; color: var(--text-dim); }
+.cs-row .settings-input { width: 72px; padding: 2px 6px; font-size: 11px; }
+.cs-row select.settings-input { width: 84px; text-align: left; }
+.cs-num { width: 22px; text-align: right; }
+.cs-note { flex: 1; min-width: 0; }
+.cs-row.cs-done { opacity: 0.5; }
+.cs-row.cs-active { box-shadow: inset 3px 0 0 var(--green); background: var(--green-dim); color: var(--text); }
+.cs-btn { background: none; border: 1px solid var(--border); border-radius: var(--radius); color: var(--text-dim); cursor: pointer; font-size: 11px; width: 22px; height: 22px; padding: 0; }
+.cs-btn:hover { color: var(--text); border-color: var(--border-2); }
+.cs-empty { padding: 12px; background: var(--surface); color: var(--text-dim); font-family: 'DM Mono', monospace; font-size: 11px; }
 
 .content { flex: 1; overflow: hidden; display: flex; flex-direction: column; }
 .tab-panel { display: none; flex: 1; overflow: hidden; flex-direction: column; }
@@ -447,6 +459,16 @@ footer { height: 24px; background: var(--surface); border-top: 1px solid var(--b
       <button class="btn btn-blue" onclick="setTecSetpoint()" title="Send the setpoint to the Pitaya (Enter does the same)">SET</button>
       <span id="cal-tec-live" style="font-family:'DM Mono',monospace;font-size:10px;color:var(--text-dim)"></span>
     </div>
+    <!-- Calibration sequence: the steps under Settings → Calibration Sequence, run by the Pitaya. -->
+    <div class="toolbar">
+      <span class="toolbar-label">SEQUENCE</span>
+      <div class="status-pill idle" id="cal-seq-pill">IDLE</div>
+      <button class="btn btn-green" id="btn-seq-start" onclick="toggleCalSequence()" title="Work through the calibration sequence: the TEC goes to each setpoint and a point is taken when it has settled">START</button>
+      <button class="btn" id="btn-seq-skip" onclick="skipCalStep()" disabled title="Give up on this step and go to the next">SKIP STEP</button>
+      <span id="cal-seq-text" style="font-family:'DM Mono',monospace;font-size:10px;color:var(--text-dim)"></span>
+      <div class="header-spacer"></div>
+      <button class="btn" onclick="openSettingsPanel('calseq')" title="Settings → Calibration Sequence">EDIT SEQUENCE</button>
+    </div>
     <div class="stat-bar">
       <div class="stat"><div class="stat-label">Mass Mode Freq</div><div class="stat-value" id="val-cal-fM" style="color:var(--green)">—</div><div class="stat-unit">Hz</div></div>
       <div class="stat"><div class="stat-label">Temp Mode Freq</div><div class="stat-value" id="val-cal-fT" style="color:var(--blue)">—</div><div class="stat-unit">Hz</div></div>
@@ -497,6 +519,7 @@ footer { height: 24px; background: var(--surface); border-top: 1px solid var(--b
         <div class="settings-nav-item active" onclick="switchSettings('meas',this)">Measurement</div>
         <div class="settings-nav-item" onclick="switchSettings('crystals',this)">Crystal</div>
         <div class="settings-nav-item" onclick="switchSettings('tec',this)">TEC Control</div>
+        <div class="settings-nav-item" onclick="switchSettings('calseq',this)">Calibration Sequence</div>
         <div class="settings-nav-section">SYSTEM</div>
         <div class="settings-nav-item" onclick="switchSettings('system',this)">System</div>
         <div class="settings-nav-item" onclick="switchSettings('opc',this)">OPC-UA</div>
@@ -773,6 +796,46 @@ footer { height: 24px; background: var(--surface); border-top: 1px solid var(--b
             <div class="settings-row"><div><div class="settings-row-label">Autotune</div><div class="settings-row-desc">Progress of a test in progress, or the result of the last one</div></div><div></div><span id="tec-at-status" style="font-family:'DM Mono',monospace;font-size:11px;color:var(--text-dim);max-width:340px;text-align:right">—</span></div>
           </div>
           <button class="btn btn-blue" id="btn-tec-autotune" onclick="toggleTecAutotune()" style="margin-bottom:28px">START AUTOTUNE</button>
+        </div>
+
+        <!-- CALIBRATION SEQUENCE: TEC setpoints the Pitaya works through by itself
+             (domain/calibration_sequence.py). Saved with its own button, not APPLY;
+             started and watched from the CALIBRATE tab. -->
+        <div class="settings-panel" id="spanel-calseq">
+          <div class="settings-section-title">GENERATE</div>
+          <div class="settings-group">
+            <div class="settings-row"><div><div class="settings-row-label">Temperature Range</div><div class="settings-row-desc">Lowest and highest calibration point. Range matters more than the number of points, and the temperatures you deposit at should sit in the middle of it: points below room temperature are worth the most. Keep the lowest above the room's dew point, or water condenses on the crystal</div></div><div></div><div style="display:flex;align-items:center;gap:6px"><input class="settings-input" type="number" id="cs-gen-tmin" value="10" step="1" style="width:70px"><span class="settings-unit">to</span><input class="settings-input" type="number" id="cs-gen-tmax" value="50" step="1" style="width:70px"><span class="settings-unit">°C</span></div></div>
+            <div class="settings-row"><div><div class="settings-row-label">Step</div><div class="settings-row-desc">Spacing of the points. A cubic has four coefficients, so take at least 6–8 distinct temperatures</div></div><div></div><div style="display:flex;align-items:center;gap:6px"><input class="settings-input" type="number" id="cs-gen-step" value="5" step="0.5" min="0.5"><span class="settings-unit">°C</span></div></div>
+            <div class="settings-row"><div><div class="settings-row-label">Pattern</div><div class="settings-row-desc"><b>Interleaved</b>: every other temperature on the way up, the ones in between on the way down, so neighbouring points are approached from opposite sides and a drift or a heating/cooling difference shows up instead of tilting the curve. <b>Both ways</b> takes every temperature going up and again coming down: twice the points, and a direct hysteresis check. <b>Up only</b> is a plain staircase, the least robust</div></div><div></div><div style="display:flex;align-items:center;gap:6px"><select class="settings-input" id="cs-gen-pattern" style="width:150px;text-align:left"><option value="interleaved">Interleaved</option><option value="both">Both ways</option><option value="up">Up only</option></select></div></div>
+            <div class="settings-row"><div><div class="settings-row-label">Reference Temperature</div><div class="settings-row-desc">Where the break-in and the reference points are held, and where the TEC goes at the end when At The End says so</div></div><div></div><div style="display:flex;align-items:center;gap:6px"><input class="settings-input" type="number" id="cs-gen-ref" value="25" step="0.5"><span class="settings-unit">°C</span></div></div>
+            <div class="settings-row"><div><div class="settings-row-label">Break-in</div><div class="settings-row-desc">Hold the reference at least this long, and until the mass mode drifts less than this. A freshly mounted crystal sheds mass at ~0.5 Hz/min, falling ~30× over three hours, and points taken through that bake the drift into the curve. Both 0 = no break-in</div></div><div></div><div style="display:flex;align-items:center;gap:6px"><input class="settings-input" type="number" id="cs-gen-breakin-min" value="30" step="5" min="0" style="width:70px"><span class="settings-unit">min,</span><input class="settings-input" type="number" id="cs-gen-breakin-drift" value="0.02" step="0.01" min="0" style="width:70px"><span class="settings-unit">Hz/min</span></div></div>
+            <div class="settings-row"><div><div class="settings-row-label">Anneal</div><div class="settings-row-desc">Hold this temperature for this long before the points, a little above the highest one, so an irreversible shift (like the −3.8 Hz mass-mode step at 60 °C on 2 Nov) happens before the points instead of among them. 0 min = no anneal</div></div><div></div><div style="display:flex;align-items:center;gap:6px"><input class="settings-input" type="number" id="cs-gen-anneal-t" value="52" step="1" style="width:70px"><span class="settings-unit">°C,</span><input class="settings-input" type="number" id="cs-gen-anneal-min" value="30" step="5" min="0" style="width:70px"><span class="settings-unit">min</span></div></div>
+            <div class="settings-row"><div><div class="settings-row-label">Reference Points</div><div class="settings-row-desc">A point at the reference before the anneal, after it, and at the very end. Comparing them shows a drift or a step over the run</div></div><div></div><div style="display:flex;align-items:center;gap:6px"><select class="settings-input" id="cs-gen-refpoints" style="width:150px;text-align:left"><option value="1">Yes</option><option value="0">No</option></select></div></div>
+          </div>
+          <button class="btn btn-blue" onclick="generateCalSequence()" style="margin-bottom:28px" title="Replace the step list with one made from the settings above">GENERATE STEPS</button>
+
+          <div class="settings-section-title">STEPS</div>
+          <div class="settings-row-desc" style="margin-bottom:8px">Worked through from the top. A <b>point</b> step goes to the setpoint and waits for the settle detector (CALIBRATE tab) to take a point there. A <b>soak</b> holds the setpoint for its minutes and, if a drift limit is set, until the mass mode drifts less than that; it takes no point</div>
+          <div id="cs-steps" class="cs-steps"></div>
+          <div style="display:flex;gap:8px;align-items:center;margin-bottom:28px">
+            <button class="btn" onclick="addCsStep('point')">+ POINT</button>
+            <button class="btn" onclick="addCsStep('soak')">+ SOAK</button>
+            <button class="btn" onclick="clearCsSteps()">CLEAR</button>
+            <span id="cs-summary" style="font-family:'DM Mono',monospace;font-size:10px;color:var(--text-dim);margin-left:8px"></span>
+          </div>
+
+          <div class="settings-section-title">RUN</div>
+          <div class="settings-group">
+            <div class="settings-row"><div><div class="settings-row-label">Step Timeout</div><div class="settings-row-desc">How long a point step may take, and a soak beyond its minutes</div></div><div></div><div style="display:flex;align-items:center;gap:6px"><input class="settings-input" type="number" id="cs-timeout" value="90" step="5" min="5"><span class="settings-unit">min</span></div></div>
+            <div class="settings-row"><div><div class="settings-row-label">On Timeout</div><div class="settings-row-desc"><b>Skip</b> goes on to the next step without a point. <b>Take anyway</b> takes one from the last window, marked not settled. <b>Stop</b> ends the sequence with the TEC holding the setpoint</div></div><div></div><div style="display:flex;align-items:center;gap:6px"><select class="settings-input" id="cs-on-timeout" style="width:150px;text-align:left"><option value="skip">Skip</option><option value="take">Take anyway</option><option value="stop">Stop</option></select></div></div>
+            <div class="settings-row"><div><div class="settings-row-label">Point Tolerance</div><div class="settings-row-desc">How close the TEMP sensor has to be to the setpoint before a point may be taken, and where a point has to lie to count for its step. Until then the settle detector's automatic points are held back</div></div><div></div><div style="display:flex;align-items:center;gap:6px"><input class="settings-input" type="number" id="cs-tolerance" value="0.5" step="0.1" min="0.05"><span class="settings-unit">°C</span></div></div>
+            <div class="settings-row"><div><div class="settings-row-label">At The End</div><div class="settings-row-desc">What the TEC does once the last step is done</div></div><div></div><div style="display:flex;align-items:center;gap:6px"><select class="settings-input" id="cs-at-end" style="width:200px;text-align:left"><option value="off">Switch off</option><option value="reference">Go to the reference</option><option value="hold">Hold the last setpoint</option></select></div></div>
+          </div>
+          <div style="display:flex;gap:8px;align-items:center;margin-bottom:28px">
+            <button class="btn btn-blue" id="btn-cs-save" onclick="saveCalSequence()">SAVE SEQUENCE</button>
+            <button class="btn" onclick="loadCalSequence()" title="Throw away unsaved edits and reload the saved sequence">REVERT</button>
+            <span id="cs-dirty" style="font-family:'DM Mono',monospace;font-size:10px;color:var(--text-dim)"></span>
+          </div>
         </div>
 
         <!-- NOTIFICATIONS -->
@@ -3396,6 +3459,287 @@ function onTecStatus(st) {
   }
 }
 
+// ---- Calibration sequence (Settings → Calibration Sequence, CALIBRATE tab) ----
+// The Pitaya works through the steps (domain/calibration_sequence.py); this
+// panel edits them and saves them with its own button. Progress arrives once a
+// second inside the CalibrationStatusEvent.
+const CS_GEN_FIELDS = {   // generator input -> key kept in config.generator
+  'cs-gen-tmin': 'tmin', 'cs-gen-tmax': 'tmax', 'cs-gen-step': 'step', 'cs-gen-pattern': 'pattern',
+  'cs-gen-ref': 'reference', 'cs-gen-breakin-min': 'breakin_min', 'cs-gen-breakin-drift': 'breakin_drift',
+  'cs-gen-anneal-t': 'anneal_t', 'cs-gen-anneal-min': 'anneal_min', 'cs-gen-refpoints': 'refpoints',
+};
+const SEQ_STATES = {   // state -> [pill text, pill class]
+  idle:    ['IDLE',    'idle'],
+  running: ['RUNNING', 'running'],
+  done:    ['DONE',    'sweeping'],
+  stopped: ['STOPPED', 'locking'],
+  failed:  ['FAILED',  'error'],
+};
+let _csSteps = [];       // the step list being edited
+let _csSavedJson = '';   // what the Pitaya holds, to tell unsaved edits
+let _seq = null;         // latest sequence status
+
+function fmtMmss(s) {
+  s = Math.max(0, Math.round(s));
+  const h = Math.floor(s / 3600), m = Math.floor(s / 60) % 60, sec = s % 60;
+  return h ? `${h}:${String(m).padStart(2, '0')}:${String(sec).padStart(2, '0')}` : `${m}:${String(sec).padStart(2, '0')}`;
+}
+
+function csConfig() {
+  const generator = {};
+  for (const [id, key] of Object.entries(CS_GEN_FIELDS)) generator[key] = fieldValue(id);
+  return {
+    steps: _csSteps.map(s => s.kind === 'point'
+      ? { kind: 'point', setpoint: parseFloat(s.setpoint) }
+      : { kind: 'soak', setpoint: parseFloat(s.setpoint), minutes: parseFloat(s.minutes) || 0,
+          max_fm_drift: parseFloat(s.max_fm_drift) || 0 }),
+    timeout_min: parseFloat(fieldValue('cs-timeout')),
+    on_timeout: fieldValue('cs-on-timeout'),
+    tolerance: parseFloat(fieldValue('cs-tolerance')),
+    at_end: fieldValue('cs-at-end'),
+    reference: parseFloat(fieldValue('cs-gen-ref')),
+    generator,
+  };
+}
+
+function csUpdateDirty() {
+  const dirty = JSON.stringify(csConfig()) !== _csSavedJson;
+  setText('cs-dirty', dirty ? 'Unsaved changes' : 'Saved on the Pitaya');
+  document.getElementById('cs-dirty').style.color = dirty ? 'var(--orange)' : '';
+  return dirty;
+}
+
+async function loadCalSequence() {
+  try {
+    const r = await fetch(`${API_URL}/calibration/sequence`);
+    if (!r.ok) return;
+    const d = await r.json();
+    const c = d.config;
+    for (const [id, key] of Object.entries(CS_GEN_FIELDS)) {
+      if (c.generator && c.generator[key] != null && c.generator[key] !== '') document.getElementById(id).value = c.generator[key];
+    }
+    document.getElementById('cs-timeout').value = c.timeout_min;
+    document.getElementById('cs-on-timeout').value = c.on_timeout;
+    document.getElementById('cs-tolerance').value = c.tolerance;
+    document.getElementById('cs-at-end').value = c.at_end;
+    if (!(c.generator && c.generator.reference != null)) document.getElementById('cs-gen-ref').value = c.reference;
+    _csSteps = c.steps.map(s => Object.assign({ minutes: 0, max_fm_drift: 0 }, s));
+    renderCsSteps();
+    _csSavedJson = JSON.stringify(csConfig());
+    csUpdateDirty();
+    onSequenceStatus(d.status);
+  } catch(e) { /* backend not reachable yet */ }
+}
+loadCalSequence();
+
+async function saveCalSequence() {
+  try {
+    const r = await fetch(`${API_URL}/calibration/sequence`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(csConfig()) });
+    const d = await r.json().catch(() => ({}));
+    if (!r.ok) { showToast(`Sequence not saved — ${d.detail || r.status}`, true); return; }
+    _csSavedJson = JSON.stringify(csConfig());
+    csUpdateDirty();
+    showToast(`Sequence saved: ${_csSteps.length} steps`);
+  } catch(e) { showToast('Sequence not saved: no connection', true); }
+}
+
+function csTemperatures(tmin, tmax, step) {
+  const temps = [];
+  for (let t = tmin; t <= tmax + 1e-9; t += step) temps.push(Math.round(t * 100) / 100);
+  if (temps[temps.length - 1] < tmax - 0.01) temps.push(tmax);
+  return temps;
+}
+
+function generateCalSequence() {
+  const g = {};
+  for (const [id, key] of Object.entries(CS_GEN_FIELDS)) g[key] = fieldValue(id);
+  const n = k => parseFloat(g[k]);
+  for (const k of ['tmin', 'tmax', 'step', 'reference', 'breakin_min', 'breakin_drift', 'anneal_t', 'anneal_min']) {
+    if (isNaN(n(k))) { showToast(`Generator: ${k.replace('_', ' ')} must be a number`, true); return; }
+  }
+  if (!(n('tmax') > n('tmin')) || !(n('step') > 0)) { showToast('Generator: need lowest < highest and a step above 0', true); return; }
+  const temps = csTemperatures(n('tmin'), n('tmax'), n('step'));
+  let points;
+  if (g.pattern === 'interleaved') {
+    const up = temps.filter((_, i) => i % 2 === 0);
+    const down = temps.filter((_, i) => i % 2 === 1).reverse();
+    points = up.concat(down);
+  } else if (g.pattern === 'both') {
+    points = temps.concat(temps.slice(0, -1).reverse());
+  } else {
+    points = temps;
+  }
+  const ref = n('reference'), refPoints = g.refpoints === '1';
+  const steps = [];
+  if (n('breakin_min') > 0 || n('breakin_drift') > 0)
+    steps.push({ kind: 'soak', setpoint: ref, minutes: n('breakin_min'), max_fm_drift: n('breakin_drift') });
+  const anneal = n('anneal_min') > 0;
+  if (anneal) {
+    if (refPoints) steps.push({ kind: 'point', setpoint: ref });
+    steps.push({ kind: 'soak', setpoint: n('anneal_t'), minutes: n('anneal_min'), max_fm_drift: 0 });
+  }
+  if (refPoints) steps.push({ kind: 'point', setpoint: ref });
+  for (const t of points) steps.push({ kind: 'point', setpoint: t });
+  if (refPoints) steps.push({ kind: 'point', setpoint: ref });
+  // A point straight after a point at the same temperature would only repeat it.
+  _csSteps = steps.filter((s, i) => !(i && s.kind === 'point' && steps[i - 1].kind === 'point'
+                                          && steps[i - 1].setpoint === s.setpoint))
+                  .map(s => Object.assign({ minutes: 0, max_fm_drift: 0 }, s));
+  renderCsSteps();
+  csUpdateDirty();
+  showToast(`Generated ${_csSteps.length} steps — SAVE SEQUENCE to keep them`);
+}
+
+function addCsStep(kind) {
+  const last = _csSteps.length ? _csSteps[_csSteps.length - 1].setpoint : parseFloat(fieldValue('cs-gen-ref')) || 25;
+  _csSteps.push({ kind, setpoint: last, minutes: kind === 'soak' ? 30 : 0, max_fm_drift: 0 });
+  renderCsSteps();
+  csUpdateDirty();
+}
+
+function clearCsSteps() {
+  if (_csSteps.length && !confirm('Remove all steps from the list?')) return;
+  _csSteps = [];
+  renderCsSteps();
+  csUpdateDirty();
+}
+
+function csEdit(i, key, value) {
+  _csSteps[i][key] = value;
+  if (key === 'kind') renderCsSteps(); else csSummary();
+  csUpdateDirty();
+}
+
+function csMove(i, d) {
+  const j = i + d;
+  if (j < 0 || j >= _csSteps.length) return;
+  const t = _csSteps[i]; _csSteps[i] = _csSteps[j]; _csSteps[j] = t;
+  renderCsSteps();
+  csUpdateDirty();
+}
+
+function csRemove(i) {
+  _csSteps.splice(i, 1);
+  renderCsSteps();
+  csUpdateDirty();
+}
+
+function renderCsSteps() {
+  const box = document.getElementById('cs-steps');
+  if (!_csSteps.length) {
+    box.innerHTML = '<div class="cs-empty">No steps: GENERATE them above, or add them below</div>';
+    csSummary();
+    return;
+  }
+  box.innerHTML = _csSteps.map((s, i) => {
+    const soak = s.kind === 'soak';
+    const extra = soak
+      ? `<input class="settings-input" type="number" step="5" min="0" value="${s.minutes}" onchange="csEdit(${i},'minutes',this.value)" title="Hold at least this long"><span>min, fM drift ≤</span>`
+        + `<input class="settings-input" type="number" step="0.01" min="0" value="${s.max_fm_drift}" onchange="csEdit(${i},'max_fm_drift',this.value)" title="0 = no drift condition"><span>Hz/min</span>`
+      : '<span>takes a point</span>';
+    return `<div class="cs-row" data-i="${i}"><span class="cs-num">${i + 1}</span>`
+      + `<select class="settings-input" onchange="csEdit(${i},'kind',this.value)"><option value="point"${soak ? '' : ' selected'}>point</option><option value="soak"${soak ? ' selected' : ''}>soak</option></select>`
+      + `<input class="settings-input" type="number" step="0.5" value="${s.setpoint}" onchange="csEdit(${i},'setpoint',this.value)"><span>°C</span>`
+      + `<span class="cs-note" style="display:flex;align-items:center;gap:6px">${extra}</span>`
+      + `<button class="cs-btn" onclick="csMove(${i},-1)" title="Move up">↑</button>`
+      + `<button class="cs-btn" onclick="csMove(${i},1)" title="Move down">↓</button>`
+      + `<button class="cs-btn" onclick="csRemove(${i})" title="Remove">✕</button></div>`;
+  }).join('');
+  csSummary();
+  csHighlight(_seq);
+}
+
+// Steps, points and a rough duration: ~15 min a point once there, soaks at
+// least their minutes, and about 2 °C/min between setpoints.
+function csSummary() {
+  const steps = _csSteps;
+  if (!steps.length) { setText('cs-summary', ''); return; }
+  let minutes = 0, T = _tec && _tec.temperature != null ? _tec.temperature : 22;
+  for (const s of steps) {
+    const sp = parseFloat(s.setpoint);
+    if (isNaN(sp)) continue;
+    minutes += Math.abs(sp - T) / 2 + (s.kind === 'point' ? 15 : Math.max(parseFloat(s.minutes) || 0, parseFloat(s.max_fm_drift) ? 20 : 0));
+    T = sp;
+  }
+  const temps = steps.filter(s => s.kind === 'point').map(s => parseFloat(s.setpoint));
+  const range = temps.length ? ` · ${Math.min.apply(null, temps)}–${Math.max.apply(null, temps)} °C` : '';
+  setText('cs-summary', `${steps.length} steps · ${temps.length} points${range} · roughly ${(minutes / 60).toFixed(1)} h`);
+}
+
+// Marks the running step, as long as the list on screen is the one saved (and
+// so the one running): after an edit the numbers no longer match.
+function csHighlight(q) {
+  const running = q && q.state === 'running' && JSON.stringify(csConfig()) === _csSavedJson;
+  document.querySelectorAll('#cs-steps .cs-row').forEach(row => {
+    const i = +row.dataset.i;
+    row.classList.toggle('cs-active', !!running && i === q.index);
+    row.classList.toggle('cs-done', !!running && i < q.index);
+  });
+}
+
+function onSequenceStatus(q) {
+  if (!q) return;
+  const prev = _seq;
+  _seq = q;
+  const [text, cls] = SEQ_STATES[q.state] || [String(q.state).toUpperCase(), 'idle'];
+  const pill = document.getElementById('cal-seq-pill');
+  pill.className = 'status-pill ' + cls;
+  pill.textContent = text;
+  const running = q.state === 'running';
+  let line;
+  if (running) {
+    line = `step ${q.index + 1}/${q.total} · ${q.description} · ${fmtMmss(q.elapsed)}`
+         + (q.waiting ? ` · ${q.waiting}` : '') + ` · ${q.points} point${q.points === 1 ? '' : 's'} so far`;
+  } else {
+    line = q.message || (_csSteps.length ? `${_csSteps.length} steps ready` : 'no sequence yet: EDIT SEQUENCE');
+  }
+  const el = document.getElementById('cal-seq-text');
+  el.textContent = line;
+  el.style.color = q.state === 'failed' ? 'var(--red)' : '';
+  const btn = document.getElementById('btn-seq-start');
+  btn.textContent = running ? 'STOP' : 'START';
+  btn.className = 'btn ' + (running ? 'btn-red' : 'btn-green');
+  document.getElementById('btn-seq-skip').disabled = !running;
+  csHighlight(q);
+  if (prev && prev.state === 'running' && !running) {
+    if (q.state === 'done') sendNotif('QCM — Calibration sequence done', q.message || '', 'calPoint');
+    else if (q.state === 'failed') sendNotif('QCM — Calibration sequence ended', q.message || '', 'calPoint');
+  }
+}
+
+async function toggleCalSequence() {
+  if (_seq && _seq.state === 'running') {
+    if (!confirm('Stop the calibration sequence?\n\nThe points taken so far are kept, and the TEC goes on holding its setpoint.')) return;
+    try { await postOrThrow(`${API_URL}/calibration/sequence/stop`); }
+    catch(e) { showToast(`Sequence not stopped — ${e.message || e}`, true); }
+    return;
+  }
+  if (csUpdateDirty()) { showToast('SAVE SEQUENCE first (Settings → Calibration Sequence): the Pitaya runs the saved one', true); return; }
+  if (!_csSteps.length) { showToast('The sequence has no steps yet: EDIT SEQUENCE', true); return; }
+  csSummary();
+  if (!confirm(`Start the calibration sequence?\n\n${document.getElementById('cs-summary').textContent}.\n\n`
+             + 'The TEC is switched on and AUTO goes on; points are taken by the settle detector with its '
+             + 'current WINDOW, drift limits and HOLD. Keep both modes locked throughout.')) return;
+  try { await postOrThrow(`${API_URL}/calibration/sequence/start`); }
+  catch(e) { showToast(`Sequence not started — ${e.message || e}`, true); }
+}
+
+async function skipCalStep() {
+  if (!confirm('Give up on this step and go to the next?')) return;
+  try { await postOrThrow(`${API_URL}/calibration/sequence/skip`); }
+  catch(e) { showToast(`Step not skipped — ${e.message || e}`, true); }
+}
+
+function openSettingsPanel(name) {
+  switchTab('settings', document.querySelector('.tab[onclick*="settings"]'));
+  const nav = document.querySelector(`.settings-nav-item[onclick*="'${name}'"]`);
+  if (nav) switchSettings(name, nav);
+}
+
+const csPanel = document.getElementById('spanel-calseq');
+if (csPanel) csPanel.addEventListener('change', () => { csUpdateDirty(); csSummary(); });
+
 // ---- Dirty-state tracking for the unified APPLY / UNDO buttons ----
 // The crystal form is tracked as its own group because APPLY writes it back to a
 // named profile — a write worth doing only when the operator actually touched it.
@@ -3646,7 +3990,9 @@ function onCalibrationPoints(ev) {
   syncCalControls();
   refreshCalCharts();
   const p = ev.added;
-  if (p && p.auto) {
+  if (p && p.auto && _seq && _seq.state === 'running') {
+    showToast(`Calibration point ${p.temperature.toFixed(2)} °C taken; the sequence goes on`);
+  } else if (p && p.auto) {
     sendNotif('QCM — Calibration point taken',
               `${p.temperature.toFixed(2)} °C (${p.source_name}): set the next temperature`, 'calPoint');
   }
@@ -3684,7 +4030,9 @@ function onCalibrationStatus(st) {
 
   // Settled with nothing taken yet: the operator has to add the point (manual
   // source, or AUTO off). An automatic point announces itself instead.
-  if (st.state === 'settled' && !(prev && prev.state === 'settled') && !st.point_here) {
+  if (st.sequence) onSequenceStatus(st.sequence);
+  if (st.state === 'settled' && !(prev && prev.state === 'settled') && !st.point_here && !st.auto_held
+      && !(st.sequence && st.sequence.state === 'running')) {
     sendNotif('QCM — Crystal settled',
               st.source === 'manual' ? 'Enter the temperature and press ADD POINT'
                                      : 'Press ADD POINT (AUTO is off)', 'calPoint');

@@ -150,6 +150,9 @@ class CalibrationRecorder:
         self._left_at: float | None = None
         self._auto_error: str | None = None   # last reason an automatic point failed, said once
         self.save_error: str | None = None    # why the last save failed, shown in the status
+        # Why automatic points are held back right now (a calibration sequence
+        # soaking, or still on its way to the setpoint), or None. Not saved.
+        self._auto_held: str | None = None
         self._load()
 
     # ==================================================
@@ -346,8 +349,9 @@ class CalibrationRecorder:
                     reason = "settled"
 
         status["point_here"] = point_here
+        status["auto_held"] = self._auto_held
         status["armed"] = bool(sensor and s.auto_capture and status["fT"] is not None
-                               and not point_here)
+                               and not point_here and self._auto_held is None)
         status["state"], status["reason"] = state, reason
         return status
 
@@ -428,6 +432,17 @@ class CalibrationRecorder:
             self.points = []
             self._remember(None)
             self._save()
+
+    def rearm(self):
+        """Forget the last point, so the next settled reading is taken even at
+        its temperature. A calibration sequence starts with this."""
+        with self._lock:
+            self._remember(None)
+
+    def hold_auto(self, reason: str | None):
+        """Hold automatic points back, saying why; None lets them through
+        again. One attribute, replaced whole, so no lock."""
+        self._auto_held = reason
 
     def _remember(self, point: dict | None):
         """Make `point` the last settled one, which the next automatic point

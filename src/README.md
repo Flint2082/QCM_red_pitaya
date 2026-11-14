@@ -69,6 +69,42 @@ is locked, and a mode whose start frequency is 0 Hz stays parked. Once the mass
 mode is locked the instrument measures straight away (see below). If the lock
 fails, it waits in IDLE for a GET LOCK.
 
+### Where the temperature mode is aimed
+
+infi2439-type crystals have two temperature modes 3.3–6 kHz apart in the B
+region. The PLL locks to a resonance inside its 4096 Hz capture window around
+the start frequency, and when both modes are inside it usually takes the higher
+one. A stale temperature start frequency therefore catches the wrong mode: on
+13 Nov 2026 a profile's 6568.3 kHz, applied with the crystal at 31 °C, put a
+whole calibration run on the upper mode.
+
+So by default (**Settings → Crystal → Temp Lock Aim → Ratio to mass**, or
+`POST /settings/lock_aim?mode=ratio&temperature=25`) GET LOCK, the boot lock,
+the PLC's lock and the capacitor adjustment start the temperature mode at the
+**mass mode's start frequency times the active calibration's fT/fM at the Aim
+Temperature** (`aim_ratio` in `processing/TempCompAlgorithm.py`), and that
+becomes the temperature start frequency:
+
+- film lowers both modes by the same fraction, so the aim follows a deposition
+  and only the mass start frequency has to be right;
+- it needs no thermometer, which the production units will not have;
+- it comes from the calibration, so it can only point at the mode the profile
+  was calibrated on.
+
+Temperature does change the ratio: the lower mode moves 8 kHz from 12 to 65 °C
+while the mass mode moves 0.2 kHz. Worked out from the 13 Nov and 2 Nov
+calibration curves, with the higher mode winning whenever both are in the
+window, a lower-mode profile aimed at 25 °C catches the lower mode from 2 to
+34 °C, aimed at 30 °C from 12 to 40 °C, aimed at 40 °C from 27 to 51 °C. The
+band reaches much further below the aim temperature than above it (a warmer
+crystal brings the upper mode into the window), so set the aim temperature a
+few degrees above where the crystal usually is at lock time. The automatic re-lock
+is not aimed: it goes back to where the lock was last good, which is right in
+the middle of a run whatever the crystal's temperature. **Fixed** starts at the
+temperature start frequency as typed, as before; 0 Hz parks the mode either way.
+Without usable calibration constants (`fM_0`, `fT_0`) the aim falls back to the
+typed frequency and says so in the log.
+
 The start frequencies follow the lock (frequency tracking, and the update at
 the end of a run) only once a lock attempt has aimed the loops. From power-up
 until then, the NCOs run from 0 Hz and their phase can pass the lock test, and
@@ -162,6 +198,32 @@ that clock shifts both modes by the same fraction, which the compensation
 cannot tell from mass. It takes one conversion a second and reports the mean
 of the last minute; a burst of conversions dips both mode frequencies for as
 long as it lasts.
+
+### Board clock correction
+
+Both modes are counted against the Pitaya's 125 MHz oscillator, which runs fast
+as the board warms. The dual-mode compensation passes that straight into the
+compensated mass frequency: on rp-f0ea58 about +0.25–0.3 ppm, or 1.7 Hz of
+the mass mode, per °C of Zynq die temperature (13 Nov 2026 calibration run,
+where the box warmed 1.4 °C in the 15 minutes after the TEC came on and the
+first point read 1 Hz low for it). **Settings → System → Board Clock**
+(`POST /settings/clock_correction?tempco_ppm=…&lag_s=…`) corrects for it
+([`domain/clock_correction.py`](domain/clock_correction.py)):
+
+- **Clock Tempco** in ppm per °C of die temperature; 0 (the default) is off.
+- **Clock Lag**: the die heats itself and follows processor load within a
+  minute, the oscillator follows the board over several, so the die reading is
+  lagged first. 8 min fitted best on 13 Nov (0.42 Hz rms left, against 0.54
+  unlagged and 0.68 uncorrected).
+
+Both frequencies are divided by 1 + tempco·(T_die,lagged − 45 °C)·1e-6 before the
+thickness and the compensated frequency are worked out, the reference included.
+The run log keeps `freq_mass_hz` and `freq_temp_hz` as measured and records the
+correction in `clock_ppm`. The coefficient belongs to the Red Pitaya, not to the
+crystal, so it is kept per instrument and RESTORE DEFAULTS leaves it alone; a
+crystal calibrated on corrected frequencies stays valid on another instrument
+with that one's coefficient. Changing it steps the compensated output by the
+change (a `CLOCK_CORRECTION` row in the run log), so ZERO afterwards.
 
 Every run log also carries the newest readings beside each sample, in
 `pt100_c`, `thermocouple_c`, `cold_junction_c` and `zynq_die_c` (°C), with any
@@ -281,6 +343,19 @@ temperature and press ADD POINT. ADD POINT before the crystal has settled asks
 first. The same is available at `GET /calibration`,
 `POST /calibration/settings`, `POST /calibration/points` and
 `DELETE /calibration/points[/{id}]`.
+
+Each point also records the lagged board temperature over its window
+(`board_c`). The points are stored as measured; whenever they are sent out the
+server adds clock-corrected copies (`fM_corr`, `fT_corr`, `clock_ppm`) with the
+board-clock coefficient set at that moment, and the tab fits those. The
+**BOARD CLOCK** line under the fitted coefficients estimates the coefficient
+from the points themselves: the mass-mode cubic is fitted together with a term in
+each point's board temperature (fM only, as fT carries the PT100's lag along the
+curve), giving the value ± its standard error. It needs six points with a board
+temperature spread over at least 0.3 °C; on 13 Nov the 1.3 °C spread gave
+0.25 ± 0.09 ppm/°C. **USE** sets it as this instrument's coefficient when the
+error is below 0.2 ppm/°C. Points taken before this was recorded have no board
+temperature and are fitted as measured.
 
 ## TEC temperature control
 

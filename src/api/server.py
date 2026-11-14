@@ -28,8 +28,9 @@ from fastapi.staticfiles import StaticFiles
 
 from domain.calibration_recorder import CalibrationRecorder
 from domain.calibration_sequence import CalibrationSequence
+from domain import clock_correction as clk
 from domain.crystal import CrystalManager, CrystalProfile, sanitize_name
-from domain.qcm_interface import OUTPUT_GAIN_MAX, WINDOW_SIZE
+from domain.qcm_interface import OUTPUT_GAIN_MAX, WINDOW_SIZE, is_parked
 from domain.run_logger import MIN_FREE_BYTES, RUNS_DIR, part_number, run_base
 from domain.sweep_logger import SWEEPS_DIR
 from domain.temperature_sensors import SENSORS
@@ -37,7 +38,7 @@ from plc.opc_worker import _READ_KEYS as OPC_READ_KEYS, _CTRL_KEYS as OPC_CTRL_K
 from messaging.api_command import *
 from messaging.api_event import CalibrationPointsEvent, CalibrationStatusEvent, LogEvent
 from messaging.defines import OutputMode
-from processing.TempCompAlgorithm import absolute_temperature
+from processing.TempCompAlgorithm import absolute_temperature, aim_ratio
 from processing.deposition_rate import (DEFAULT_WINDOW as RATE_WINDOW, MAX_WINDOW as RATE_WINDOW_MAX,
                                         MIN_WINDOW as RATE_WINDOW_MIN)
 from domain import acquisition as acq
@@ -141,8 +142,17 @@ _SETTING_KEYS = frozenset({
     "prune_old_runs", "trim_current_run",
     "active_crystal", "ambient_temp", "t_start_source", "mat_dens", "z_ratio",
     "target_thickness", "rate_window", "sample_rate", "publish_rate", "log_rate",
+    "lock_aim", "lock_aim_temp", "clock_tempco", "clock_lag_s",
     "opc_enabled", "opc_url", "opc_user", "opc_password", "opc_base_node",
 })
+
+# How the temperature mode's lock start frequency is chosen. "ratio": the mass
+# mode's start frequency times the active calibration's fT/fM at the aim
+# temperature (processing/TempCompAlgorithm.aim_ratio), so it follows film
+# loading and can only point at the mode the profile was calibrated on.
+# "fixed": the profile's (or tracked) temperature start frequency, as typed.
+LOCK_AIMS = ("ratio", "fixed")
+LOCK_AIM_TEMP_RANGE = (-20.0, 120.0)  # °C
 
 # Measurement modes. "compensated" locks both modes and solves the temperature
 # from fT; "uncompensated" locks the mass mode alone and parks the temp
@@ -167,11 +177,13 @@ _OPC_SETTING_KEYS = ("opc_enabled", "opc_url", "opc_user", "opc_password", "opc_
 # This is also the single definition of each default — __init__ initialises the
 # server state from it, so there is no second copy to drift.
 #
-# Two persisted settings are deliberately absent, which is what keeps these
+# Three persisted settings are deliberately absent, which is what keeps these
 # universal: the OPC connection is site wiring (resetting the PLC address would
-# cut the link to the coater), and the active crystal is the consumable this
+# cut the link to the coater), the active crystal is the consumable this
 # particular box has fitted — no repo-wide default can name the right one, and
-# clearing it would take the calibration with it. Both survive a restore.
+# clearing it would take the calibration with it — and the clock correction
+# (clock_tempco, clock_lag_s) is measured on this Red Pitaya's own oscillator.
+# All three survive a restore.
 DEFAULT_SETTINGS = {
     # Post-lock loop settings, matching QCMInterface's own defaults.
     #
@@ -207,6 +219,8 @@ DEFAULT_SETTINGS = {
     "measurement_mode": "compensated",  # both modes; "uncompensated" = mass mode only
     "freq_tracking": True,          # follow the locked frequencies for re-lock
     "freq_track_interval": 10.0,    # s between lock-frequency updates
+    "lock_aim": "ratio",            # temp-mode start from the mass mode's (LOCK_AIMS)
+    "lock_aim_temp": 25.0,          # degC the temp-mode aim is worked out at
     "prune_old_runs": True,         # delete finished runs when the disk runs low
     "trim_current_run": True,       # drop the oldest parts of the run in progress
     "ambient_temp": 23.0,           # degC, room temperature
@@ -353,6 +367,11 @@ class RestServer:
         # The values here are only a fallback until a crystal is applied.
         self._lock_freq_mass: float = 5983000.0
         self._lock_freq_temp: float = 6570000.0
+        # Reference-clock correction of this Red Pitaya (domain/clock_correction.py):
+        # ppm per °C of lagged Zynq die temperature, 0 = off, and the lag. Not in
+        # DEFAULT_SETTINGS — measured per board, so a restore leaves it alone.
+        self._clock_tempco: float = 0.0
+        self._clock_lag_s: float = clk.DEFAULT_LAG_S
         # Oscillator settings, output mode, lock-detect conditions, auto re-lock
         # and the per-run measurement parameters all start at DEFAULT_SETTINGS;
         # _load_settings then overrides whatever this box has saved. The
@@ -390,9 +409,9 @@ class RestServer:
         # locks the mass mode alone, and a 0 Hz start frequency parks its
         # oscillator. Without it the NCOs sit at 0 Hz until someone presses GET
         # LOCK, reporting locks that are not there.
-        self.command_queue.put(StartupPLLCommand(self._lock_freq_mass, self._lock_freq_temp))
-        print(f"[Settings] Queued lock at mass {self._lock_freq_mass:.0f} Hz, "
-              f"temp {self._lock_freq_temp:.0f} Hz (boot)")
+        mass, temp = self._lock_starts()
+        self.command_queue.put(StartupPLLCommand(mass, temp))
+        print(f"[Settings] Queued lock at mass {mass:.0f} Hz, temp {temp:.0f} Hz (boot)")
         self.app = self._build_app()
         
 
@@ -415,6 +434,10 @@ class RestServer:
             "measurement_mode": self._measurement_mode,
             "freq_tracking":  self._freq_tracking,
             "freq_track_interval": self._freq_track_interval,
+            "lock_aim":       self._lock_aim,
+            "lock_aim_temp":  self._lock_aim_temp,
+            "clock_tempco":   self._clock_tempco,
+            "clock_lag_s":    self._clock_lag_s,
             "prune_old_runs":   self._prune_old_runs,
             "trim_current_run": self._trim_current_run,
             "active_crystal": self._active_crystal,
@@ -466,6 +489,14 @@ class RestServer:
             self._freq_tracking = bool(d["freq_tracking"])
         if "freq_track_interval" in d:
             self._freq_track_interval = max(1.0, float(d["freq_track_interval"]))
+        if d.get("lock_aim") in LOCK_AIMS:
+            self._lock_aim = d["lock_aim"]
+        if "lock_aim_temp" in d:
+            self._lock_aim_temp = _clamp(d["lock_aim_temp"], *LOCK_AIM_TEMP_RANGE)
+        if "clock_tempco" in d:
+            self._clock_tempco = _clamp(d["clock_tempco"], *clk.TEMPCO_RANGE)
+        if "clock_lag_s" in d:
+            self._clock_lag_s = _clamp(d["clock_lag_s"], *clk.LAG_RANGE)
         if "prune_old_runs" in d:
             self._prune_old_runs = bool(d["prune_old_runs"])
         if "trim_current_run" in d:
@@ -595,8 +626,9 @@ class RestServer:
             "t_start_source": self._t_start_source,
             "mat_dens":       self._mat_dens,
             "z_ratio":        self._z_ratio,
-            "lock_freq_mass": self._lock_freq_mass,
-            "lock_freq_temp": self._lock_freq_temp,
+            # Aimed here, like GET LOCK, so a PLC lock lands on the same mode.
+            # Quietly: the PLC's start reads these too, and locks nothing.
+            **dict(zip(("lock_freq_mass", "lock_freq_temp"), self._lock_starts(announce=False))),
         }
 
     def _reference_defaults(self) -> dict:
@@ -635,6 +667,69 @@ class RestServer:
             profile.fT_0, profile.fT_1, profile.fT_2, profile.fT_3,
         ))
         self.command_queue.put(SetSensorParamsCommand(profile.mass_sensitivity, profile.sens_area, profile.freq_virgin, profile.tooling_ratio))
+
+    def _aim(self) -> dict:
+        """How the temperature-mode lock is aimed right now: the mode, the aim
+        temperature, the ratio from the active calibration (None when it has
+        none usable) and the start frequency that gives with the mass start."""
+        ratio = aim_ratio(self._coefficients or {}, self._lock_aim_temp)
+        temp = None
+        if ratio is not None and not is_parked(self._lock_freq_mass):
+            temp = round(ratio * self._lock_freq_mass, 1)
+        return {"mode": self._lock_aim, "temperature": self._lock_aim_temp,
+                "ratio": ratio, "temp": temp}
+
+    def _lock_starts(self, announce: bool = True) -> tuple[float, float]:
+        """The start frequencies a lock is released at (GET LOCK, the boot lock,
+        the PLC's lock, the capacitor adjustment).
+
+        With the "ratio" aim the temperature mode starts at the mass mode's start
+        frequency times the calibration's fT/fM at the aim temperature, which is
+        then also what the start frequency reads. A temperature start of 0 Hz
+        still parks that mode, and without a usable calibration the start stays
+        as it is. The automatic re-lock does not come through here: it reuses
+        the frequencies the lock was last good at, which is where the modes are
+        in the middle of a run, whatever the crystal's temperature."""
+        mass, temp = self._lock_freq_mass, self._lock_freq_temp
+        if self._lock_aim != "ratio" or is_parked(temp):
+            return mass, temp
+        aimed = self._aim()["temp"]
+        if aimed is None:
+            if announce:
+                print("[Lock] No temperature-mode aim from the active calibration; "
+                      f"starting it at {temp:.0f} Hz as set")
+            return mass, temp
+        if announce and abs(aimed - temp) >= 1.0:
+            print(f"[Lock] Temperature mode aimed at {aimed:.0f} Hz: the calibration's fT/fM "
+                  f"at {self._lock_aim_temp:g} °C times the mass start {mass:.0f} Hz "
+                  f"(was {temp:.0f} Hz)")
+        self._lock_freq_temp = aimed
+        return mass, aimed
+
+    def _clock_corrected(self, points: list[dict]) -> list[dict]:
+        """Calibration points with clock-corrected copies of their frequencies
+        (fM_corr, fT_corr, clock_ppm), from each point's board temperature and the
+        coefficient set now — what the CALIBRATE tab fits, so a profile describes
+        the crystal and not this board's clock. A point without a board
+        temperature (taken before it was recorded) is used as measured."""
+        clock = clk.ClockCorrection(self._clock_tempco, self._clock_lag_s)
+        out = []
+        for p in points:
+            p = dict(p)
+            ppm = clock.ppm_at(p.get("board_c"))
+            scale = 1.0 + ppm * 1e-6
+            p["clock_ppm"] = ppm
+            p["fM_corr"] = p["fM"] / scale
+            p["fT_corr"] = p["fT"] / scale
+            out.append(p)
+        return out
+
+    def _calibration_contents(self) -> dict:
+        contents = self._calibration.contents()
+        contents["points"] = self._clock_corrected(contents["points"])
+        contents["clock"] = {"tempco_ppm": self._clock_tempco, "lag_s": self._clock_lag_s,
+                             "ref_c": clk.REF_C}
+        return contents
 
     def _enqueue_settings(self, reason: str = "boot"):
         """Push the current settings to the hardware so stored values take effect
@@ -679,6 +774,7 @@ class RestServer:
         self.command_queue.put(SetTempHoldCommand(self._temp_hold))
         self.command_queue.put(SetMeasurementModeCommand(self._measurement_mode == "compensated"))
         self.command_queue.put(SetFreqTrackingCommand(self._freq_tracking, self._freq_track_interval))
+        self.command_queue.put(SetClockCorrectionCommand(self._clock_tempco, self._clock_lag_s))
         self.command_queue.put(SetStorageReclaimCommand(self._prune_old_runs, self._trim_current_run))
         self.command_queue.put(SetTargetThicknessCommand(self._target_thickness))
         self.command_queue.put(SetRateWindowCommand(self._rate_window))
@@ -898,7 +994,8 @@ class RestServer:
             if kind in ("MeasurementEvent", "TelemetryEvent") and msg.get("timestamp"):
                 self._calibration.add_frequencies(
                     msg["timestamp"], msg.get("freq_mass_mode"), msg.get("freq_temp_mode"),
-                    bool(msg.get("lock_mass")) and bool(msg.get("lock_temp")))
+                    bool(msg.get("lock_mass")) and bool(msg.get("lock_temp")),
+                    board_c=msg.get("board_c"))
             elif kind == "TemperatureEvent" and msg.get("timestamp"):
                 self._calibration.add_temperatures(
                     msg["timestamp"], bool(msg.get("available")), msg.get("sensors") or [])
@@ -931,9 +1028,10 @@ class RestServer:
         return point
 
     def _queue_calibration_points(self, added: dict | None = None):
-        contents = self._calibration.contents()
+        contents = self._calibration_contents()
         self.event_queue.put(CalibrationPointsEvent(
-            points=contents["points"], settings=contents["settings"], added=added))
+            points=contents["points"], settings=contents["settings"], added=added,
+            clock=contents["clock"]))
 
     def _recording_run(self) -> str | None:
         """The run being recorded right now, by its base name, or None."""
@@ -977,7 +1075,7 @@ class RestServer:
                 await ws.send_json(self._last_opc_status)
             if self._last_temperatures:
                 await ws.send_json(self._last_temperatures)
-            await ws.send_json({"type": "CalibrationPointsEvent", **self._calibration.contents(),
+            await ws.send_json({"type": "CalibrationPointsEvent", **self._calibration_contents(),
                                 "added": None})
             await ws.send_json({"type": "CalibrationStatusEvent", "status": self._calibration.status()})
             try:
@@ -1032,8 +1130,8 @@ class RestServer:
 
         @app.post("/cap_adjust/start")
         def cap_adjust_start():
-            self.command_queue.put(StartCapAdjustCommand(
-                freq_mass=self._lock_freq_mass, freq_temp=self._lock_freq_temp))
+            mass, temp = self._lock_starts()
+            self.command_queue.put(StartCapAdjustCommand(freq_mass=mass, freq_temp=temp))
             return {"status": "ok"}
 
         @app.post("/cap_adjust/stop")
@@ -1043,8 +1141,9 @@ class RestServer:
         
         @app.post("/measurement/get_lock")
         def get_lock():
-            self.command_queue.put(StartupPLLCommand(self._lock_freq_mass, self._lock_freq_temp))
-            return {"status": "ok"}
+            mass, temp = self._lock_starts()
+            self.command_queue.put(StartupPLLCommand(mass, temp))
+            return {"status": "ok", "mass": mass, "temp": temp}
 
         @app.post("/measurement/stop")
         def stop_measurement():
@@ -1210,6 +1309,44 @@ class RestServer:
             self._save_settings()
             return {"status": "ok"}
 
+        @app.post("/settings/lock_aim")
+        def set_lock_aim(mode: str, temperature: float | None = None):
+            """How GET LOCK (and the boot and PLC locks) choose the temperature
+            mode's start frequency. "ratio": the mass mode's start frequency times
+            the active calibration's fT/fM at `temperature` °C — it follows film
+            loading, needs no thermometer and can only aim at the mode the profile
+            was calibrated on, but is good to about ±10 °C around that temperature.
+            "fixed": the temperature start frequency as set."""
+            if mode not in LOCK_AIMS:
+                raise HTTPException(400, f"mode must be one of {', '.join(LOCK_AIMS)}")
+            if temperature is not None:
+                lo, hi = LOCK_AIM_TEMP_RANGE
+                if not (math.isfinite(temperature) and lo <= temperature <= hi):
+                    raise HTTPException(400, f"temperature must be {lo:g} to {hi:g} °C")
+                self._lock_aim_temp = float(temperature)
+            self._lock_aim = mode
+            self._save_settings()
+            return {"status": "ok", "lock_aim": self._aim()}
+
+        @app.post("/settings/clock_correction")
+        def set_clock_correction(tempco_ppm: float, lag_s: float = clk.DEFAULT_LAG_S):
+            """This Red Pitaya's reference-clock correction: `tempco_ppm` ppm per
+            °C of the Zynq die temperature, lagged by `lag_s` (0 ppm/°C switches
+            it off). Both frequencies are divided by 1 + tempco·(T_lagged −
+            REF_C)·1e-6 before the thickness is worked out, and the CALIBRATE tab
+            fits clock-corrected points. Takes effect at once: the compensated
+            output steps by the change, so ZERO after setting it mid-run."""
+            try:
+                clk.ClockCorrection(tempco_ppm, lag_s)   # validates
+            except ValueError as e:
+                raise HTTPException(400, str(e))
+            self._clock_tempco, self._clock_lag_s = float(tempco_ppm), float(lag_s)
+            self.command_queue.put(SetClockCorrectionCommand(self._clock_tempco, self._clock_lag_s))
+            self._save_settings()
+            self._queue_calibration_points()   # the points' corrected copies change with it
+            return {"status": "ok", "clock_correction": {
+                "tempco_ppm": self._clock_tempco, "lag_s": self._clock_lag_s, "ref_c": clk.REF_C}}
+
         @app.post("/settings/storage_reclaim")
         def set_storage_reclaim(prune_old_runs: bool, trim_current_run: bool):
             """What the run logger may delete when the data partition runs low.
@@ -1358,6 +1495,12 @@ class RestServer:
                 "lock_frequencies": {
                     "mass": _finite(self._lock_freq_mass),
                     "temp": _finite(self._lock_freq_temp),
+                },
+                "lock_aim": self._aim(),
+                "clock_correction": {
+                    "tempco_ppm": self._clock_tempco,
+                    "lag_s":      self._clock_lag_s,
+                    "ref_c":      clk.REF_C,
                 },
                 "coefficients": {k: _finite(v) for k, v in (self._coefficients or {}).items()},
             }
@@ -1701,7 +1844,7 @@ class RestServer:
 
         @app.get("/calibration")
         def get_calibration():
-            return {**self._calibration.contents(), "status": self._calibration.status()}
+            return {**self._calibration_contents(), "status": self._calibration.status()}
 
         @app.post("/calibration/settings")
         def set_calibration_settings(source: str | None = None, window_s: float | None = None,

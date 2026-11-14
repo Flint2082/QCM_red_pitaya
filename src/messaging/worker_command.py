@@ -149,6 +149,13 @@ class SetFreqTrackingCommand(WorkerCommand):
     interval: float  # seconds between updates
 
 @dataclass
+class SetClockCorrectionCommand(WorkerCommand):
+    """Correct both frequencies for the reference clock's drift with board
+    temperature (domain/clock_correction.py)."""
+    tempco_ppm: float  # ppm per °C of lagged Zynq die temperature; 0 = off
+    lag_s: float       # time constant of the lag on the die temperature
+
+@dataclass
 class SetStorageReclaimCommand(WorkerCommand):
     """What the run logger may delete when the data partition runs low. Both are
     permanent — a run CSV is the only copy of that run."""

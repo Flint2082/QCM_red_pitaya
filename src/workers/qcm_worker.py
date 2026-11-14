@@ -26,6 +26,7 @@ from domain.acquisition import (DEFAULT_LOG_RATE, DEFAULT_PUBLISH_RATE, DEFAULT_
                                 Decimator)
 from processing.TempCompAlgorithm import absolute_temperature
 from processing.deposition_rate import RateEstimator
+from domain.clock_correction import ClockCorrection
 
 
 def start_temperature(source: str, typed: float, reading, now: float,
@@ -117,6 +118,10 @@ class QCMWorker(threading.Thread):
         self._ref_defaults = SetReferenceParamsCommand(ambient_temp=23.0)
         # The newest TemperatureEvent, for a run's T start from a thermometer.
         self._temperatures = temperatures
+        # Reference-clock correction from the Zynq die temperature, fed from the
+        # same events every cycle (domain/clock_correction.py). Off (0 ppm/°C)
+        # until the server sends this instrument's coefficient.
+        self.clock = ClockCorrection()
         self._t_start_from = "manual"  # where the current run's T start came from
         # Target thickness (nm of compensated thickness; 0 = no target). Checked
         # against every measurement; crossing it raises a flag for the operator,
@@ -417,6 +422,10 @@ class QCMWorker(threading.Thread):
             "interval": self.freq_track_interval,
         }
         snapshot["acquisition"] = self._acquisition_settings()
+        snapshot["clock_correction"] = {
+            "tempco_ppm_per_c": self.clock.tempco_ppm,
+            "lag_s":            self.clock.lag_s,
+        }
         snapshot["measurement"] = {
             "mode":             "compensated" if self._output_compensated() else "uncompensated",
             "reference":        "automatic" if self._ref_auto else "zero",
@@ -647,6 +656,18 @@ class QCMWorker(threading.Thread):
             # the acquisition loop itself for no benefit: the resonances move over
             # minutes, not milliseconds.
             self.freq_track_interval = max(1.0, float(command.interval))
+        elif isinstance(command, SetClockCorrectionCommand):
+            try:
+                self.clock.configure(command.tempco_ppm, command.lag_s)
+            except ValueError as e:
+                print(f"[QCM] Clock correction not changed: {e}")
+            else:
+                self._update_clock()
+                if self.recording:
+                    self.logger.write_event(
+                        "CLOCK_CORRECTION",
+                        f"tempco={self.clock.tempco_ppm:g} ppm/C lag={self.clock.lag_s:g} s "
+                        f"(compensated output steps by the change; ZERO to rebase)")
         elif isinstance(command, SetAcquisitionCommand):
             rates = (self._publish.rate, self._log.rate)
             self._publish.rate = float(command.publish_rate)
@@ -888,6 +909,7 @@ class QCMWorker(threading.Thread):
         if self._pending_sample_rate is not None and not self._in_run():
             self._set_sample_rate(self._pending_sample_rate)
         self._count_sample(mono)
+        self._update_clock()
         # Whether this sample goes out to the GUI and the PLC.
         publish = self._publish.due(mono, 1.0 / self.sample_rate)
 
@@ -954,6 +976,15 @@ class QCMWorker(threading.Thread):
                 self.event_queue.put(TelemetryEvent(data=telemetry))
 
         self._refresh_leds(lock_mass, lock_temp, now)
+
+    def _update_clock(self):
+        """Give the clock correction the newest die reading (a new one arrives
+        once a second; the rest of the cycles it holds) and the QCM the error it
+        now stands at."""
+        reading = self._temperatures() if self._temperatures else None
+        if reading is not None:
+            self.clock.update(reading.timestamp, reading.zynq_die_c)
+        self.qcm.setClock(self.clock.ppm, self.clock.board_c)
 
     def _measure(self, lock_mass: bool, lock_temp: bool, now: float, mono: float, publish: bool):
         """One measurement cycle, logged or not. Every sample goes into the

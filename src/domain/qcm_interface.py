@@ -192,6 +192,12 @@ class QCMInterface:
         self.T_start = 0
         self.fT_start = 0
         self.fM_start = 0
+        # Reference-clock error in ppm and the lagged board temperature it was
+        # worked out from (domain/clock_correction.py), set by the worker every
+        # cycle. Both frequencies are divided by 1 + clock_ppm·1e-6 before any
+        # thickness is worked out, the reference included.
+        self.clock_ppm = 0.0
+        self.board_c = None
         # False for a run taken on the mass mode alone (see setMeasurementReference).
         self.compensated = True
         # Oscillators the last lock attempt parked (0 Hz, integrator off) instead
@@ -891,8 +897,9 @@ class QCMInterface:
             # it — say why here rather than divide by zero further down.
             raise ValueError("mass-mode frequency reads 0 Hz — lock the mass mode before taking a reference")
         self.compensated = bool(compensated)
-        self.fM_start = fM
-        self.fT_start = self.getFreq(2) if self.compensated else 0.0
+        scale = self.clockScale()
+        self.fM_start = fM / scale
+        self.fT_start = self.getFreq(2) / scale if self.compensated else 0.0
         self.T_start = T # would be nice to measure this with a thermometer
         self.temp_comp = tca.TempCompAlgorithm(
             coefficients = self.coefficients,
@@ -946,21 +953,27 @@ class QCMInterface:
         carry on reading the one figure there is, and `compensated` False on the
         sample says which it is."""
         t = self.getTelemetry()
+        # The clock correction applies to both thicknesses: it is the
+        # instrument's error, not the crystal's temperature.
+        scale = self.clockScale()
+        fM, fT = t.freq_mass_mode / scale, t.freq_temp_mode / scale
+        clock = dict(clock_ppm=self.clock_ppm, board_c=self.board_c)
         if not (self.compensated and compensated):
-            thickness = self.temp_comp.FreqToThickness(t.freq_mass_mode)
-            if np.isfinite(t.freq_mass_mode):
-                self.setMockSigFreq(t.freq_mass_mode)
+            thickness = self.temp_comp.FreqToThickness(fM)
+            if np.isfinite(fM):
+                self.setMockSigFreq(fM)
             return MeasurementData(
                 **vars(t),
                 uncompensated_thickness=thickness,
                 calculated_thickness=thickness,
                 calculated_temp=None,
-                compensated_freq=t.freq_mass_mode,
+                compensated_freq=fM,
                 temp_held=False,
                 compensated=False,
+                **clock,
             )
         T_calc, uncompensated_thickness_nm, compensated_thickness_nm, compensated_m_freq = \
-            self.temp_comp.FreqToTemp(t.freq_temp_mode, t.freq_mass_mode, hold_temp=hold_temp)
+            self.temp_comp.FreqToTemp(fT, fM, hold_temp=hold_temp)
         # None when the solve failed (FreqToTemp reports that itself).
         if compensated_m_freq is not None and np.isfinite(compensated_m_freq):
             self.setMockSigFreq(compensated_m_freq)
@@ -971,7 +984,18 @@ class QCMInterface:
             calculated_temp=T_calc,
             compensated_freq=compensated_m_freq,
             temp_held=bool(hold_temp),
+            **clock,
         )
+
+    def setClock(self, ppm: float, board_c: float | None):
+        """The reference-clock error (ppm) to take out of both frequencies from
+        the next sample on, and the lagged board temperature it came from."""
+        self.clock_ppm = float(ppm) if ppm is not None and math.isfinite(ppm) else 0.0
+        self.board_c = board_c
+
+    def clockScale(self) -> float:
+        """Measured over corrected frequency (see domain/clock_correction.py)."""
+        return 1.0 + self.clock_ppm * 1e-6
     
     def moveWindow(self, fM=None, fT=None):
         """Re-centre each PLL's capture window on the frequency it is holding.

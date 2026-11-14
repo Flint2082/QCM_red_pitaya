@@ -501,6 +501,13 @@ footer { height: 24px; background: var(--surface); border-top: 1px solid var(--b
             <div class="cal-coeff-row"><span class="cal-coeff-name">fT_1</span><span class="cal-coeff-val" id="cal-fT1">—</span></div>
           </div>
         </div>
+        <!-- Board clock: the points are fitted clock-corrected (Settings → System →
+             Board Clock); this says what they suggest the coefficient should be. -->
+        <div style="display:flex;align-items:center;gap:10px;padding:8px 16px;border-top:1px solid var(--border);font-family:'DM Mono',monospace;font-size:11px;color:var(--text-dim)">
+          <span style="color:var(--text-mid);letter-spacing:.08em">BOARD CLOCK</span>
+          <span id="cal-clock-info" style="flex:1">—</span>
+          <button class="btn" id="btn-cal-clock-use" onclick="useCalClockEstimate()" disabled title="Set this instrument's board-clock coefficient to the value these points suggest">USE</button>
+        </div>
       </div>
     </div>
   </div>
@@ -596,6 +603,13 @@ footer { height: 24px; background: var(--surface); border-top: 1px solid var(--b
             <div class="settings-row"><div><div class="settings-row-label">Hold Temperature On Lock Loss</div><div class="settings-row-desc">Hold the last calculated temperature while the temp mode is unlocked, rather than solving it from an off-resonance Ft. Only the thermal <i>correction</i> pauses: the mass mode is still measured and the compensated thickness keeps coming out, following the film sample for sample. Held samples show as <b>HELD</b> on the Monitor tab.<br><br><b>Disabled</b>, the temperature is solved from whatever Ft currently reads, locked or not — the live figure, with the lock flag and lock quality beside it to say how far to trust it. Useful when lock detection is marginal and the loops are in fact fine. Either way a sample is produced every cycle and the run is never interrupted</div></div><div></div><div style="display:flex;align-items:center;gap:6px"><select class="settings-input" id="s-temp-hold" style="width:150px;text-align:left"><option value="1">Enabled</option><option value="0">Disabled</option></select></div></div>
             <div class="settings-row"><div><div class="settings-row-label">Track Lock Frequencies</div><div class="settings-row-desc">While both modes are locked, keep the start frequencies on the frequencies the PLLs are actually holding, so a re-lock aims at where the resonances are now instead of where they were hours ago. Does not change the crystal profile on disk</div></div><div></div><div style="display:flex;align-items:center;gap:6px"><select class="settings-input" id="s-freq-track" style="width:150px;text-align:left"><option value="1">Enabled</option><option value="0">Disabled</option></select></div></div>
             <div class="settings-row"><div><div class="settings-row-label">Tracking Interval</div><div class="settings-row-desc">How often the start frequencies are updated</div></div><div></div><div style="display:flex;align-items:center;gap:6px"><input class="settings-input" type="number" id="s-freq-track-interval" value="10" step="1" min="1"><span class="settings-unit">s</span></div></div>
+          </div>
+
+          <div class="settings-section-title">BOARD CLOCK</div>
+          <div class="settings-group">
+            <div class="settings-row"><div><div class="settings-row-label">Clock Tempco</div><div class="settings-row-desc">Both modes are counted against the Red Pitaya's 125 MHz oscillator, which runs fast as the board warms: about +0.25–0.3 ppm per °C of the Zynq die on rp-f0ea58. That shifts both frequencies by the same fraction, which the compensation reads as mass: ~1.7 Hz of the mass mode per °C. With a coefficient set, both frequencies are corrected from the lagged die temperature before any thickness is worked out (the run log keeps them as measured, with the correction in <b>clock_ppm</b>), and the CALIBRATE tab fits corrected points — it also estimates the coefficient from them. Each Red Pitaya has its own oscillator, so this belongs to the instrument, not the crystal, and RESTORE DEFAULTS leaves it alone. 0 switches the correction off. Changing it steps the compensated output: ZERO afterwards</div></div><div></div><div style="display:flex;align-items:center;gap:6px"><input class="settings-input" type="number" id="s-clock-tempco" value="0" step="0.01" min="-5" max="5"><span class="settings-unit">ppm/°C</span></div></div>
+            <div class="settings-row"><div><div class="settings-row-label">Clock Lag</div><div class="settings-row-desc">The die heats itself and follows processor load within a minute; the oscillator follows the board over several. A first-order lag on the die reading tracks the clock better: 8 min fitted best on 13 Nov 2026. 0–60 min</div></div><div></div><div style="display:flex;align-items:center;gap:6px"><input class="settings-input" type="number" id="s-clock-lag" value="8" step="0.5" min="0" max="60"><span class="settings-unit">min</span></div></div>
+            <div class="settings-row"><div><div class="settings-row-label">Correction Now</div><div class="settings-row-desc">Lagged die temperature and the error taken out of both frequencies, referred to a 45 °C die</div></div><div></div><span id="clock-live" style="font-family:'DM Mono',monospace;font-size:12px;color:var(--text-dim)">—</span></div>
           </div>
 
           <div class="settings-section-title">OUTPUT</div>
@@ -710,8 +724,10 @@ footer { height: 24px; background: var(--surface); border-top: 1px solid var(--b
 
           <div class="settings-section-title">START FREQUENCIES</div>
           <div class="settings-group">
-            <div class="settings-row"><div><div class="settings-row-label">Mass Lock Freq</div><div class="settings-row-desc">PLL start frequency — OSC 1</div></div><div></div><div style="display:flex;align-items:center;gap:6px"><input class="settings-input" type="number" id="s-crystal-freq-mass" value="5983000" step="1000"><span class="settings-unit">Hz</span></div></div>
-            <div class="settings-row"><div><div class="settings-row-label">Temp Lock Freq</div><div class="settings-row-desc">PLL start frequency — OSC 2</div></div><div></div><div style="display:flex;align-items:center;gap:6px"><input class="settings-input" type="number" id="s-crystal-freq-temp" value="6570000" step="1000"><span class="settings-unit">Hz</span></div></div>
+            <div class="settings-row"><div><div class="settings-row-label">Mass Lock Freq</div><div class="settings-row-desc">PLL start frequency — OSC 1</div></div><div></div><div style="display:flex;align-items:center;gap:6px"><input class="settings-input" type="number" id="s-crystal-freq-mass" value="5983000" step="1000" oninput="updateAimHint()"><span class="settings-unit">Hz</span></div></div>
+            <div class="settings-row"><div><div class="settings-row-label">Temp Lock Freq</div><div class="settings-row-desc">PLL start frequency — OSC 2. With the aim below on <b>Ratio</b>, GET LOCK replaces it with the aimed frequency; 0 parks the temperature mode either way</div></div><div></div><div style="display:flex;align-items:center;gap:6px"><input class="settings-input" type="number" id="s-crystal-freq-temp" value="6570000" step="1000" oninput="updateAimHint()"><span class="settings-unit">Hz</span></div></div>
+            <div class="settings-row"><div><div class="settings-row-label">Temp Lock Aim</div><div class="settings-row-desc"><b>Ratio</b>: the temperature mode starts at the mass lock frequency times this calibration's fT/fM at the aim temperature. Film lowers both modes by the same fraction, so the aim follows a deposition with no thermometer, and it can only point at the mode the profile was calibrated on — the wrong B-region mode cannot be caught by a stale frequency. Temperature does move the ratio, so the aim only holds over a band around the aim temperature (see below); outside it the lock may miss or land on the neighbouring mode. The automatic re-lock is not aimed: it returns to where the lock was last good. <b>Fixed</b>: start at the frequency above. An instrument setting, not saved in the profile</div><div class="settings-row-desc" id="lock-aim-hint" style="margin-top:4px;color:var(--text-mid)">—</div></div><div></div><div style="display:flex;align-items:center;gap:6px"><select class="settings-input" id="s-lock-aim" style="width:150px;text-align:left" onchange="updateAimHint()"><option value="ratio">Ratio to mass</option><option value="fixed">Fixed</option></select></div></div>
+            <div class="settings-row"><div><div class="settings-row-label">Aim Temperature</div><div class="settings-row-desc">Crystal temperature the ratio is taken at. With both B-region modes in the window the PLL takes the higher one, so the aim tolerates a crystal much colder than this (aimed at 25 °C, a lower-mode profile still locks right down to ~2 °C) but only ~9 °C warmer. Set it a few degrees above where the crystal usually is when you lock. −20 to 120 °C</div></div><div></div><div style="display:flex;align-items:center;gap:6px"><input class="settings-input" type="number" id="s-lock-aim-temp" value="25" step="1" min="-20" max="120" oninput="updateAimHint()"><span class="settings-unit">°C</span></div></div>
             <div class="settings-row"><div><div class="settings-row-label">Virgin Frequency</div><div class="settings-row-desc">Pristine uncoated crystal mass-mode frequency — Z-match &amp; usage reference (default 6 MHz; set 0 to use run start)</div></div><div></div><div style="display:flex;align-items:center;gap:6px"><input class="settings-input" type="number" id="s-crystal-freq-virgin" value="6000000" step="1000"><span class="settings-unit">Hz</span></div></div>
           </div>
 
@@ -1857,6 +1873,7 @@ function onMeasurement(e) {
 
   applyTelemetry(e, ts);
   setCompensatedView(e.compensated !== false);
+  updateClockLive(e);
 
   // Virgin-frequency fallback: the first Fm of the *run*, so this is set here
   // and not in applyTelemetry — idle telemetry must not claim the reference.
@@ -2738,6 +2755,15 @@ async function loadInitialSettings() {
       document.getElementById('s-freq-track').value = s.freq_tracking.enabled ? '1' : '0';
       if (s.freq_tracking.interval != null) document.getElementById('s-freq-track-interval').value = s.freq_tracking.interval;
     }
+    if (s.lock_aim) {
+      if (s.lock_aim.mode) document.getElementById('s-lock-aim').value = s.lock_aim.mode;
+      if (s.lock_aim.temperature != null) document.getElementById('s-lock-aim-temp').value = s.lock_aim.temperature;
+    }
+    if (s.clock_correction) {
+      const cc = s.clock_correction;
+      if (cc.tempco_ppm != null) { document.getElementById('s-clock-tempco').value = cc.tempco_ppm; _clockTempco = cc.tempco_ppm; }
+      if (cc.lag_s != null) { document.getElementById('s-clock-lag').value = +(cc.lag_s / 60).toFixed(2); _clockLag = cc.lag_s; }
+    }
   } catch(e) { /* backend not yet reachable */ }
 
   let crystalLoaded = false;
@@ -3045,6 +3071,7 @@ function onStartFreqAutoUpdated(ev) {
     _baseline['s-crystal-freq-mass'] = mass.value;
     _baseline['s-crystal-freq-temp'] = temp.value;
     updateDirtyState();
+    updateAimHint();
     return;
   }
   // End of a run: the operator is meant to notice and decide whether to save
@@ -3054,7 +3081,8 @@ function onStartFreqAutoUpdated(ev) {
   mass.value = ev.freq_mass;
   temp.value = ev.freq_temp;
   updateDirtyState();
-  showToast(`Start freqs updated: ${(ev.freq_mass/1e6).toFixed(3)} / ${(ev.freq_temp/1e6).toFixed(3)} MHz`);
+  updateAimHint();
+  showToast(`Start freqs updated:${(ev.freq_mass/1e6).toFixed(3)} / ${(ev.freq_temp/1e6).toFixed(3)} MHz`);
 }
 
 function onOpcStatus(ev) {
@@ -3125,7 +3153,12 @@ async function sendCommand(action) {
     setLockBtnState(true);
     try {
       await fetch(`${API_URL}/settings/lock_frequencies?mass=${mass}&temp=${temp}`, { method: 'POST' });
-      await fetch(`${API_URL}/measurement/get_lock`, { method: 'POST' });
+      const r = await fetch(`${API_URL}/measurement/get_lock`, { method: 'POST' });
+      const d = await r.json().catch(() => ({}));
+      // With the ratio aim the Pitaya picks the temperature start itself.
+      if (d.temp != null && Math.abs(d.temp - temp) >= 1) {
+        showToast(`Temp mode aimed at ${(d.temp / 1e6).toFixed(4)} MHz from the mass lock freq`);
+      }
     } catch(e) { console.error('Lock command failed:', e); setLockBtnState(false); }
     return;
   }
@@ -3271,6 +3304,36 @@ async function applyLockSettings() {
   const interval = parseFloat(document.getElementById('s-freq-track-interval').value);
   if (isNaN(interval) || interval < 1) throw new Error('Tracking interval must be at least 1 s');
   await postOrThrow(`${API_URL}/settings/freq_tracking?enabled=${track}&interval=${interval}`);
+  const aim  = fieldValue('s-lock-aim') || 'ratio';
+  const aimT = parseFloat(fieldValue('s-lock-aim-temp'));
+  if (!(aimT >= -20 && aimT <= 120)) throw new Error('Aim temperature must be −20 to 120 °C');
+  await postOrThrow(`${API_URL}/settings/lock_aim?mode=${aim}&temperature=${aimT}`);
+}
+
+// Board clock (Settings → System). Only sent when it changed: a new coefficient
+// steps the compensated output and re-corrects every calibration point.
+var _clockTempco = 0, _clockLag = 480;   // as the Pitaya holds them (var: read by the settings load)
+async function applyClockCorrection() {
+  if (!isDirty(['s-clock-tempco', 's-clock-lag'])) return;
+  const k = parseFloat(fieldValue('s-clock-tempco'));
+  const lagMin = parseFloat(fieldValue('s-clock-lag'));
+  if (!(k >= -5 && k <= 5)) throw new Error('Clock tempco must be −5 to 5 ppm/°C');
+  if (!(lagMin >= 0 && lagMin <= 60)) throw new Error('Clock lag must be 0 to 60 min');
+  await postOrThrow(`${API_URL}/settings/clock_correction?tempco_ppm=${k}&lag_s=${lagMin * 60}`);
+  _clockTempco = k;
+  _clockLag = lagMin * 60;
+  if (_isRunning) _applyNote = 'Settings applied; the clock correction steps the compensated output — ZERO to rebase';
+}
+
+function updateClockLive(e) {
+  const el = document.getElementById('clock-live');
+  if (!el) return;
+  if (e.board_c == null) { el.textContent = '—'; return; }
+  const ppm = e.clock_ppm || 0;
+  const hz = ppm * 1e-6 * (e.freq_mass_mode || 0);
+  const sign = v => (v >= 0 ? '+' : '');
+  el.textContent = `die ${e.board_c.toFixed(2)} °C lagged · `
+    + (_clockTempco ? `${sign(ppm)}${ppm.toFixed(3)} ppm = ${sign(hz)}${hz.toFixed(2)} Hz on fM` : 'correction off');
 }
 
 async function applyStorageReclaim() {
@@ -3320,6 +3383,7 @@ async function applyAllSettings() {
   await applyAcquisition();
   await applyOutputMode();
   await applyLockSettings();
+  await applyClockCorrection();
   await applyStorageReclaim();
   // Only when the crystal form itself changed. APPLY used to push it every time,
   // so editing an unrelated field re-saved the profile from whatever happened to
@@ -3794,6 +3858,7 @@ const SETTING_IDS = [
   's-osc2-int', 's-osc2-lpf', 's-osc2-inv', 's-osc2-agc', 's-osc2-gain', 's-osc2-amp',
   's-lock-phase', 's-lock-std', 's-auto-relock', 's-temp-hold',
   's-freq-track', 's-freq-track-interval', 's-output-mode',
+  's-lock-aim', 's-lock-aim-temp', 's-clock-tempco', 's-clock-lag',
   's-prune-runs', 's-trim-run',
   ...CRYSTAL_SETTING_IDS,
   ...TEC_SETTING_IDS,
@@ -3933,7 +3998,44 @@ function initCoeffChartsIfNeeded() {
   updateCoeffCharts();
 }
 
+// ---- Temperature-mode aim (Crystal → Start Frequencies) ----
+// What GET LOCK starts the temperature mode at, worked out from the form the way
+// the Pitaya does from the applied profile (TempCompAlgorithm.aim_ratio): the
+// calibration's fT/fM at the aim temperature, times the mass lock frequency.
+function aimRatio(T) {
+  const g = id => parseFloat(fieldValue(id));
+  const m0 = g('s-coeff-fM0'), t0 = g('s-coeff-fT0');
+  const fM = m0 + g('s-coeff-fM1') * T + g('s-coeff-fM2') * T * T + g('s-coeff-fM3') * T * T * T;
+  const fT = t0 + g('s-coeff-fT1') * T + g('s-coeff-fT2') * T * T + g('s-coeff-fT3') * T * T * T;
+  if (!(m0 > 0 && t0 > 0 && fM > 0 && isFinite(fT))) return null;
+  const r = fT / fM;
+  return (r > 1.0 && r < 1.2) ? r : null;
+}
+
+function updateAimHint() {
+  const el = document.getElementById('lock-aim-hint');
+  if (!el) return;
+  el.style.color = 'var(--text-mid)';
+  const mode = fieldValue('s-lock-aim') || 'ratio';
+  const T = parseFloat(fieldValue('s-lock-aim-temp'));
+  const mass = parseFloat(fieldValue('s-crystal-freq-mass'));
+  const temp = parseFloat(fieldValue('s-crystal-freq-temp'));
+  if (temp === 0) { el.textContent = 'Temp Lock Freq 0: the temperature mode is parked'; return; }
+  if (mode !== 'ratio') { el.textContent = 'GET LOCK starts the temperature mode at the Temp Lock Freq above'; return; }
+  const r = isNaN(T) ? null : aimRatio(T);
+  if (r == null || !(mass > 0)) {
+    el.textContent = 'No usable calibration in this form (fM_0 / fT_0): GET LOCK uses the Temp Lock Freq above';
+    el.style.color = 'var(--orange)';
+    return;
+  }
+  const aimed = r * mass;
+  const off = isFinite(temp) ? aimed - temp : 0;
+  el.textContent = `fT/fM at ${T} °C = ${r.toFixed(6)}: GET LOCK aims at ${aimed.toFixed(0)} Hz`
+    + (Math.abs(off) >= 1000 ? `, ${(off / 1000).toFixed(1)} kHz from the Temp Lock Freq above` : '');
+}
+
 function updateCoeffCharts() {
+  updateAimHint();
   if (!_coeffChartsInit) return;
   const gv = id => parseFloat(fieldValue(id)) || 0;
   const fM3 = gv('s-coeff-fM3'), fM2 = gv('s-coeff-fM2'), fM1 = gv('s-coeff-fM1');
@@ -3955,6 +4057,8 @@ let _calPoints = [];
 let _calCoefM = null, _calCoefT = null;  // [c3, c2, c1, c0] each, or null when < 4 points
 let _calSettings = null;                 // as last received from the Pitaya
 let _calStatus = null;                   // latest CalibrationStatusEvent status
+let _calClock = null;                    // clock correction the points came corrected with
+let _calClockEstimate = null;            // board-clock coefficient the points suggest, ppm/°C
 
 // Each sensor's latest reading {temperature, faults}, for the TEMP field.
 let _lastTemps = {};
@@ -4020,8 +4124,12 @@ function syncCalControls() {
 
 function onCalibrationPoints(ev) {
   _calSettings = ev.settings;
+  _calClock = ev.clock || null;
+  // Fitted on the clock-corrected frequencies the Pitaya adds (board clock,
+  // Settings → System), so a profile describes the crystal, not this board.
   _calPoints = (ev.points || []).map(p => ({
-    id: p.id, t: p.temperature, fM: p.fM, fT: p.fT,
+    id: p.id, t: p.temperature, fM: ifNull(p.fM_corr, p.fM), fT: ifNull(p.fT_corr, p.fT),
+    board: p.board_c, fMraw: p.fM,
     source: p.source_name + (p.auto ? ', auto' : '') + (p.settled ? '' : ', not settled'), raw: p }));
   syncCalControls();
   refreshCalCharts();
@@ -4169,6 +4277,7 @@ function refreshCalCharts() {
   drawCalChart(calibCharts.fT, _calCoefT, 'fT');
 
   renderCalCoeffs();
+  updateCalClockEstimate();
 
   const hint = document.getElementById('cal-fit-hint');
   if (hint) hint.textContent = pts.length >= 4 ? `cubic fit over ${pts.length} points`
@@ -4197,6 +4306,81 @@ function drawCalChart(chart, coef, key) {
   if (coef) { ax.title.text = 'Δf (Hz)'; ax.ticks.callback = v => Number(v).toFixed(0); }
   else      { ax.title.text = 'f (kHz)'; ax.ticks.callback = v => (Number(v) / 1e3).toFixed(3); }
   chart.update('none');
+}
+
+// The board-clock coefficient the points suggest: the mass-mode cubic fitted
+// together with a term in each point's (lagged) board temperature. The points
+// come corrected with the coefficient set now, so the fit finds what is still
+// missing from it. fM alone: fT carries the PT100's lag along the curve (±10 Hz
+// on 13 Nov 2026), which says nothing about the clock. It takes a spread of
+// board temperatures — the box warming after the TEC comes on gave 1.3 °C and
+// 0.25 ± 0.09 ppm/°C on 13 Nov — and says so when there is too little.
+const CAL_CLOCK_MIN_POINTS = 6;
+const CAL_CLOCK_MIN_SPAN = 0.3;   // °C of board temperature across the points
+const CAL_CLOCK_MAX_SIGMA = 0.2;  // ppm/°C; vaguer than this is not offered for USE
+
+function updateCalClockEstimate() {
+  const info = document.getElementById('cal-clock-info');
+  const btn = document.getElementById('btn-cal-clock-use');
+  _calClockEstimate = null;
+  if (btn) btn.disabled = true;
+  if (!info) return;
+  info.style.color = '';
+  const set = _calClock ? _calClock.tempco_ppm : 0;
+  const ref = _calClock ? _calClock.ref_c : 45;
+  const setTxt = `set ${set.toFixed(2)} ppm/°C`;
+  const pts = _calPoints.filter(p => p.board != null && isFinite(p.board) && isFinite(p.fM));
+  if (pts.length < CAL_CLOCK_MIN_POINTS) {
+    info.textContent = `${setTxt} · ${pts.length} point${pts.length === 1 ? '' : 's'} with a board temperature; `
+      + `${CAL_CLOCK_MIN_POINTS} are needed to estimate it`;
+    return;
+  }
+  const boards = pts.map(p => p.board);
+  const span = Math.max(...boards) - Math.min(...boards);
+  // Columns 1, x, x², x³ (x = (T − 40)/25, for conditioning) and the clock term:
+  // Hz of fM per ppm/°C at that point's board temperature.
+  const rows = pts.map(p => {
+    const x = (p.t - 40) / 25;
+    return [1, x, x * x, x * x * x, (p.fMraw || p.fM) * 1e-6 * (p.board - ref)];
+  });
+  const m = 5, n = rows.length;
+  const A = Array.from({ length: m }, () => new Array(m).fill(0));
+  const b = new Array(m).fill(0);
+  rows.forEach((r, i) => {
+    for (let j = 0; j < m; j++) { b[j] += r[j] * pts[i].fM; for (let k = 0; k < m; k++) A[j][k] += r[j] * r[k]; }
+  });
+  const c = solveLinear(A, b);
+  const e4 = solveLinear(A, [0, 0, 0, 0, 1]);
+  if (!c || !e4) { info.textContent = `${setTxt} · the board temperatures do not vary enough to tell`; return; }
+  let ss = 0;
+  rows.forEach((r, i) => { let y = 0; for (let j = 0; j < m; j++) y += r[j] * c[j]; ss += (pts[i].fM - y) ** 2; });
+  const sigma = Math.sqrt(ss / (n - m) * e4[4]);
+  const est = set + c[4];
+  const txt = `points suggest ${est.toFixed(2)} ± ${sigma.toFixed(2)} ppm/°C (${setTxt}; `
+    + `board ${span.toFixed(2)} °C across ${n} points)`;
+  if (span < CAL_CLOCK_MIN_SPAN) {
+    info.textContent = `${setTxt} · the board stayed within ${span.toFixed(2)} °C over these points: too little to tell`;
+    return;
+  }
+  info.textContent = txt;
+  if (!(sigma <= CAL_CLOCK_MAX_SIGMA) || !(est >= -5 && est <= 5)) { info.style.color = 'var(--orange)'; return; }
+  _calClockEstimate = est;
+  if (btn) btn.disabled = Math.abs(c[4]) < 0.005;
+}
+
+async function useCalClockEstimate() {
+  if (_calClockEstimate == null) return;
+  const k = Math.round(_calClockEstimate * 1000) / 1000;
+  if (!confirm(`Set this instrument's board-clock coefficient to ${k} ppm/°C?\n\n`
+             + 'Measurements are corrected with it from now on, and the calibration points are refitted '
+             + 'with it. The compensated output steps by the change: ZERO afterwards.')) return;
+  try {
+    await postOrThrow(`${API_URL}/settings/clock_correction?tempco_ppm=${k}&lag_s=${_clockLag}`);
+    _clockTempco = k;
+    const el = document.getElementById('s-clock-tempco');
+    if (el) { el.value = k; _baseline['s-clock-tempco'] = el.value; updateDirtyState(); }
+    showToast(`Board-clock coefficient set to ${k} ppm/°C`);
+  } catch(e) { showToast(`Not set — ${e.message || e}`, true); }
 }
 
 // Click-to-delete: confirm, then drop the point from both charts.

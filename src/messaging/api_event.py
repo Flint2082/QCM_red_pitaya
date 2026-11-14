@@ -161,6 +161,9 @@ class CalibrationPointsEvent(ApiEvent):
     points: list[dict]
     settings: dict
     added: dict | None = None
+    # The clock correction the points' fM_corr/fT_corr were worked out with:
+    # tempco_ppm, lag_s, ref_c (see api/server.py, _clock_corrected).
+    clock: dict | None = None
 
 @dataclass
 class OpcStatusEvent(ApiEvent):

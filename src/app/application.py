@@ -196,6 +196,8 @@ class Application(threading.Thread):
             self.worker_command_queue.put(wc.SetMeasurementModeCommand(command.compensated))
         elif isinstance(command, ac.SetFreqTrackingCommand):
             self.worker_command_queue.put(wc.SetFreqTrackingCommand(command.enabled, command.interval))
+        elif isinstance(command, ac.SetClockCorrectionCommand):
+            self.worker_command_queue.put(wc.SetClockCorrectionCommand(command.tempco_ppm, command.lag_s))
         elif isinstance(command, ac.SetTargetThicknessCommand):
             self.worker_command_queue.put(wc.SetTargetThicknessCommand(command.target))
         elif isinstance(command, ac.SetRateWindowCommand):

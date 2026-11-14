@@ -99,11 +99,12 @@ class Settings:
 
 class _Bin:
     """The frequency samples of one second: sums of the locked ones, and
-    whether any sample in it was unlocked."""
-    __slots__ = ("t", "n", "fM", "fT", "locked")
+    whether any sample in it was unlocked; and the board temperature."""
+    __slots__ = ("t", "n", "fM", "fT", "locked", "board", "nb")
 
     def __init__(self, t: int):
         self.t, self.n, self.fM, self.fT, self.locked = t, 0, 0.0, 0.0, True
+        self.board, self.nb = 0.0, 0   # sum and count of board temperatures
 
 
 def _slope_per_min(ts, ys) -> float | None:
@@ -159,8 +160,11 @@ class CalibrationRecorder:
     # Readings in
     # ==================================================
 
-    def add_frequencies(self, timestamp: float, fM, fT, locked: bool):
-        """One sample of both modes; `locked` only when both are."""
+    def add_frequencies(self, timestamp: float, fM, fT, locked: bool, board_c=None):
+        """One sample of both modes; `locked` only when both are. board_c is
+        the lagged board temperature the clock correction works from
+        (domain/clock_correction.py), averaged into the point so the server can
+        correct its frequencies with whatever coefficient is set when it fits."""
         with self._lock:
             second = int(timestamp)
             if self._bins and second < self._bins[-1].t:
@@ -177,6 +181,9 @@ class CalibrationRecorder:
                 b.fT += fT
             else:
                 b.locked = False
+            if board_c is not None and math.isfinite(board_c):
+                b.board += board_c
+                b.nb += 1
 
     def add_temperatures(self, timestamp: float, available: bool, sensors: list[dict]):
         """One round of LTC2986 readings, as in a TemperatureEvent."""
@@ -376,6 +383,8 @@ class CalibrationRecorder:
                              f"{_mmss(s.window_s)}: lock both modes first")
         fM, fM_std = _mean_std([b.fM / b.n for b in good])
         fT, fT_std = _mean_std([b.fT / b.n for b in good])
+        boards = [b.board / b.nb for b in good if b.nb]
+        board = round(sum(boards) / len(boards), 4) if boards else None
         if s.source == "manual":
             if temperature is None or not math.isfinite(temperature):
                 raise ValueError("enter the temperature of this point")
@@ -393,7 +402,10 @@ class CalibrationRecorder:
             "start": good[0].t, "end": good[-1].t + 1,   # the span averaged
             "temperature": round(temp, 4),
             "source": s.source, "source_name": SOURCES[s.source],
+            # As measured: the server adds clock-corrected copies (fM_corr,
+            # fT_corr) when it sends the points out, from board_c.
             "fM": fM, "fT": fT,
+            "board_c": board,
             # Scatter of the one-second averages over the window
             "fM_std": fM_std, "fT_std": fT_std, "temp_std": temp_std,
             "seconds": len(good),

@@ -593,3 +593,99 @@ curl -X POST "http://192.168.1.50:8000/measurement/stop"
   with `--no-opcua`.
 - **The PLC gets nothing** — the OPC-UA bridge is off by default: switch it
   on under Settings → OPC-UA, or `qcm.set_opc_enabled(True)`.
+
+---
+
+## 9. Simulating the TEC
+
+[`tec_simulator.py`](tec_simulator.py) simulates the calibration holder on its
+Peltier, driven by the real TEC controller code (`src/workers/tec_worker.py`:
+the PID, the PT100 + crystal fusion, the limits) on a virtual clock. Use it to
+try gains, the fusion settings or a calibration sequence before running them
+on the holder. Four hours of holder time take a few seconds.
+
+```bash
+python tools/tec_simulator.py                                   # the standard 15-65 °C sequence, plotted
+python tools/tec_simulator.py --setpoints 25,45,25 --dwell 30
+python tools/tec_simulator.py --source pt100 --gains 39.9,0.196,585
+python tools/tec_simulator.py --fuse-tau 300 --no-plot
+python tools/tec_simulator.py --tf 25,40,60                     # small-signal transfer functions
+```
+
+From Python, `tec_simulator.run(schedule, t_end, settings, params, ...)` returns
+the crystal, PT100 and drive once a second. `crystal_error=` adds a calibration
+error to the crystal temperature the loop is fed, and `room=` makes the room
+temperature a function of time. `Holder` is the thermal model on its own:
+`step(u, dt)` advances it, and `linearise(T)` gives the transfer functions.
+
+### Transfer functions
+
+Small signal, TEC drive (%) to temperature (°C). They were measured on the
+rp-f0ea58 holder on 14 Nov 2026 with a PRBS on the drive (±15 % around 40 °C,
+±12 % around 60 °C), the drive logged throughout:
+
+| Operating point | Drive → crystal | Crystal → PT100 |
+|---|---|---|
+| 40 °C (37 % drive) | 0.47 · e^(−2.3 s) / ((320 s + 1)(12.2 s + 1)) | (64.5 s + 1) / ((80.1 s + 1)(6.7 s + 1)) |
+| 60 °C (82 % drive) | 0.40–0.43 · e^(−2.3 s) / ((330 s + 1)(12.2 s + 1)) | the same |
+
+- **Crystal fit:** at 40 °C it is within 3 % of the measured response from
+  0.5 to 33 mHz.
+- **Gain vs operating point:** the gain falls with the drive, so it is lower
+  at 60 °C.
+- **Time constants:** these barely change between the two operating points.
+- **TEC off:** with the bridge switched off the holder relaxes with τ ≈ 410 s.
+- **Check:** with this model the controller's own relay autotune reproduces
+  both autotunes run on the real holder on 13 Nov:
+  - PT100 loop: Ku 84–87 %/°C, Tu 90–91 s (real: 87.8, 92 s);
+  - PT100 + crystal loop: Ku 132–136, Tu 57–58 s (real: 131, 57.5 s).
+
+### The model (large signal)
+
+A static map from drive to the rise it holds, feeding the linear part above (a
+Hammerstein model):
+
+```
+w = F(u)·(1 − kap·ΔT)     F(u) = 0.495·u − 0.00067·u²   heating   (F(100 %) = 42.8 °C)
+                          F(u) = 0.261·u + 0.00044·u²   cooling   (F(−100 %) = −21.7 °C)
+crystal − Ta = e^(−2.3 s) / ((312 s + 1)(12.2 s + 1)) · w      kap = −0.0014 /°C, Ta ≈ 22 °C
+```
+
+- **The map F(u) is the holding curve:** 0 % at room temperature, 37 % at
+  40 °C, 82 % at 60 °C. Full heating tops out near 67 °C.
+- **Cooling is weaker:** at room temperature full cooling does half of what
+  full heating does. The Peltier's Joule heat helps heating and fights
+  cooling.
+- **How it was fitted:**
+  - fast part (delay, crystal lag, PT100 path): the PRBS frequency response;
+  - map and slow poles: the time series of the test;
+  - cooling side: the full-cooling ramps of the 13-14 Nov runs.
+
+### Accuracy and limits
+
+- **On the identification test:** the model is within 0.13 °C rms of the
+  crystal and 0.14 °C of the PT100 over 2¾ hours. That stretch runs from the
+  settled 40 °C hold, through a 20 °C step and both PRBS runs, to a TEC-off
+  relaxation.
+- **On the logged runs:** the 13 and 13-14 Nov calibration sequences, replayed
+  with the controller settings of the time, agree to 0.16-0.19 °C rms.
+  - The plateaus agree to about 0.1 °C.
+  - During full-power ramps the error reaches 0.5-0.75 °C for a minute or two.
+- **Below 35 °C:** heating there is slower than the model, by up to about
+  15 %. The first ramp up from room temperature on 14 Nov was 15 % slower than
+  modelled too. Neither is understood yet.
+- **Not modelled:**
+  - **Room temperature:** the model holds it constant.
+  - **Box warming:** the box warms by a few tenths of a degree once the TEC
+    runs.
+  - **Crystal thermometer in fast ramps:** it is off by up to ~0.2 °C (thermal
+    transients in the B-mode).
+- **The PT100 + crystal loop's creep after a step** comes from the crystal
+  calibration, not from the holder. The fused offset learned at one plateau is
+  wrong at the next by the change in the crystal's calibration error, and the
+  loop re-learns it over `fuse_tau_s`.
+  - On 13-14 Nov the loop most likely ran on half_cal, whose error against
+    the PT100 ranges from −0.4 °C to +1.1 °C across 15-65 °C. That would cause
+    the 0.3-0.5 °C creeps.
+  - The replay with that error (`crystal_error=`) reproduces them.
+  - With an accurate calibration, `fuse_tau_s` 900 s and 300 s settle alike.

@@ -99,11 +99,12 @@ class Settings:
 
 class _Bin:
     """The frequency samples of one second: sums of the locked ones, and
-    whether any sample in it was unlocked."""
-    __slots__ = ("t", "n", "fM", "fT", "locked")
+    whether any sample in it was unlocked; and the board temperature."""
+    __slots__ = ("t", "n", "fM", "fT", "locked", "board", "nb")
 
     def __init__(self, t: int):
         self.t, self.n, self.fM, self.fT, self.locked = t, 0, 0.0, 0.0, True
+        self.board, self.nb = 0.0, 0   # sum and count of board temperatures
 
 
 def _slope_per_min(ts, ys) -> float | None:
@@ -150,14 +151,20 @@ class CalibrationRecorder:
         self._left_at: float | None = None
         self._auto_error: str | None = None   # last reason an automatic point failed, said once
         self.save_error: str | None = None    # why the last save failed, shown in the status
+        # Why automatic points are held back right now (a calibration sequence
+        # soaking, or still on its way to the setpoint), or None. Not saved.
+        self._auto_held: str | None = None
         self._load()
 
     # ==================================================
     # Readings in
     # ==================================================
 
-    def add_frequencies(self, timestamp: float, fM, fT, locked: bool):
-        """One sample of both modes; `locked` only when both are."""
+    def add_frequencies(self, timestamp: float, fM, fT, locked: bool, board_c=None):
+        """One sample of both modes; `locked` only when both are. board_c is
+        the lagged board temperature the clock correction works from
+        (domain/clock_correction.py), averaged into the point so the server can
+        correct its frequencies with whatever coefficient is set when it fits."""
         with self._lock:
             second = int(timestamp)
             if self._bins and second < self._bins[-1].t:
@@ -174,6 +181,9 @@ class CalibrationRecorder:
                 b.fT += fT
             else:
                 b.locked = False
+            if board_c is not None and math.isfinite(board_c):
+                b.board += board_c
+                b.nb += 1
 
     def add_temperatures(self, timestamp: float, available: bool, sensors: list[dict]):
         """One round of LTC2986 readings, as in a TemperatureEvent."""
@@ -346,8 +356,9 @@ class CalibrationRecorder:
                     reason = "settled"
 
         status["point_here"] = point_here
+        status["auto_held"] = self._auto_held
         status["armed"] = bool(sensor and s.auto_capture and status["fT"] is not None
-                               and not point_here)
+                               and not point_here and self._auto_held is None)
         status["state"], status["reason"] = state, reason
         return status
 
@@ -372,6 +383,8 @@ class CalibrationRecorder:
                              f"{_mmss(s.window_s)}: lock both modes first")
         fM, fM_std = _mean_std([b.fM / b.n for b in good])
         fT, fT_std = _mean_std([b.fT / b.n for b in good])
+        boards = [b.board / b.nb for b in good if b.nb]
+        board = round(sum(boards) / len(boards), 4) if boards else None
         if s.source == "manual":
             if temperature is None or not math.isfinite(temperature):
                 raise ValueError("enter the temperature of this point")
@@ -389,7 +402,10 @@ class CalibrationRecorder:
             "start": good[0].t, "end": good[-1].t + 1,   # the span averaged
             "temperature": round(temp, 4),
             "source": s.source, "source_name": SOURCES[s.source],
+            # As measured: the server adds clock-corrected copies (fM_corr,
+            # fT_corr) when it sends the points out, from board_c.
             "fM": fM, "fT": fT,
+            "board_c": board,
             # Scatter of the one-second averages over the window
             "fM_std": fM_std, "fT_std": fT_std, "temp_std": temp_std,
             "seconds": len(good),
@@ -428,6 +444,17 @@ class CalibrationRecorder:
             self.points = []
             self._remember(None)
             self._save()
+
+    def rearm(self):
+        """Forget the last point, so the next settled reading is taken even at
+        its temperature. A calibration sequence starts with this."""
+        with self._lock:
+            self._remember(None)
+
+    def hold_auto(self, reason: str | None):
+        """Hold automatic points back, saying why; None lets them through
+        again. One attribute, replaced whole, so no lock."""
+        self._auto_held = reason
 
     def _remember(self, point: dict | None):
         """Make `point` the last settled one, which the next automatic point

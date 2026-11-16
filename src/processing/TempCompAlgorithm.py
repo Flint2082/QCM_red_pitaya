@@ -237,6 +237,44 @@ def absolute_temperature(coefficients, fM, fT, near=25.0):
     return float(min(T, key=lambda r: abs(r - near)))
 
 
+# A temperature-to-mass mode ratio outside this is not a calibration of a real
+# crystal (an SC-cut's B/C ratio is about 1.098), so the lock does not aim by it.
+AIM_RATIO_RANGE = (1.0, 1.2)
+
+
+def aim_ratio(coefficients, temperature: float) -> float | None:
+    """fT/fM of the calibrated temperature mode at `temperature` (degC), from
+    the calibration cubics with their constants: the ratio the temperature-mode
+    lock is aimed at, as a multiple of the mass-mode start frequency.
+
+    Film lowers both modes by the same fraction, so the ratio holds through a
+    deposition and the mass mode's start frequency carries the temperature
+    mode's along with it. Temperature does not leave it alone: on infi2439_SC_1
+    the lower B-region mode moves 8 kHz from 12 to 65 degC while fM moves 0.2 kHz.
+    The aim is therefore only as good as the temperature it was taken at. The PLL
+    takes the higher mode when both are in its 4 kHz window, so for the lower mode
+    the aim tolerates a much colder crystal than a warmer one: aimed at 25 degC,
+    about 2-34 degC on infi2439_SC_1. It also follows the calibration:
+    a profile calibrated on one mode aims at that mode and no other.
+
+    None when the profile has no usable constants or the ratio is implausible."""
+    try:
+        c = {k: float(coefficients[k]) for k in
+             ("fM_0", "fM_1", "fM_2", "fM_3", "fT_0", "fT_1", "fT_2", "fT_3")}
+        T = float(temperature)
+    except (KeyError, TypeError, ValueError):
+        return None
+    if not (c["fM_0"] > 0 and c["fT_0"] > 0 and math.isfinite(T)):
+        return None
+    fM = c["fM_0"] + c["fM_1"] * T + c["fM_2"] * T**2 + c["fM_3"] * T**3
+    fT = c["fT_0"] + c["fT_1"] * T + c["fT_2"] * T**2 + c["fT_3"] * T**3
+    if not (fM > 0 and math.isfinite(fM) and math.isfinite(fT)):
+        return None
+    ratio = fT / fM
+    lo, hi = AIM_RATIO_RANGE
+    return ratio if lo < ratio < hi else None
+
+
 
 def calculateCoeffecients(calibration_file, coeffecient_file):
     # matplotlib is imported here rather than at the top of the module because

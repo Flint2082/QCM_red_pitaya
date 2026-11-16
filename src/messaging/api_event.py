@@ -15,7 +15,10 @@ class ErrorEvent(ApiEvent):
 
 @dataclass
 class StateEvent(ApiEvent):
+    # IDLE / RUNNING / LOCKING / SWEEPING / CAP_ADJUST, as the PLC reads it:
+    # RUNNING means the run log is open, IDLE that it is not.
     state: str
+    measuring: bool = False   # thickness is being measured (a lock and a reference), logged or not
 
 @dataclass
 class SweepPointEvent(ApiEvent):
@@ -98,6 +101,16 @@ class RunLogFailedEvent(ApiEvent):
     reason: str  # why the run is not being recorded (disk full, write error, ...)
 
 @dataclass
+class ZeroEvent(ApiEvent):
+    """A new thickness reference: the thickness reads 0 from here. auto: taken
+    by the worker after a lock, before any ZERO; compensated: the temp mode was
+    locked, so the thickness is temperature-compensated from this reference."""
+    auto: bool
+    compensated: bool
+    t_start: float
+    t_source: str
+
+@dataclass
 class TargetReachedEvent(ApiEvent):
     """Target-thickness flag: True when the target is crossed, False when it is
     cleared (run start / target change). Drives the UI popup, the REST flag and
@@ -136,12 +149,21 @@ class CalibrationStatusEvent(ApiEvent):
     status: dict
 
 @dataclass
+class TecStatusEvent(ApiEvent):
+    """Every step of the TEC temperature loop, and once a second while it is
+    off. See workers/tec_worker.py for the fields."""
+    status: dict
+
+@dataclass
 class CalibrationPointsEvent(ApiEvent):
     """The calibration points and settings, after any change. `added` is the
     point just taken, when that is what changed them."""
     points: list[dict]
     settings: dict
     added: dict | None = None
+    # The clock correction the points' fM_corr/fT_corr were worked out with:
+    # tempco_ppm, lag_s, ref_c (see api/server.py, _clock_corrected).
+    clock: dict | None = None
 
 @dataclass
 class OpcStatusEvent(ApiEvent):

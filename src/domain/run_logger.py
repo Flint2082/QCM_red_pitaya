@@ -64,6 +64,10 @@ HEADERS = [
     "temperature_c", "amp_mass", "phase_mass",
     "amp_temp", "phase_temp", "lock_mass", "lock_temp", "quality_mass", "quality_temp",
     *TEMPERATURE_COLUMNS, DIE_COLUMN, "temp_sensor_faults",
+    # Reference-clock error taken out of both frequencies before the thickness
+    # and compensated frequency were worked out (domain/clock_correction.py);
+    # freq_mass_hz and freq_temp_hz are as measured. 0 with the correction off.
+    "clock_ppm",
     "event_type", "event_detail",
 ]
 
@@ -436,6 +440,7 @@ class RunLogger:
                 "quality_mass": "" if data.quality_mass is None else data.quality_mass,
                 "quality_temp": "" if data.quality_temp is None else data.quality_temp,
                 **self._temperature_columns(ts),
+                "clock_ppm": round(getattr(data, "clock_ppm", 0.0) or 0.0, 5),
                 "event_type": "", "event_detail": "",
             })
             self._file.flush()

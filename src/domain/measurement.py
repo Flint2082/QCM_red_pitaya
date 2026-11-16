@@ -44,3 +44,9 @@ class MeasurementData(TelemetryData):
     # processing/deposition_rate.py). None until the window has filled.
     calculated_rate: float | None = None
     uncompensated_rate: float | None = None
+    # Reference-clock correction (domain/clock_correction.py): the error taken
+    # out of both frequencies before the thickness was worked out, in ppm
+    # (0 with the correction off), and the lagged board temperature it came
+    # from. freq_mass_mode and freq_temp_mode stay as measured.
+    clock_ppm: float = 0.0
+    board_c: float | None = None

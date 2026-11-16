@@ -65,9 +65,45 @@ process exits.
 On every start the service writes the saved settings to the FPGA, applies the
 active crystal profile, and then locks the PLLs on that profile's start
 frequencies, exactly as GET LOCK does. In uncompensated mode only the mass mode
-is locked, and a mode whose start frequency is 0 Hz stays parked. If the lock
-fails, the instrument waits in IDLE for a GET LOCK, as it did before this
-start-up lock existed.
+is locked, and a mode whose start frequency is 0 Hz stays parked. Once the mass
+mode is locked the instrument measures straight away (see below). If the lock
+fails, it waits in IDLE for a GET LOCK.
+
+### Where the temperature mode is aimed
+
+infi2439-type crystals have two temperature modes 3.3–6 kHz apart in the B
+region. The PLL locks to a resonance inside its 4096 Hz capture window around
+the start frequency, and when both modes are inside it usually takes the higher
+one. A stale temperature start frequency therefore catches the wrong mode: on
+13 Nov 2026 a profile's 6568.3 kHz, applied with the crystal at 31 °C, put a
+whole calibration run on the upper mode.
+
+So by default (**Settings → Crystal → Temp Lock Aim → Ratio to mass**, or
+`POST /settings/lock_aim?mode=ratio&temperature=25`) GET LOCK, the boot lock,
+the PLC's lock and the capacitor adjustment start the temperature mode at the
+**mass mode's start frequency times the active calibration's fT/fM at the Aim
+Temperature** (`aim_ratio` in `processing/TempCompAlgorithm.py`), and that
+becomes the temperature start frequency:
+
+- film lowers both modes by the same fraction, so the aim follows a deposition
+  and only the mass start frequency has to be right;
+- it needs no thermometer, which the production units will not have;
+- it comes from the calibration, so it can only point at the mode the profile
+  was calibrated on.
+
+Temperature does change the ratio: the lower mode moves 8 kHz from 12 to 65 °C
+while the mass mode moves 0.2 kHz. Worked out from the 13 Nov and 2 Nov
+calibration curves, with the higher mode winning whenever both are in the
+window, a lower-mode profile aimed at 25 °C catches the lower mode from 2 to
+34 °C, aimed at 30 °C from 12 to 40 °C, aimed at 40 °C from 27 to 51 °C. The
+band reaches much further below the aim temperature than above it (a warmer
+crystal brings the upper mode into the window), so set the aim temperature a
+few degrees above where the crystal usually is at lock time. The automatic re-lock
+is not aimed: it goes back to where the lock was last good, which is right in
+the middle of a run whatever the crystal's temperature. **Fixed** starts at the
+temperature start frequency as typed, as before; 0 Hz parks the mode either way.
+Without usable calibration constants (`fM_0`, `fT_0`) the aim falls back to the
+typed frequency and says so in the log.
 
 The start frequencies follow the lock (frequency tracking, and the update at
 the end of a run) only once a lock attempt has aimed the loops. From power-up
@@ -75,6 +111,55 @@ until then, the NCOs run from 0 Hz and their phase can pass the lock test, and
 a fresh start used to overwrite the start frequencies with 0 Hz that way. A
 sweep or a capacitor adjustment also leaves the loops open, so tracking stops
 after either one until the next lock.
+
+## Measuring, logging and ZERO
+
+The sensor measures all the time: from the moment the mass mode is locked, every
+sample's thickness, rate and temperature are worked out and shown, whether or
+not anything is being logged. **START LOG** and **STOP LOG** only open and close
+the run log. Everything that used to run only during a run now runs whenever
+the instrument measures:
+
+- **The capture windows follow the locked frequencies.** They used to stay put
+  outside a run, so a calibration walked the B-mode (about −106 Hz/°C, −221 at
+  64 °C) out of its ±2 kHz window and lost the lock.
+- **Automatic re-lock** when the mass mode is lost. A failed automatic attempt
+  raises no LOCK FAILED dialog and is retried every 30 s.
+- **The drive-gain servo and frequency tracking**, as before.
+
+What is shown depends on the locks:
+
+- mass mode not locked: no thickness, rate or temperature, on the page, to the
+  PLC or in the log, until it is back;
+- both locked: the compensated thickness;
+- the temp mode lost after the reference was taken: the temperature is held as
+  before (**Hold Temperature On Lock Loss**), so the thickness stays compensated;
+- the reference taken without the temp mode (or uncompensated mode): the
+  uncompensated thickness, with no temperature, until the next ZERO.
+
+**ZERO** sets the thickness back to 0: the mass-mode frequency now becomes the
+reference, T start is read from the T Start Source, and the film parameters are
+those in Settings. It is compensated when the temp mode is locked at that
+moment. Logging never moves the reference, so a log can start or stop mid-
+deposition; a ZERO during a log is written to it as a `ZERO` row. Before the
+first ZERO the reference is taken automatically after every successful lock
+(and retaken, compensated, once the temp mode locks), so the readout starts
+from 0 at every GET LOCK; after a ZERO, re-locks keep the deposition baseline
+and only ZERO moves it. Every new reference is announced as a `ZeroEvent` on
+`/ws`. The target flag clears at a ZERO.
+
+The PLC's StartMeasurement is the start of a deposition: it zeroes and opens
+the log; StopMeasurement closes it. For the PLC and `GET /state` the state
+keeps its old meaning, RUNNING while a log is open and IDLE while none is;
+`measuring` says whether the sensor is producing a thickness meanwhile. The
+page shows MEASURING and LOGGING. Over REST, `POST /measurement/start` opens the
+log (`zero=true` zeroes first), `POST /measurement/zero` zeroes, and
+`POST /measurement/stop` closes the log. `tools/qcm_client.py`'s
+`start_measurement()` still zeroes by default, as a start always did.
+
+A sweep or a capacitor adjustment can be run while the sensor measures, as long
+as nothing is being logged; both open the loops, so measuring resumes at the
+next GET LOCK. A new sample rate waits for a log in progress to end.
 
 ## Front-panel LEDs
 
@@ -114,20 +199,47 @@ cannot tell from mass. It takes one conversion a second and reports the mean
 of the last minute; a burst of conversions dips both mode frequencies for as
 long as it lasts.
 
+### Board clock correction
+
+Both modes are counted against the Pitaya's 125 MHz oscillator, which runs fast
+as the board warms. The dual-mode compensation passes that straight into the
+compensated mass frequency: on rp-f0ea58 about +0.25–0.3 ppm, or 1.7 Hz of
+the mass mode, per °C of Zynq die temperature (13 Nov 2026 calibration run,
+where the box warmed 1.4 °C in the 15 minutes after the TEC came on and the
+first point read 1 Hz low for it). **Settings → System → Board Clock**
+(`POST /settings/clock_correction?tempco_ppm=…&lag_s=…`) corrects for it
+([`domain/clock_correction.py`](domain/clock_correction.py)):
+
+- **Clock Tempco** in ppm per °C of die temperature; 0 (the default) is off.
+- **Clock Lag**: the die heats itself and follows processor load within a
+  minute, the oscillator follows the board over several, so the die reading is
+  lagged first. 8 min fitted best on 13 Nov (0.42 Hz rms left, against 0.54
+  unlagged and 0.68 uncorrected).
+
+Both frequencies are divided by 1 + tempco·(T_die,lagged − 45 °C)·1e-6 before the
+thickness and the compensated frequency are worked out, the reference included.
+The run log keeps `freq_mass_hz` and `freq_temp_hz` as measured and records the
+correction in `clock_ppm`. The coefficient belongs to the Red Pitaya, not to the
+crystal, so it is kept per instrument and RESTORE DEFAULTS leaves it alone; a
+crystal calibrated on corrected frequencies stays valid on another instrument
+with that one's coefficient. Changing it steps the compensated output by the
+change (a `CLOCK_CORRECTION` row in the run log), so ZERO afterwards.
+
 Every run log also carries the newest readings beside each sample, in
 `pt100_c`, `thermocouple_c`, `cold_junction_c` and `zynq_die_c` (°C), with any
 LTC2986 fault named in `temp_sensor_faults`. They are blank while there is no
 current reading. `temperature_c` is something else: the crystal temperature the
 compensation solves from the two modes.
 
-A run's start temperature (T start, the crystal temperature the compensation
-starts from) can come from one of these sensors instead of the typed-in ambient
-temperature: **Settings → Measurement → T Start Source**, or `t_start_source`
-on `POST /measurement/start` and `/settings/measurement_params`. The QCM worker
-reads the sensor the moment the run starts, so a PLC-triggered start does the
-same. Without a current, fault-free reading it starts from the ambient
-temperature rather than not at all. Either way the run log records the value
-and its origin, in the SETTINGS row and as `T_source=` in `RUN_START`.
+The reference's start temperature (T start, the crystal temperature the
+compensation starts from) can come from one of these sensors instead of the
+typed-in ambient temperature: **Settings → Measurement → T Start Source**, or
+`t_start_source` on `POST /measurement/zero` and `/settings/measurement_params`.
+The QCM worker reads the sensor the moment the reference is taken (ZERO, the
+PLC's start, or the automatic reference after a lock). Without a current,
+fault-free reading it starts from the ambient temperature rather than not at
+all. Either way the run log records the value and its origin, in the SETTINGS
+row and as `T_source=` in `RUN_START` (and in `ZERO` rows).
 
 T start can also come from the crystal itself (`crystal`). The calibration fit
 gives both modes' whole curves, constants `fM_0`/`fT_0` included, so the two
@@ -152,8 +264,8 @@ seconds of each thickness and takes its slope
 ([`processing/deposition_rate.py`](processing/deposition_rate.py)). The window
 is set under **Settings → Measurement → Rate Window** (default 1 s, or
 `POST /settings/rate_window`). A longer window gives a quieter rate that lags a
-change by about half the window. The rate stays blank until half a window of
-the run has been taken, and again for half the new window when the window is
+change by about half the window. The rate stays blank until half a window has
+been taken since the last reference (ZERO), and again for half the new window when the window is
 lengthened mid-run.
 
 Every run log carries it in `rate_comp_nm_s` and `rate_uncomp_nm_s`, beside the
@@ -231,6 +343,178 @@ temperature and press ADD POINT. ADD POINT before the crystal has settled asks
 first. The same is available at `GET /calibration`,
 `POST /calibration/settings`, `POST /calibration/points` and
 `DELETE /calibration/points[/{id}]`.
+
+Each point also records the lagged board temperature over its window
+(`board_c`). The points are stored as measured; whenever they are sent out the
+server adds clock-corrected copies (`fM_corr`, `fT_corr`, `clock_ppm`) with the
+board-clock coefficient set at that moment, and the tab fits those. The
+**BOARD CLOCK** line under the fitted coefficients estimates the coefficient
+from the points themselves: the mass-mode cubic is fitted together with a term in
+each point's board temperature (fM only, as fT carries the PT100's lag along the
+curve), giving the value ± its standard error. It needs six points with a board
+temperature spread over at least 0.3 °C; on 13 Nov the 1.3 °C spread gave
+0.25 ± 0.09 ppm/°C. **USE** sets it as this instrument's coefficient when the
+error is below 0.2 ppm/°C. Points taken before this was recorded have no board
+temperature and are fitted as measured.
+
+## TEC temperature control
+
+The calibration Peltier can be driven by the Pitaya itself, through an H-bridge
+(an X-NUCLEO-IHM04A1) on E1 pins that the FPGA switches with a PWM. A PID loop
+on the Pitaya ([`workers/tec_worker.py`](workers/tec_worker.py), logic in
+[`domain/tec_controller.py`](domain/tec_controller.py)) holds a setpoint on a
+feedback temperature, by default the PT100. The setpoint and an ON box are on
+the **CALIBRATE** tab; everything else is under **Settings → TEC Control**.
+
+The software sets four registers:
+
+| register | meaning |
+|---|---|
+| `PWM_en` | 1 = drive the bridge, 0 = everything off |
+| `PWM_freq` | 27 bits: step of a 27-bit phase accumulator at 125 MHz, so f = `PWM_freq` · 125 MHz / 2^27, 0.93 Hz per unit (1 kHz = 1074) |
+| `PWM_thresh` | 27 bits: duty × 2^27; the output is high while the accumulator is below it |
+| `PWM_dir` | which way the current runs; **Heating Direction** says which value heats |
+
+`pwm_words()` in `domain/tec_controller.py` is the one place that turns a
+frequency and a duty cycle into those words. Full drive is written as
+2^27 − 1: the register is 27 bits wide, so 2^27 would wrap to 0 and full drive
+would come out as none. A bitstream without the registers shows the TEC as
+unavailable and refuses to switch it on.
+
+**Safety.** The loop is off after every start of the service, whatever it was
+doing before. It switches itself off, and shows FAULT with the reason, when the
+feedback temperature leaves the safety limits (default 5–75 °C), when the PT100
+does with another source, after a minute without a usable reading, or on an
+error in the loop; ON clears it. Without a reading for 5 s the drive goes to
+zero until one comes back. Stopping the service switches the bridge off.
+**The bitstream has no watchdog**: if the process dies without switching off,
+the FPGA keeps the last drive, and the bimetal thermostat on the holder is then
+what stops a runaway. A watchdog in the FPGA that drops `PWM_en` when the
+registers have not been written for a few seconds would close that gap.
+
+**Feedback sources:**
+- An LTC2986 sensor: the PT100 by default, read once a second.
+- The crystal's own absolute temperature from its two locked modes (T start
+  from the crystal, above). It follows the crystal without the PT100's lag, but
+  needs a calibrated profile and both modes locked.
+- **PT100 + crystal**, which combines the two.
+
+**PT100 + crystal** (`Fusion` in `domain/tec_controller.py`). The loop
+regulates on the crystal's temperature plus an offset: PT100 − crystal,
+averaged over the **Averaging Time** (default 900 s).
+- **Slower than that, the PT100 decides.** It ends up at the setpoint and
+  stays the reference for every calibration point.
+- **Faster, the loop follows the crystal.** The crystal reads ten times a
+  second with next to no noise, runs ahead of the PT100 (it sits closer to the
+  Peltier), and feels what the PT100 never sees, such as heat lost to the air.
+- **Only the crystal's changes count, never its absolute reading.** So the
+  calibration being made does not decide the temperature: a profile that is
+  off only scales the short-term corrections by its slope error.
+- **The PT100's lag is allowed for.** The PT100 is compared with the crystal
+  delayed by the **PT100 Delay** (default 20 s; measured 12 s at 45 °C and
+  24 s at 65 °C on the infi2439 holder), so its lag during a ramp is not taken
+  for a change in the offset.
+
+The crystal is dropped and the loop runs on the PT100 alone when:
+- either mode is unlocked;
+- the crystal reading jumps by more than 0.5 °C between two samples (a mode
+  hop or a false lock);
+- it reads more than 5 °C from the PT100.
+
+The PT100 alone then uses the ordinary PID gains. The crystal is used again
+after 30 s of steady readings (three PT100 Delays, if longer). The offset is
+worked out afresh over that wait: the delay filter starts at once, and the
+average starts after two delays. The average starts as a running mean whose
+span grows to the Averaging Time, so a rejoin in the middle of a ramp washes
+out within minutes. PT100 + crystal
+has gains of its own (`fused_kp`/`ki`/`kd`): an autotune on this source sets
+those and leaves the PT100 ones alone. Settings saved before it existed start
+it from the PT100 gains. An autotune on PT100 + crystal is refused while the
+crystal is not in use, and fails if the crystal drops out during it.
+
+Why combine them (13 Nov 2026 calibration, on the PT100 alone):
+- The crystal wandered ±20–40 mK while the PT100 looked flat.
+- About half of that wander never reached the PT100, more the hotter the
+  holder (8 mK rms at 45 °C, 17 mK at 65 °C).
+- A crude model of the holder predicts the crystal's wander drops from about
+  18 to 6 mK rms with both sensors.
+
+**PID.** Gains are in % of drive: Kp per °C, Ki per °C·s, Kd per °C/s.
+- The derivative acts on the temperature rather than the error, so a new
+  setpoint does not kick the drive, and it is smoothed over 5 s.
+- The integral stops growing while the drive is at its cap.
+- The integral only moves within the **Integral Band** of the setpoint
+  (default 1 °C; 0 = everywhere), or outside it when the temperature has
+  stalled short of the setpoint. Stalled means it would not get there within
+  one integral time Kp/Ki at its current pace. On the way to a new setpoint the
+  integral holds the drive that held the last one, instead of piling up the
+  error of the whole approach and overshooting by it. The stall rule matters
+  from a cold start: Kp alone can settle further from the setpoint than the
+  band.
+
+**Autotune** (relay method, Åström–Hägglund). The drive switches between
+bias ± the relay amplitude each time the temperature crosses the setpoint by
+more than the hysteresis, so the loop oscillates at its natural period Tu; the
+swing gives the ultimate gain Ku, and the chosen rule (Tyreus–Luyben by
+default) turns those into gains, which replace the old ones (on PT100 + crystal,
+its own). Started away from
+the setpoint it first gets there on the PID and takes the PID's integral as the
+bias; the bias is also nudged when one side of the relay cannot reach the
+setpoint, and evened out after every cycle so heating and cooling take equally
+long. It needs four or more agreeing cycles, so 20–60 min on a real holder, and
+gives up after 12 cycles, 3 h, or an hour without the relay switching. Run it
+at a setpoint mid-range.
+
+The settings are kept in `data/tec.json`, apart from DEFAULT_SETTINGS: the
+gains belong to this rig, so RESTORE DEFAULTS leaves them alone. The same is
+available at `GET /tec`, `POST /tec/settings`, `POST /tec/enabled`,
+`POST /tec/autotune/start` and `/abort`; every step of the loop is pushed to
+the browsers as a `TecStatusEvent`.
+
+## Calibration sequence
+
+With the TEC under its control, the Pitaya can take a whole calibration by
+itself ([`domain/calibration_sequence.py`](domain/calibration_sequence.py)).
+The steps are set up under **Settings → Calibration Sequence** and saved with
+SAVE SEQUENCE (not APPLY), in `data/calibration/sequence.json`; START and STOP
+are on the **CALIBRATE** tab's SEQUENCE row, which shows the step in progress.
+
+Each step goes to a setpoint and is one of:
+
+- **point**: wait for the settle detector to take a point there, as AUTO
+  would (same WINDOW, drift limits and HOLD), then go on;
+- **soak**: hold the setpoint for its minutes and, with a drift limit, until
+  the mass mode drifts less than that (Hz/min over the settle window). No
+  point: a break-in, or an anneal.
+
+The generator fills the list from a range, a step and a pattern:
+**interleaved** (every other temperature going up, the ones in between coming
+down, so neighbours are approached from opposite sides and a drift shows up
+instead of tilting the curve), **both ways**, or **up only**. Before the
+points it can put one hot soak that is both break-in and anneal: held a little
+above the highest point for a minimum time and until the mass mode drifts less
+than a limit. Heat speeds up a fresh crystal's break-in, and an irreversible
+shift then happens before the points rather than among them. Reference points
+can follow it and close the run. The defaults (10–50 °C in 5 °C steps, the
+soak at 52 °C for at least 60 min and ≤ 0.02 Hz/min, reference 25 °C) give 12
+steps with 11 points. The list can be edited by hand afterwards.
+
+While a soak runs, and in a point step until the TEMP sensor is within the
+point tolerance of the setpoint, the settle detector's automatic points are
+held back, so it takes nothing during a break-in or on the way to a setpoint.
+Each point step re-arms the detector, so a temperature can be taken again
+after a soak with nothing in between. A step that times out is skipped, taken
+as it stands (marked not settled), or ends the sequence. At the end the TEC
+switches off, goes to the reference temperature, or holds the last setpoint.
+
+START needs a sensor as the TEMP source, switches AUTO on (and off again when
+the sequence ends, if it was off before) and the TEC on, and refuses setpoints
+outside the TEC's safety limits. The TEC switching off, by
+hand or on a fault, ends the sequence, and so does a restart of the service
+(the TEC comes up off); the points taken so far stay. The same is available at
+`GET`/`POST /calibration/sequence` and `POST /calibration/sequence/start`,
+`/stop` and `/skip`; progress goes out once a second as `status.sequence` in
+the `CalibrationStatusEvent`.
 
 ## OPC-UA
 

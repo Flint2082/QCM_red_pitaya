@@ -19,11 +19,20 @@ from messaging.defines import WorkerState
 _STATE_MAP = {
     WorkerState.IDLE:        "IDLE",
     WorkerState.LOCKING:     "LOCKING",
-    WorkerState.MEASURING:   "RUNNING",
+    WorkerState.MEASURING:   "IDLE",      # RUNNING while the run log is open, see _api_state
     WorkerState.SWEEPING:    "SWEEPING",
     WorkerState.CALIBRATING: "IDLE",
     WorkerState.CAP_ADJUST:  "CAP_ADJUST",
 }
+
+
+def _api_state(event) -> str:
+    """The state as the REST API, the GUI and the PLC have always read it:
+    RUNNING means a run is being logged and IDLE that none is, whether or not
+    the sensor is measuring meanwhile (StateEvent.measuring says that)."""
+    if event.recording and event.state == WorkerState.MEASURING:
+        return "RUNNING"
+    return _STATE_MAP.get(event.state, "IDLE")
 
 
 class Application(threading.Thread):
@@ -41,6 +50,8 @@ class Application(threading.Thread):
         opc_status_queue:  queue.Queue | None = None,
         # Readings from the temperature worker (optional)
         temperature_queue: queue.Queue | None = None,
+        # Status of the TEC temperature loop (optional)
+        tec_queue: queue.Queue | None = None,
 
         system_state=None,
     ):
@@ -52,6 +63,7 @@ class Application(threading.Thread):
         self._event_queues:   list[queue.Queue] = [q for q in (api_event_queue,   opc_event_queue)   if q]
         self._opc_status_queue: queue.Queue | None = opc_status_queue
         self._temperature_queue: queue.Queue | None = temperature_queue
+        self._tec_queue: queue.Queue | None = tec_queue
         self.system_state = system_state
         self.running = True
 
@@ -103,19 +115,20 @@ class Application(threading.Thread):
         return did_work
 
     # --------------------------------------------------
-    # Inbound: temperature readings → forward to REST/WS clients
+    # Inbound: temperature readings and TEC status → forward to REST/WS clients
     # --------------------------------------------------
 
     def _process_temperatures(self) -> bool:
-        if self._temperature_queue is None:
-            return False
         did_work = False
-        try:
-            while True:
-                self._emit(self._temperature_queue.get_nowait())
-                did_work = True
-        except queue.Empty:
-            pass
+        for q in (self._temperature_queue, self._tec_queue):
+            if q is None:
+                continue
+            try:
+                while True:
+                    self._emit(q.get_nowait())
+                    did_work = True
+            except queue.Empty:
+                pass
         return did_work
 
     # --------------------------------------------------
@@ -140,6 +153,14 @@ class Application(threading.Thread):
         """
         if isinstance(command, ac.StartMeasurementCommand):
             self.worker_command_queue.put(wc.StartMeasurementCommand(
+                ambient_temp=command.ambient_temp, mat_dens=command.mat_dens, z_ratio=command.z_ratio,
+                t_start_source=command.t_start_source, zero=command.zero))
+        elif isinstance(command, ac.ZeroCommand):
+            self.worker_command_queue.put(wc.ZeroCommand(
+                ambient_temp=command.ambient_temp, mat_dens=command.mat_dens, z_ratio=command.z_ratio,
+                t_start_source=command.t_start_source))
+        elif isinstance(command, ac.SetReferenceParamsCommand):
+            self.worker_command_queue.put(wc.SetReferenceParamsCommand(
                 ambient_temp=command.ambient_temp, mat_dens=command.mat_dens, z_ratio=command.z_ratio,
                 t_start_source=command.t_start_source))
         elif isinstance(command, ac.StopMeasurementCommand):
@@ -175,6 +196,8 @@ class Application(threading.Thread):
             self.worker_command_queue.put(wc.SetMeasurementModeCommand(command.compensated))
         elif isinstance(command, ac.SetFreqTrackingCommand):
             self.worker_command_queue.put(wc.SetFreqTrackingCommand(command.enabled, command.interval))
+        elif isinstance(command, ac.SetClockCorrectionCommand):
+            self.worker_command_queue.put(wc.SetClockCorrectionCommand(command.tempco_ppm, command.lag_s))
         elif isinstance(command, ac.SetTargetThicknessCommand):
             self.worker_command_queue.put(wc.SetTargetThicknessCommand(command.target))
         elif isinstance(command, ac.SetRateWindowCommand):
@@ -221,7 +244,12 @@ class Application(threading.Thread):
         Add any business logic here before forwarding.
         """
         if isinstance(event, we.StateEvent):
-            self._emit(ae.StateEvent(state=_STATE_MAP.get(event.state, "IDLE")))
+            self._emit(ae.StateEvent(state=_api_state(event),
+                                     measuring=event.state == WorkerState.MEASURING))
+
+        elif isinstance(event, we.ZeroEvent):
+            self._emit(ae.ZeroEvent(auto=event.auto, compensated=event.compensated,
+                                    t_start=event.t_start, t_source=event.t_source))
 
         elif isinstance(event, we.SweepPointEvent):
             self._emit(ae.SweepPointEvent(

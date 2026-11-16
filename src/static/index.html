@@ -101,6 +101,18 @@ header { height: var(--header-h); background: var(--surface); border-bottom: 1px
 .status-pill.locking  { border-color: var(--orange); color: var(--orange); background: var(--orange-dim); }
 .status-pill.sweeping { border-color: var(--blue);   color: var(--blue);   background: var(--blue-dim); }
 .status-pill.error    { border-color: var(--red);    color: var(--red);    background: var(--red-dim); }
+/* Calibration sequence step list (Settings → Calibration Sequence) */
+.cs-steps { display: flex; flex-direction: column; gap: 1px; background: var(--border); border: 1px solid var(--border); border-radius: var(--radius); margin-bottom: 8px; max-height: 420px; overflow: auto; }
+.cs-row { display: flex; align-items: center; gap: 8px; padding: 4px 10px; background: var(--surface); font-family: 'DM Mono', monospace; font-size: 11px; color: var(--text-dim); }
+.cs-row .settings-input { width: 72px; padding: 2px 6px; font-size: 11px; }
+.cs-row select.settings-input { width: 84px; text-align: left; }
+.cs-num { width: 22px; text-align: right; }
+.cs-note { flex: 1; min-width: 0; }
+.cs-row.cs-done { opacity: 0.5; }
+.cs-row.cs-active { box-shadow: inset 3px 0 0 var(--green); background: var(--green-dim); color: var(--text); }
+.cs-btn { background: none; border: 1px solid var(--border); border-radius: var(--radius); color: var(--text-dim); cursor: pointer; font-size: 11px; width: 22px; height: 22px; padding: 0; }
+.cs-btn:hover { color: var(--text); border-color: var(--border-2); }
+.cs-empty { padding: 12px; background: var(--surface); color: var(--text-dim); font-family: 'DM Mono', monospace; font-size: 11px; }
 
 .content { flex: 1; overflow: hidden; display: flex; flex-direction: column; }
 .tab-panel { display: none; flex: 1; overflow: hidden; flex-direction: column; }
@@ -262,7 +274,8 @@ footer { height: 24px; background: var(--surface); border-top: 1px solid var(--b
       </div>
       <div class="toolbar-sep"></div>
       <button class="btn btn-orange btn-get-lock" onclick="sendCommand('lock')"><svg viewBox="0 0 12 12"><path d="M6 1a3 3 0 0 0-3 3v1H2v6h8V5H9V4a3 3 0 0 0-3-3zm0 1.5a1.5 1.5 0 0 1 1.5 1.5v1h-3V4A1.5 1.5 0 0 1 6 2.5z"/></svg>GET LOCK</button>
-      <button class="btn btn-green" id="btn-start-stop" onclick="toggleStartStop()"><svg viewBox="0 0 12 12"><polygon points="3,2 10,6 3,10"/></svg>START</button>
+      <button class="btn btn-zero" id="btn-zero-1" onclick="sendCommand('zero')" disabled title="Zero the thickness here: a new reference, with T start from the T Start Source and the film parameters in Settings. Needs the mass mode locked; compensated when the temp mode is locked too"><svg viewBox="0 0 12 12"><path d="M6 1.5a4.5 4.5 0 1 0 0 9 4.5 4.5 0 0 0 0-9zm0 1.6a2.9 2.9 0 1 1 0 5.8 2.9 2.9 0 0 1 0-5.8z"/></svg>ZERO</button>
+      <button class="btn btn-green" id="btn-start-stop" onclick="toggleStartStop()" title="Open the run log; the measurement itself runs whenever the mass mode is locked"><svg viewBox="0 0 12 12"><circle cx="6" cy="6" r="3.5"/></svg>START LOG</button>
       <div class="header-spacer"></div>
       <button class="btn" onclick="clearCharts()">CLEAR</button>
     </div>
@@ -304,7 +317,8 @@ footer { height: 24px; background: var(--surface); border-top: 1px solid var(--b
       </div>
       <div class="toolbar-sep"></div>
       <button class="btn btn-orange btn-get-lock" onclick="sendCommand('lock')"><svg viewBox="0 0 12 12"><path d="M6 1a3 3 0 0 0-3 3v1H2v6h8V5H9V4a3 3 0 0 0-3-3zm0 1.5a1.5 1.5 0 0 1 1.5 1.5v1h-3V4A1.5 1.5 0 0 1 6 2.5z"/></svg>GET LOCK</button>
-      <button class="btn btn-green" id="btn-start-stop-2" onclick="toggleStartStop()"><svg viewBox="0 0 12 12"><polygon points="3,2 10,6 3,10"/></svg>START</button>
+      <button class="btn btn-zero" id="btn-zero-2" onclick="sendCommand('zero')" disabled title="Zero the thickness here: a new reference, with T start from the T Start Source and the film parameters in Settings. Needs the mass mode locked; compensated when the temp mode is locked too"><svg viewBox="0 0 12 12"><path d="M6 1.5a4.5 4.5 0 1 0 0 9 4.5 4.5 0 0 0 0-9zm0 1.6a2.9 2.9 0 1 1 0 5.8 2.9 2.9 0 0 1 0-5.8z"/></svg>ZERO</button>
+      <button class="btn btn-green" id="btn-start-stop-2" onclick="toggleStartStop()" title="Open the run log; the measurement itself runs whenever the mass mode is locked"><svg viewBox="0 0 12 12"><circle cx="6" cy="6" r="3.5"/></svg>START LOG</button>
       <div class="header-spacer"></div>
       <button class="btn" onclick="clearCharts()">CLEAR</button>
     </div>
@@ -395,7 +409,8 @@ footer { height: 24px; background: var(--surface); border-top: 1px solid var(--b
   <div class="tab-panel" id="panel-calibrate">
     <div class="toolbar">
       <button class="btn btn-orange btn-get-lock" onclick="sendCommand('lock')"><svg viewBox="0 0 12 12"><path d="M6 1a3 3 0 0 0-3 3v1H2v6h8V5H9V4a3 3 0 0 0-3-3zm0 1.5a1.5 1.5 0 0 1 1.5 1.5v1h-3V4A1.5 1.5 0 0 1 6 2.5z"/></svg>GET LOCK</button>
-      <button class="btn btn-green" id="btn-start-stop-3" onclick="toggleStartStop()"><svg viewBox="0 0 12 12"><polygon points="3,2 10,6 3,10"/></svg>START</button>
+      <button class="btn btn-zero" id="btn-zero-3" onclick="sendCommand('zero')" disabled title="Zero the thickness here: a new reference, with T start from the T Start Source and the film parameters in Settings. Needs the mass mode locked; compensated when the temp mode is locked too"><svg viewBox="0 0 12 12"><path d="M6 1.5a4.5 4.5 0 1 0 0 9 4.5 4.5 0 0 0 0-9zm0 1.6a2.9 2.9 0 1 1 0 5.8 2.9 2.9 0 0 1 0-5.8z"/></svg>ZERO</button>
+      <button class="btn btn-green" id="btn-start-stop-3" onclick="toggleStartStop()" title="Open the run log; the measurement itself runs whenever the mass mode is locked"><svg viewBox="0 0 12 12"><circle cx="6" cy="6" r="3.5"/></svg>START LOG</button>
       <div class="toolbar-sep"></div>
       <span class="toolbar-label">TEMP</span>
       <select id="cal-temp-source" onchange="onCalTempSource()" title="Where ADD POINT takes the temperature from: typed in, or the latest reading of an LTC2986 sensor (TEMP SENSORS tab)" style="background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);color:var(--text);font-family:'DM Mono',monospace;font-size:11px;padding:0 8px;height:26px;outline:none;">
@@ -435,6 +450,28 @@ footer { height: 24px; background: var(--surface); border-top: 1px solid var(--b
       <span class="toolbar-label" title="How long both have to stay within the limits">HOLD</span>
       <div class="num-input-wrap"><input id="cal-hold" type="number" min="0" max="60" step="0.5" onchange="setCalSetting('hold_s', this.value * 60)"><span class="num-input-unit">min</span></div>
     </div>
+    <!-- TEC temperature loop on the Pitaya; its settings are under Settings → TEC Control. -->
+    <div class="toolbar">
+      <span class="toolbar-label">TEC</span>
+      <div class="status-pill idle" id="cal-tec-pill">—</div>
+      <label title="Drive the Peltier to hold the setpoint (Settings → TEC Control)" style="display:flex;align-items:center;gap:6px;font-family:'DM Mono',monospace;font-size:10px;color:var(--text-dim);cursor:pointer;user-select:none">
+        <input type="checkbox" id="cal-tec-on" onchange="setTecEnabled(this.checked)" style="accent-color:var(--blue)"> ON
+      </label>
+      <span class="toolbar-label" title="Temperature the TEC holds">SETPOINT</span>
+      <div class="num-input-wrap"><input id="cal-tec-setpoint" type="number" step="0.5" onkeydown="if (event.key === 'Enter') setTecSetpoint()"><span class="num-input-unit">°C</span></div>
+      <button class="btn btn-blue" onclick="setTecSetpoint()" title="Send the setpoint to the Pitaya (Enter does the same)">SET</button>
+      <span id="cal-tec-live" style="font-family:'DM Mono',monospace;font-size:10px;color:var(--text-dim)"></span>
+    </div>
+    <!-- Calibration sequence: the steps under Settings → Calibration Sequence, run by the Pitaya. -->
+    <div class="toolbar">
+      <span class="toolbar-label">SEQUENCE</span>
+      <div class="status-pill idle" id="cal-seq-pill">IDLE</div>
+      <button class="btn btn-green" id="btn-seq-start" onclick="toggleCalSequence()" title="Work through the calibration sequence: the TEC goes to each setpoint and a point is taken when it has settled">START</button>
+      <button class="btn" id="btn-seq-skip" onclick="skipCalStep()" disabled title="Give up on this step and go to the next">SKIP STEP</button>
+      <span id="cal-seq-text" style="font-family:'DM Mono',monospace;font-size:10px;color:var(--text-dim)"></span>
+      <div class="header-spacer"></div>
+      <button class="btn" onclick="openSettingsPanel('calseq')" title="Settings → Calibration Sequence">EDIT SEQUENCE</button>
+    </div>
     <div class="stat-bar">
       <div class="stat"><div class="stat-label">Mass Mode Freq</div><div class="stat-value" id="val-cal-fM" style="color:var(--green)">—</div><div class="stat-unit">Hz</div></div>
       <div class="stat"><div class="stat-label">Temp Mode Freq</div><div class="stat-value" id="val-cal-fT" style="color:var(--blue)">—</div><div class="stat-unit">Hz</div></div>
@@ -464,6 +501,13 @@ footer { height: 24px; background: var(--surface); border-top: 1px solid var(--b
             <div class="cal-coeff-row"><span class="cal-coeff-name">fT_1</span><span class="cal-coeff-val" id="cal-fT1">—</span></div>
           </div>
         </div>
+        <!-- Board clock: the points are fitted clock-corrected (Settings → System →
+             Board Clock); this says what they suggest the coefficient should be. -->
+        <div style="display:flex;align-items:center;gap:10px;padding:8px 16px;border-top:1px solid var(--border);font-family:'DM Mono',monospace;font-size:11px;color:var(--text-dim)">
+          <span style="color:var(--text-mid);letter-spacing:.08em">BOARD CLOCK</span>
+          <span id="cal-clock-info" style="flex:1">—</span>
+          <button class="btn" id="btn-cal-clock-use" onclick="useCalClockEstimate()" disabled title="Set this instrument's board-clock coefficient to the value these points suggest">USE</button>
+        </div>
       </div>
     </div>
   </div>
@@ -484,6 +528,8 @@ footer { height: 24px; background: var(--surface); border-top: 1px solid var(--b
         <div class="settings-nav-section">GENERAL</div>
         <div class="settings-nav-item active" onclick="switchSettings('meas',this)">Measurement</div>
         <div class="settings-nav-item" onclick="switchSettings('crystals',this)">Crystal</div>
+        <div class="settings-nav-item" onclick="switchSettings('tec',this)">TEC Control</div>
+        <div class="settings-nav-item" onclick="switchSettings('calseq',this)">Calibration Sequence</div>
         <div class="settings-nav-section">SYSTEM</div>
         <div class="settings-nav-item" onclick="switchSettings('system',this)">System</div>
         <div class="settings-nav-item" onclick="switchSettings('opc',this)">OPC-UA</div>
@@ -494,7 +540,7 @@ footer { height: 24px; background: var(--surface); border-top: 1px solid var(--b
         <div class="settings-panel active" id="spanel-meas">
           <div class="settings-section-title">MODE</div>
           <div class="settings-group">
-            <div class="settings-row"><div><div class="settings-row-label">Measurement Mode</div><div class="settings-row-desc"><b>Compensated</b> locks both modes and solves the crystal temperature from the temp mode, so the thickness is corrected for it. <b>Uncompensated</b> locks the mass mode only — GET LOCK parks the temp oscillator at 0 Hz — and reports the plain thickness from the mass-mode shift, with no temperature: every frequency change is taken as film, so it is only as good as the crystal's temperature is steady. For a crystal with no usable temp mode or no calibration. GET LOCK uses the new mode straight away; a run in progress keeps the mode it was started in. Either mode is also parked by setting its lock frequency to 0 Hz</div></div><div></div><div style="display:flex;align-items:center;gap:6px"><select class="settings-input" id="s-meas-mode" style="width:150px;text-align:left"><option value="compensated">Compensated</option><option value="uncompensated">Uncompensated</option></select></div></div>
+            <div class="settings-row"><div><div class="settings-row-label">Measurement Mode</div><div class="settings-row-desc"><b>Compensated</b> locks both modes and solves the crystal temperature from the temp mode, so the thickness is corrected for it. <b>Uncompensated</b> locks the mass mode only — GET LOCK parks the temp oscillator at 0 Hz — and reports the plain thickness from the mass-mode shift, with no temperature: every frequency change is taken as film, so it is only as good as the crystal's temperature is steady. For a crystal with no usable temp mode or no calibration. GET LOCK uses the new mode straight away. Switched to Uncompensated, the thickness is the uncompensated one from the current reference at once; back to Compensated, GET LOCK (to lock the temp mode) and ZERO for a compensated reference. Either mode is also parked by setting its lock frequency to 0 Hz</div></div><div></div><div style="display:flex;align-items:center;gap:6px"><select class="settings-input" id="s-meas-mode" style="width:150px;text-align:left"><option value="compensated">Compensated</option><option value="uncompensated">Uncompensated</option></select></div></div>
           </div>
 
           <div class="settings-section-title">MATERIAL PROPERTIES</div>
@@ -505,7 +551,7 @@ footer { height: 24px; background: var(--surface); border-top: 1px solid var(--b
 
           <div class="settings-section-title">TEMPERATURE</div>
           <div class="settings-group">
-            <div class="settings-row"><div><div class="settings-row-label">T Start Source</div><div class="settings-row-desc">Where a run's starting reference temperature comes from, read the moment the run starts (from the GUI or the PLC). Crystal solves it from the two locked modes with the active crystal's calibration, constants fM_0/fT_0 included, so it needs a profile calibrated on this crystal. A thermometer is read directly. Without a current reading the run starts from Ambient Temperature instead and the run log says so</div></div><div></div><div style="display:flex;align-items:center;gap:6px"><span id="s-tstart-live" style="font-family:'DM Mono',monospace;font-size:11px;color:var(--text-dim)"></span><select class="settings-input" id="s-tstart-source" onchange="updateTStartLive()" style="width:150px;text-align:left"><option value="manual">Manual</option><option value="crystal">Crystal</option><option value="pt100">PT100</option><option value="thermocouple">Thermocouple</option><option value="cold_junction">Cold junction</option></select></div></div>
+            <div class="settings-row"><div><div class="settings-row-label">T Start Source</div><div class="settings-row-desc">Where the thickness reference's temperature (T start) comes from, read the moment the reference is taken: at ZERO, at the PLC's start, and after a lock before any ZERO. Crystal solves it from the two locked modes with the active crystal's calibration, constants fM_0/fT_0 included, so it needs a profile calibrated on this crystal. A thermometer is read directly. Without a current reading T start is Ambient Temperature instead, and the log says so</div></div><div></div><div style="display:flex;align-items:center;gap:6px"><span id="s-tstart-live" style="font-family:'DM Mono',monospace;font-size:11px;color:var(--text-dim)"></span><select class="settings-input" id="s-tstart-source" onchange="updateTStartLive()" style="width:150px;text-align:left"><option value="manual">Manual</option><option value="crystal">Crystal</option><option value="pt100">PT100</option><option value="thermocouple">Thermocouple</option><option value="cold_junction">Cold junction</option></select></div></div>
             <div class="settings-row"><div><div class="settings-row-label">Ambient Temperature</div><div class="settings-row-desc">Starting reference temperature when T Start Source is Manual, and the fallback for the other sources</div></div><div></div><div style="display:flex;align-items:center;gap:6px"><input class="settings-input" type="number" id="s-amb-temp" value="23" step="0.5"><span class="settings-unit">°C</span></div></div>
           </div>
 
@@ -557,6 +603,13 @@ footer { height: 24px; background: var(--surface); border-top: 1px solid var(--b
             <div class="settings-row"><div><div class="settings-row-label">Hold Temperature On Lock Loss</div><div class="settings-row-desc">Hold the last calculated temperature while the temp mode is unlocked, rather than solving it from an off-resonance Ft. Only the thermal <i>correction</i> pauses: the mass mode is still measured and the compensated thickness keeps coming out, following the film sample for sample. Held samples show as <b>HELD</b> on the Monitor tab.<br><br><b>Disabled</b>, the temperature is solved from whatever Ft currently reads, locked or not — the live figure, with the lock flag and lock quality beside it to say how far to trust it. Useful when lock detection is marginal and the loops are in fact fine. Either way a sample is produced every cycle and the run is never interrupted</div></div><div></div><div style="display:flex;align-items:center;gap:6px"><select class="settings-input" id="s-temp-hold" style="width:150px;text-align:left"><option value="1">Enabled</option><option value="0">Disabled</option></select></div></div>
             <div class="settings-row"><div><div class="settings-row-label">Track Lock Frequencies</div><div class="settings-row-desc">While both modes are locked, keep the start frequencies on the frequencies the PLLs are actually holding, so a re-lock aims at where the resonances are now instead of where they were hours ago. Does not change the crystal profile on disk</div></div><div></div><div style="display:flex;align-items:center;gap:6px"><select class="settings-input" id="s-freq-track" style="width:150px;text-align:left"><option value="1">Enabled</option><option value="0">Disabled</option></select></div></div>
             <div class="settings-row"><div><div class="settings-row-label">Tracking Interval</div><div class="settings-row-desc">How often the start frequencies are updated</div></div><div></div><div style="display:flex;align-items:center;gap:6px"><input class="settings-input" type="number" id="s-freq-track-interval" value="10" step="1" min="1"><span class="settings-unit">s</span></div></div>
+          </div>
+
+          <div class="settings-section-title">BOARD CLOCK</div>
+          <div class="settings-group">
+            <div class="settings-row"><div><div class="settings-row-label">Clock Tempco</div><div class="settings-row-desc">Both modes are counted against the Red Pitaya's 125 MHz oscillator, which runs fast as the board warms: about +0.25–0.3 ppm per °C of the Zynq die on rp-f0ea58. That shifts both frequencies by the same fraction, which the compensation reads as mass: ~1.7 Hz of the mass mode per °C. With a coefficient set, both frequencies are corrected from the lagged die temperature before any thickness is worked out (the run log keeps them as measured, with the correction in <b>clock_ppm</b>), and the CALIBRATE tab fits corrected points — it also estimates the coefficient from them. Each Red Pitaya has its own oscillator, so this belongs to the instrument, not the crystal, and RESTORE DEFAULTS leaves it alone. 0 switches the correction off. Changing it steps the compensated output: ZERO afterwards</div></div><div></div><div style="display:flex;align-items:center;gap:6px"><input class="settings-input" type="number" id="s-clock-tempco" value="0" step="0.01" min="-5" max="5"><span class="settings-unit">ppm/°C</span></div></div>
+            <div class="settings-row"><div><div class="settings-row-label">Clock Lag</div><div class="settings-row-desc">The die heats itself and follows processor load within a minute; the oscillator follows the board over several. A first-order lag on the die reading tracks the clock better: 8 min fitted best on 13 Nov 2026. 0–60 min</div></div><div></div><div style="display:flex;align-items:center;gap:6px"><input class="settings-input" type="number" id="s-clock-lag" value="8" step="0.5" min="0" max="60"><span class="settings-unit">min</span></div></div>
+            <div class="settings-row"><div><div class="settings-row-label">Correction Now</div><div class="settings-row-desc">Lagged die temperature and the error taken out of both frequencies, referred to a 45 °C die</div></div><div></div><span id="clock-live" style="font-family:'DM Mono',monospace;font-size:12px;color:var(--text-dim)">—</span></div>
           </div>
 
           <div class="settings-section-title">OUTPUT</div>
@@ -671,8 +724,10 @@ footer { height: 24px; background: var(--surface); border-top: 1px solid var(--b
 
           <div class="settings-section-title">START FREQUENCIES</div>
           <div class="settings-group">
-            <div class="settings-row"><div><div class="settings-row-label">Mass Lock Freq</div><div class="settings-row-desc">PLL start frequency — OSC 1</div></div><div></div><div style="display:flex;align-items:center;gap:6px"><input class="settings-input" type="number" id="s-crystal-freq-mass" value="5983000" step="1000"><span class="settings-unit">Hz</span></div></div>
-            <div class="settings-row"><div><div class="settings-row-label">Temp Lock Freq</div><div class="settings-row-desc">PLL start frequency — OSC 2</div></div><div></div><div style="display:flex;align-items:center;gap:6px"><input class="settings-input" type="number" id="s-crystal-freq-temp" value="6570000" step="1000"><span class="settings-unit">Hz</span></div></div>
+            <div class="settings-row"><div><div class="settings-row-label">Mass Lock Freq</div><div class="settings-row-desc">PLL start frequency — OSC 1</div></div><div></div><div style="display:flex;align-items:center;gap:6px"><input class="settings-input" type="number" id="s-crystal-freq-mass" value="5983000" step="1000" oninput="updateAimHint()"><span class="settings-unit">Hz</span></div></div>
+            <div class="settings-row"><div><div class="settings-row-label">Temp Lock Freq</div><div class="settings-row-desc">PLL start frequency — OSC 2. With the aim below on <b>Ratio</b>, GET LOCK replaces it with the aimed frequency; 0 parks the temperature mode either way</div></div><div></div><div style="display:flex;align-items:center;gap:6px"><input class="settings-input" type="number" id="s-crystal-freq-temp" value="6570000" step="1000" oninput="updateAimHint()"><span class="settings-unit">Hz</span></div></div>
+            <div class="settings-row"><div><div class="settings-row-label">Temp Lock Aim</div><div class="settings-row-desc"><b>Ratio</b>: the temperature mode starts at the mass lock frequency times this calibration's fT/fM at the aim temperature. Film lowers both modes by the same fraction, so the aim follows a deposition with no thermometer, and it can only point at the mode the profile was calibrated on — the wrong B-region mode cannot be caught by a stale frequency. Temperature does move the ratio, so the aim only holds over a band around the aim temperature (see below); outside it the lock may miss or land on the neighbouring mode. The automatic re-lock is not aimed: it returns to where the lock was last good. <b>Fixed</b>: start at the frequency above. An instrument setting, not saved in the profile</div><div class="settings-row-desc" id="lock-aim-hint" style="margin-top:4px;color:var(--text-mid)">—</div></div><div></div><div style="display:flex;align-items:center;gap:6px"><select class="settings-input" id="s-lock-aim" style="width:150px;text-align:left" onchange="updateAimHint()"><option value="ratio">Ratio to mass</option><option value="fixed">Fixed</option></select></div></div>
+            <div class="settings-row"><div><div class="settings-row-label">Aim Temperature</div><div class="settings-row-desc">Crystal temperature the ratio is taken at. With both B-region modes in the window the PLL takes the higher one, so the aim tolerates a crystal much colder than this (aimed at 25 °C, a lower-mode profile still locks right down to ~2 °C) but only ~9 °C warmer. Set it a few degrees above where the crystal usually is when you lock. −20 to 120 °C</div></div><div></div><div style="display:flex;align-items:center;gap:6px"><input class="settings-input" type="number" id="s-lock-aim-temp" value="25" step="1" min="-20" max="120" oninput="updateAimHint()"><span class="settings-unit">°C</span></div></div>
             <div class="settings-row"><div><div class="settings-row-label">Virgin Frequency</div><div class="settings-row-desc">Pristine uncoated crystal mass-mode frequency — Z-match &amp; usage reference (default 6 MHz; set 0 to use run start)</div></div><div></div><div style="display:flex;align-items:center;gap:6px"><input class="settings-input" type="number" id="s-crystal-freq-virgin" value="6000000" step="1000"><span class="settings-unit">Hz</span></div></div>
           </div>
 
@@ -715,6 +770,101 @@ footer { height: 24px; background: var(--surface); border-top: 1px solid var(--b
           <div style="display:flex;gap:8px">
             <button class="btn" onclick="revertCrystalDefaults()"
                     title="Refill this form with the reference crystal values — does not touch the saved profile until APPLY">RESET FORM TO REFERENCE VALUES</button>
+          </div>
+        </div>
+
+        <!-- TEC CONTROL: the calibration Peltier's temperature loop, run on the
+             Pitaya (workers/tec_worker.py). The setpoint is on the CALIBRATE tab. -->
+        <div class="settings-panel" id="spanel-tec">
+          <div class="settings-section-title">CONTROL</div>
+          <div class="settings-group">
+            <div class="settings-row"><div><div class="settings-row-label">Temperature Control</div><div class="settings-row-desc">Drives the Peltier through the H-bridge to hold the setpoint set on the CALIBRATE tab. Takes effect at once, like the ON box there, rather than waiting for APPLY. Never remembered: after a restart of the service the TEC is always off. It also switches itself off when the feedback temperature (or the PT100, whatever the source) leaves the safety limits below, or when there has been no reading for a minute; a FAULT then says why, and switching it on again clears it</div></div><div></div><div style="display:flex;align-items:center;gap:6px"><select class="settings-input" id="s-tec-enabled" style="width:150px;text-align:left" onchange="setTecEnabled(this.value === '1')"><option value="0">Disabled</option><option value="1">Enabled</option></select></div></div>
+            <div class="settings-row"><div><div class="settings-row-label">Status</div><div class="settings-row-desc">What the loop is doing, the feedback temperature, the setpoint and the drive (positive heats)</div></div><div></div><div style="display:flex;align-items:center;gap:8px"><div class="status-pill idle" id="tec-pill">—</div><span id="tec-live" style="font-family:'DM Mono',monospace;font-size:11px;color:var(--text-dim)"></span></div></div>
+          </div>
+
+          <div class="settings-section-title">FEEDBACK</div>
+          <div class="settings-group">
+            <div class="settings-row"><div><div class="settings-row-label">Feedback Source</div><div class="settings-row-desc">The temperature the loop regulates. <b>PT100</b> sits on the holder and reads once a second. <b>Crystal</b> is the crystal's own temperature solved from its two locked modes with the active calibration: no lag behind the crystal, but it needs both modes locked and a profile calibrated on this crystal, so it is no use while calibrating a new one. <b>PT100 + crystal</b> combines the two (see below): the PT100 decides where the temperature sits, the crystal steadies it from second to second. Without a fault-free reading the drive drops to zero</div></div><div></div><div style="display:flex;align-items:center;gap:6px"><select class="settings-input" id="s-tec-source" style="width:150px;text-align:left"><option value="pt100">PT100</option><option value="thermocouple">Thermocouple</option><option value="cold_junction">Cold junction</option><option value="crystal">Crystal</option><option value="fused">PT100 + crystal</option></select></div></div>
+          </div>
+
+          <div class="settings-section-title">PT100 + CRYSTAL</div>
+          <div class="settings-group">
+            <div class="settings-row"><div><div class="settings-row-label">How It Works</div><div class="settings-row-desc">The loop regulates on the crystal's temperature plus an offset: PT100 minus crystal, averaged over the Averaging Time. Over longer times than that the PT100 decides, so it ends up at the setpoint and stays the reference for every calibration point. Over shorter ones the loop follows the crystal, which reads ten times a second with next to no noise, runs ahead of the PT100, and feels what the PT100 never sees, such as heat lost to the air. Only the crystal's changes count, never its absolute reading, so the calibration being made does not decide the temperature. The crystal is dropped, and the loop runs on the PT100 alone with the PID gains above, while either mode is unlocked, when its reading jumps by more than 0.5 °C at once (a mode hop) or when it is more than 5 °C from the PT100. It is used again after 30 s of steady readings (three PT100 Delays, if longer), over which the offset is worked out afresh</div></div><div></div><div></div></div>
+            <div class="settings-row"><div><div class="settings-row-label">Crystal</div><div class="settings-row-desc">Whether the crystal is in use now, and the averaged PT100 − crystal</div></div><div></div><span id="tec-fusion-live" style="font-family:'DM Mono',monospace;font-size:11px;color:var(--text-dim);max-width:340px;text-align:right">—</span></div>
+            <div class="settings-row"><div><div class="settings-row-label">Averaging Time</div><div class="settings-row-desc">How long PT100 − crystal is averaged over. Longer lets the crystal steady slower wander too, but after a setpoint change the PT100 takes about this long to finish settling onto the setpoint. 30–7200 s</div></div><div></div><div style="display:flex;align-items:center;gap:6px"><input class="settings-input" type="number" id="s-tec-fuse-tau" value="900" step="60" min="30" max="7200"><span class="settings-unit">s</span></div></div>
+            <div class="settings-row"><div><div class="settings-row-label">PT100 Delay</div><div class="settings-row-desc">How far the PT100 runs behind the crystal (measured on the infi2439 holder: 12 s at 45 °C, 24 s at 65 °C). The PT100 is compared with the crystal delayed by this much, so during a ramp its lag is not taken for a change in the offset. 0–300 s</div></div><div></div><div style="display:flex;align-items:center;gap:6px"><input class="settings-input" type="number" id="s-tec-fuse-lag" value="20" step="1" min="0" max="300"><span class="settings-unit">s</span></div></div>
+            <div class="settings-row"><div><div class="settings-row-label">Kp</div><div class="settings-row-desc">Proportional gain while the crystal is in use. An autotune on PT100 + crystal sets these three and leaves the PID gains above, for the PT100 alone, as they are</div></div><div></div><div style="display:flex;align-items:center;gap:6px"><input class="settings-input" type="number" id="s-tec-fkp" value="20" step="any" min="0"><span class="settings-unit">%/°C</span></div></div>
+            <div class="settings-row"><div><div class="settings-row-label">Ki</div><div class="settings-row-desc">Integral gain while the crystal is in use</div></div><div></div><div style="display:flex;align-items:center;gap:6px"><input class="settings-input" type="number" id="s-tec-fki" value="0.2" step="any" min="0"><span class="settings-unit">%/(°C·s)</span></div></div>
+            <div class="settings-row"><div><div class="settings-row-label">Kd</div><div class="settings-row-desc">Derivative gain while the crystal is in use</div></div><div></div><div style="display:flex;align-items:center;gap:6px"><input class="settings-input" type="number" id="s-tec-fkd" value="0" step="any" min="0"><span class="settings-unit">%·s/°C</span></div></div>
+          </div>
+
+          <div class="settings-section-title">PWM</div>
+          <div class="settings-group">
+            <div class="settings-row"><div><div class="settings-row-label">PWM Frequency</div><div class="settings-row-desc">Switching frequency of the bridge (FPGA register PWM_freq). The holder smooths the temperature at any of these; without an output filter the TEC losses are the same at any frequency, and a lower one has fewer edges to radiate toward the crystal. 100 Hz – 100 kHz</div></div><div></div><div style="display:flex;align-items:center;gap:6px"><input class="settings-input" type="number" id="s-tec-freq" value="1000" step="100" min="100" max="100000"><span class="settings-unit">Hz</span></div></div>
+            <div class="settings-row"><div><div class="settings-row-label">Maximum Drive</div><div class="settings-row-desc">Cap on the duty cycle either way. The bench supply's current limit is the hardware limit; this one is for a gentler loop. 0–100 %</div></div><div></div><div style="display:flex;align-items:center;gap:6px"><input class="settings-input" type="number" id="s-tec-max" value="100" step="5" min="0" max="100"><span class="settings-unit">%</span></div></div>
+            <div class="settings-row"><div><div class="settings-row-label">Heating Direction</div><div class="settings-row-desc">Which PWM_dir heats. It depends on how the TEC is wired and which face touches the holder: find it once with a small drive, watching which way the PT100 goes. The wrong way round the loop runs away, until it trips on a safety limit</div></div><div></div><div style="display:flex;align-items:center;gap:6px"><select class="settings-input" id="s-tec-heat-dir" style="width:150px;text-align:left"><option value="0">PWM_dir = 0</option><option value="1">PWM_dir = 1</option></select></div></div>
+          </div>
+
+          <div class="settings-section-title">PID</div>
+          <div class="settings-group">
+            <div class="settings-row"><div><div class="settings-row-label">Kp</div><div class="settings-row-desc">Proportional gain: drive per degree of error. These three are the gains on a single sensor, and on the PT100 alone whenever PT100 + crystal has dropped the crystal</div></div><div></div><div style="display:flex;align-items:center;gap:6px"><input class="settings-input" type="number" id="s-tec-kp" value="20" step="any" min="0"><span class="settings-unit">%/°C</span></div></div>
+            <div class="settings-row"><div><div class="settings-row-label">Ki</div><div class="settings-row-desc">Integral gain: drive added per second per degree of error. It stops growing while the drive is at its cap, so a long ramp does not wind it up</div></div><div></div><div style="display:flex;align-items:center;gap:6px"><input class="settings-input" type="number" id="s-tec-ki" value="0.2" step="any" min="0"><span class="settings-unit">%/(°C·s)</span></div></div>
+            <div class="settings-row"><div><div class="settings-row-label">Kd</div><div class="settings-row-desc">Derivative gain: drive per °C/s that the temperature moves. It acts on the temperature, not the error, so a new setpoint does not kick the drive, and it is smoothed over 5 s</div></div><div></div><div style="display:flex;align-items:center;gap:6px"><input class="settings-input" type="number" id="s-tec-kd" value="0" step="any" min="0"><span class="settings-unit">%·s/°C</span></div></div>
+            <div class="settings-row"><div><div class="settings-row-label">Integral Band</div><div class="settings-row-desc">The integral only moves within this distance of the setpoint, with either set of gains, or where the temperature has stalled short of it. On the way to a new setpoint it then holds the drive that held the last one, instead of piling up the error of the whole approach and overshooting by it. 0 = it moves everywhere</div></div><div></div><div style="display:flex;align-items:center;gap:6px"><input class="settings-input" type="number" id="s-tec-iband" value="1" step="0.1" min="0" max="100"><span class="settings-unit">°C</span></div></div>
+          </div>
+
+          <div class="settings-section-title">SAFETY LIMITS</div>
+          <div class="settings-group">
+            <div class="settings-row"><div><div class="settings-row-label">Minimum Temperature</div><div class="settings-row-desc">Below this the loop switches itself off. The setpoint has to lie between the two limits</div></div><div></div><div style="display:flex;align-items:center;gap:6px"><input class="settings-input" type="number" id="s-tec-tmin" value="5" step="1"><span class="settings-unit">°C</span></div></div>
+            <div class="settings-row"><div><div class="settings-row-label">Maximum Temperature</div><div class="settings-row-desc">Above this the loop switches itself off, on the feedback temperature and, with another source, on the PT100 too. Keep it below the bimetal thermostat on the holder, which is what stops a runaway when the software cannot</div></div><div></div><div style="display:flex;align-items:center;gap:6px"><input class="settings-input" type="number" id="s-tec-tmax" value="75" step="1"><span class="settings-unit">°C</span></div></div>
+          </div>
+
+          <div class="settings-section-title">AUTOTUNE</div>
+          <div class="settings-group">
+            <div class="settings-row"><div><div class="settings-row-label">Relay Amplitude</div><div class="settings-row-desc">The autotune drives ± this much around the drive needed to hold the setpoint, switching each time the temperature crosses it, so the loop oscillates at its natural period. It measures the period and the swing, works out the gains, takes them and goes on holding the setpoint. Run it at a setpoint in the middle of the range you use, with the temperature already close to it; it takes four or more oscillations, often 20–60 min</div></div><div></div><div style="display:flex;align-items:center;gap:6px"><input class="settings-input" type="number" id="s-tec-at-amp" value="30" step="5" min="1" max="100"><span class="settings-unit">%</span></div></div>
+            <div class="settings-row"><div><div class="settings-row-label">Hysteresis</div><div class="settings-row-desc">How far past the setpoint the temperature has to go before the relay switches: comfortably above the sensor noise</div></div><div></div><div style="display:flex;align-items:center;gap:6px"><input class="settings-input" type="number" id="s-tec-at-hyst" value="0.1" step="0.05" min="0" max="5"><span class="settings-unit">°C</span></div></div>
+            <div class="settings-row"><div><div class="settings-row-label">Tuning Rule</div><div class="settings-row-desc">How the measured loop becomes gains. <b>Tyreus-Luyben</b> is gentle and robust, the usual choice for a thermal loop. <b>No overshoot</b> is slower still on the proportional gain. <b>Ziegler-Nichols</b> is fast and overshoots by about a quarter</div></div><div></div><div style="display:flex;align-items:center;gap:6px"><select class="settings-input" id="s-tec-at-rule" style="width:200px;text-align:left"><option value="tyreus_luyben">Tyreus-Luyben (gentle)</option><option value="no_overshoot">No overshoot</option><option value="ziegler_nichols">Ziegler-Nichols (fast)</option></select></div></div>
+            <div class="settings-row"><div><div class="settings-row-label">Autotune</div><div class="settings-row-desc">Progress of a test in progress, or the result of the last one</div></div><div></div><span id="tec-at-status" style="font-family:'DM Mono',monospace;font-size:11px;color:var(--text-dim);max-width:340px;text-align:right">—</span></div>
+          </div>
+          <button class="btn btn-blue" id="btn-tec-autotune" onclick="toggleTecAutotune()" style="margin-bottom:28px">START AUTOTUNE</button>
+        </div>
+
+        <!-- CALIBRATION SEQUENCE: TEC setpoints the Pitaya works through by itself
+             (domain/calibration_sequence.py). Saved with its own button, not APPLY;
+             started and watched from the CALIBRATE tab. -->
+        <div class="settings-panel" id="spanel-calseq">
+          <div class="settings-section-title">GENERATE</div>
+          <div class="settings-group">
+            <div class="settings-row"><div><div class="settings-row-label">Temperature Range</div><div class="settings-row-desc">Lowest and highest calibration point. Range matters more than the number of points, and the temperatures you deposit at should sit in the middle of it: points below room temperature are worth the most. Keep the lowest above the room's dew point, or water condenses on the crystal</div></div><div></div><div style="display:flex;align-items:center;gap:6px"><input class="settings-input" type="number" id="cs-gen-tmin" value="10" step="1" style="width:70px"><span class="settings-unit">to</span><input class="settings-input" type="number" id="cs-gen-tmax" value="50" step="1" style="width:70px"><span class="settings-unit">°C</span></div></div>
+            <div class="settings-row"><div><div class="settings-row-label">Step</div><div class="settings-row-desc">Spacing of the points. A cubic has four coefficients, so take at least 6–8 distinct temperatures</div></div><div></div><div style="display:flex;align-items:center;gap:6px"><input class="settings-input" type="number" id="cs-gen-step" value="5" step="0.5" min="0.5"><span class="settings-unit">°C</span></div></div>
+            <div class="settings-row"><div><div class="settings-row-label">Pattern</div><div class="settings-row-desc"><b>Interleaved</b>: every other temperature on the way up, the ones in between on the way down, so neighbouring points are approached from opposite sides and a drift or a heating/cooling difference shows up instead of tilting the curve. <b>Both ways</b> takes every temperature going up and again coming down: twice the points, and a direct hysteresis check. <b>Up only</b> is a plain staircase, the least robust</div></div><div></div><div style="display:flex;align-items:center;gap:6px"><select class="settings-input" id="cs-gen-pattern" style="width:150px;text-align:left"><option value="interleaved">Interleaved</option><option value="both">Both ways</option><option value="up">Up only</option></select></div></div>
+            <div class="settings-row"><div><div class="settings-row-label">Reference Temperature</div><div class="settings-row-desc">Where the reference points are taken, and where the TEC goes at the end when At The End says so</div></div><div></div><div style="display:flex;align-items:center;gap:6px"><input class="settings-input" type="number" id="cs-gen-ref" value="25" step="0.5"><span class="settings-unit">°C</span></div></div>
+            <div class="settings-row"><div><div class="settings-row-label">Break-in &amp; Anneal</div><div class="settings-row-desc">One soak before the points, at this temperature, for at least this long and until the mass mode drifts less than this. A freshly mounted crystal sheds mass at ~0.5 Hz/min, falling ~30× over three hours at room temperature, and points taken through that bake the drift into the curve; heat speeds that up. Holding a little above the highest point also makes an irreversible shift, like the −3.8 Hz mass-mode step at 60 °C on 2 Nov, happen before the points instead of among them. The drift is judged at this temperature, where the loss runs fastest. For a fresh crystal give Step Timeout room: it counts from the end of the minimum. 0 min and 0 Hz/min = none</div></div><div></div><div style="display:flex;align-items:center;gap:6px"><input class="settings-input" type="number" id="cs-gen-anneal-t" value="52" step="1" style="width:60px"><span class="settings-unit">°C,</span><input class="settings-input" type="number" id="cs-gen-anneal-min" value="60" step="5" min="0" style="width:60px"><span class="settings-unit">min,</span><input class="settings-input" type="number" id="cs-gen-breakin-drift" value="0.02" step="0.01" min="0" style="width:60px"><span class="settings-unit">Hz/min</span></div></div>
+            <div class="settings-row"><div><div class="settings-row-label">Reference Points</div><div class="settings-row-desc">A point at the reference straight after the break-in &amp; anneal, and one at the very end. Comparing them shows a drift or a step over the calibration</div></div><div></div><div style="display:flex;align-items:center;gap:6px"><select class="settings-input" id="cs-gen-refpoints" style="width:150px;text-align:left"><option value="1">Yes</option><option value="0">No</option></select></div></div>
+          </div>
+          <button class="btn btn-blue" onclick="generateCalSequence()" style="margin-bottom:28px" title="Replace the step list with one made from the settings above">GENERATE STEPS</button>
+
+          <div class="settings-section-title">STEPS</div>
+          <div class="settings-row-desc" style="margin-bottom:8px">Worked through from the top. A <b>point</b> step goes to the setpoint and waits for the settle detector (CALIBRATE tab) to take a point there. A <b>soak</b> holds the setpoint for its minutes and, if a drift limit is set, until the mass mode drifts less than that; it takes no point</div>
+          <div id="cs-steps" class="cs-steps"></div>
+          <div style="display:flex;gap:8px;align-items:center;margin-bottom:28px">
+            <button class="btn" onclick="addCsStep('point')">+ POINT</button>
+            <button class="btn" onclick="addCsStep('soak')">+ SOAK</button>
+            <button class="btn" onclick="clearCsSteps()">CLEAR</button>
+            <span id="cs-summary" style="font-family:'DM Mono',monospace;font-size:10px;color:var(--text-dim);margin-left:8px"></span>
+          </div>
+
+          <div class="settings-section-title">RUN</div>
+          <div class="settings-group">
+            <div class="settings-row"><div><div class="settings-row-label">Step Timeout</div><div class="settings-row-desc">How long a point step may take, and a soak beyond its minutes</div></div><div></div><div style="display:flex;align-items:center;gap:6px"><input class="settings-input" type="number" id="cs-timeout" value="90" step="5" min="5"><span class="settings-unit">min</span></div></div>
+            <div class="settings-row"><div><div class="settings-row-label">On Timeout</div><div class="settings-row-desc"><b>Skip</b> goes on to the next step without a point. <b>Take anyway</b> takes one from the last window, marked not settled. <b>Stop</b> ends the sequence with the TEC holding the setpoint</div></div><div></div><div style="display:flex;align-items:center;gap:6px"><select class="settings-input" id="cs-on-timeout" style="width:150px;text-align:left"><option value="skip">Skip</option><option value="take">Take anyway</option><option value="stop">Stop</option></select></div></div>
+            <div class="settings-row"><div><div class="settings-row-label">Point Tolerance</div><div class="settings-row-desc">How close the TEMP sensor has to be to the setpoint before a point may be taken, and where a point has to lie to count for its step. Until then the settle detector's automatic points are held back</div></div><div></div><div style="display:flex;align-items:center;gap:6px"><input class="settings-input" type="number" id="cs-tolerance" value="0.5" step="0.1" min="0.05"><span class="settings-unit">°C</span></div></div>
+            <div class="settings-row"><div><div class="settings-row-label">At The End</div><div class="settings-row-desc">What the TEC does once the last step is done</div></div><div></div><div style="display:flex;align-items:center;gap:6px"><select class="settings-input" id="cs-at-end" style="width:200px;text-align:left"><option value="off">Switch off</option><option value="reference">Go to the reference</option><option value="hold">Hold the last setpoint</option></select></div></div>
+          </div>
+          <div style="display:flex;gap:8px;align-items:center;margin-bottom:28px">
+            <button class="btn btn-blue" id="btn-cs-save" onclick="saveCalSequence()">SAVE SEQUENCE</button>
+            <button class="btn" onclick="loadCalSequence()" title="Throw away unsaved edits and reload the saved sequence">REVERT</button>
+            <span id="cs-dirty" style="font-family:'DM Mono',monospace;font-size:10px;color:var(--text-dim)"></span>
           </div>
         </div>
 
@@ -794,6 +944,13 @@ footer { height: 24px; background: var(--surface); border-top: 1px solid var(--b
                 <div class="notif-desc">The CALIBRATE tab took a point by itself (set the next temperature), or the crystal has settled and is waiting for one</div>
               </div>
               <label class="toggle-switch"><input type="checkbox" id="notif-calPoint" checked onchange="setNotifOption('calPoint',this.checked)"><span class="toggle-slider"></span></label>
+            </div>
+            <div class="notif-row">
+              <div class="notif-row-info">
+                <div class="notif-label">TEC Switched Off</div>
+                <div class="notif-desc">The temperature loop tripped on a safety limit, a lost reading or an error, and the Peltier is no longer driven</div>
+              </div>
+              <label class="toggle-switch"><input type="checkbox" id="notif-tecFault" checked onchange="setNotifOption('tecFault',this.checked)"><span class="toggle-slider"></span></label>
             </div>
           </div>
           <button class="btn" onclick="testNotifSound()" style="margin-right:8px">TEST SOUND</button>
@@ -939,7 +1096,8 @@ let _prevOpcConnected = null;
 let _prevWsConnected = false;
 let _isRunning = false;       // true while state === RUNNING (drops during a mid-run re-lock)
 let _runActive = false;       // true for the whole run, spanning RUNNING -> LOCKING -> RUNNING re-locks
-let _startRequested = false;  // set when the user presses START, consumed on the next RUNNING transition
+let _startRequested = false;  // set when the user presses START LOG, consumed on the next RUNNING transition
+let _measuring = false;       // the sensor is measuring (a lock and a reference), logged or not
 let _sweepRunning = false;
 let _runPoints = 0;  // measurement points received this run (drives the download button + row count)
 let _runStartFm = null;  // first mass-mode freq of the current run — virgin reference when Virgin Freq is 0
@@ -1715,6 +1873,7 @@ function onMeasurement(e) {
 
   applyTelemetry(e, ts);
   setCompensatedView(e.compensated !== false);
+  updateClockLive(e);
 
   // Virgin-frequency fallback: the first Fm of the *run*, so this is set here
   // and not in applyTelemetry — idle telemetry must not claim the reference.
@@ -1922,7 +2081,8 @@ function connect() {
       const ev = JSON.parse(msg.data);
       if (ev.type === 'MeasurementEvent')   onMeasurement(ev);
       if (ev.type === 'TelemetryEvent')     onTelemetry(ev);
-      if (ev.type === 'StateEvent')         onStateChange(ev.state);
+      if (ev.type === 'StateEvent')         onStateChange(ev.state, !!ev.measuring);
+      if (ev.type === 'ZeroEvent')          onZero(ev);
       if (ev.type === 'SweepPointEvent')    onSweepPoint(ev);
       if (ev.type === 'SweepCompleteEvent') onSweepComplete(ev);
       if (ev.type === 'CapAdjustEvent')     onCapAdjust(ev);
@@ -1930,6 +2090,7 @@ function connect() {
       if (ev.type === 'TemperatureEvent')   onTemperature(ev);
       if (ev.type === 'CalibrationPointsEvent') onCalibrationPoints(ev);
       if (ev.type === 'CalibrationStatusEvent') onCalibrationStatus(ev.status);
+      if (ev.type === 'TecStatusEvent')     onTecStatus(ev.status);
       if (ev.type === 'LockFailedEvent')    document.getElementById('modal-lock-failed').style.display = 'flex';
       if (ev.type === 'LockStatusEvent')    onLockStatus(ev);
       if (ev.type === 'StartFreqAutoUpdatedEvent') onStartFreqAutoUpdated(ev);
@@ -1957,7 +2118,7 @@ function showToast(msg, isError = false, isWarning = false) {
 // Preferences are per-browser (two operators on two laptops want their own), so
 // they persist to localStorage rather than to the instrument's settings.json.
 const NOTIF_STORE_KEY = 'qcm.notifications';
-const notifConfig = { enabled: false, sound: true, lockLost: true, sweepComplete: true, opcLost: true, wsLost: true, recFailed: true, storageReclaim: true, targetReached: true, calPoint: true };
+const notifConfig = { enabled: false, sound: true, lockLost: true, sweepComplete: true, opcLost: true, wsLost: true, recFailed: true, storageReclaim: true, targetReached: true, calPoint: true, tecFault: true };
 let _audioCtx = null;
 
 function setNotifOption(key, value) {
@@ -1984,7 +2145,8 @@ function loadNotifConfig() {
         lockLost: 'notif-lockLost', sweepComplete: 'notif-sweepComplete',
         targetReached: 'notif-targetReached', opcLost: 'notif-opcLost',
         wsLost: 'notif-wsLost', recFailed: 'notif-recFailed',
-        storageReclaim: 'notif-storageReclaim', calPoint: 'notif-calPoint' })) {
+        storageReclaim: 'notif-storageReclaim', calPoint: 'notif-calPoint',
+        tecFault: 'notif-tecFault' })) {
     const el = document.getElementById(id);
     if (el) el.checked = notifConfig[k];
   }
@@ -2055,6 +2217,11 @@ function playNotifSound(eventType) {
       playBeep(880, 0.2);
       playBeep(660, 0.35, 0.25, 0.24);
       break;
+    case 'tecFault':
+      // Low falling pair: the temperature loop has let go.
+      playBeep(440, 0.25);
+      playBeep(330, 0.4, 0.25, 0.3);
+      break;
   }
 }
 
@@ -2066,7 +2233,7 @@ function testNotifSound() {
 function sendNotif(title, body, eventType) {
   if (!notifConfig[eventType]) return;
   playNotifSound(eventType);
-  showToast(title, eventType === 'lockLost' || eventType === 'opcLost' || eventType === 'wsLost', false);
+  showToast(title, eventType === 'lockLost' || eventType === 'opcLost' || eventType === 'wsLost' || eventType === 'tecFault', false);
   if (notifConfig.enabled && 'Notification' in window && Notification.permission === 'granted') {
     try { new Notification(title, { body, silent: true }); } catch(e) {}
   }
@@ -2588,6 +2755,15 @@ async function loadInitialSettings() {
       document.getElementById('s-freq-track').value = s.freq_tracking.enabled ? '1' : '0';
       if (s.freq_tracking.interval != null) document.getElementById('s-freq-track-interval').value = s.freq_tracking.interval;
     }
+    if (s.lock_aim) {
+      if (s.lock_aim.mode) document.getElementById('s-lock-aim').value = s.lock_aim.mode;
+      if (s.lock_aim.temperature != null) document.getElementById('s-lock-aim-temp').value = s.lock_aim.temperature;
+    }
+    if (s.clock_correction) {
+      const cc = s.clock_correction;
+      if (cc.tempco_ppm != null) { document.getElementById('s-clock-tempco').value = cc.tempco_ppm; _clockTempco = cc.tempco_ppm; }
+      if (cc.lag_s != null) { document.getElementById('s-clock-lag').value = +(cc.lag_s / 60).toFixed(2); _clockLag = cc.lag_s; }
+    }
   } catch(e) { /* backend not yet reachable */ }
 
   let crystalLoaded = false;
@@ -2636,6 +2812,7 @@ async function loadInitialSettings() {
     document.getElementById('target-pill').style.display = _targetReached ? 'flex' : 'none';
   } catch(e) { /* older backend without the target endpoint */ }
   updateTargetStatus();
+  await loadTecSettings();
   snapshotBaseline();   // everything just loaded is the clean baseline
 }
 loadInitialSettings();
@@ -2715,6 +2892,8 @@ function setCapAmp(id, amp, gain) {
   el.style.color = `hsl(${(120 * (1 - a)).toFixed(0)}, 70%, 55%)`;
 }
 
+// START LOG / STOP LOG open and close the run log; the sensor measures either
+// way. A log can start once there is something to log (a lock and a reference).
 function updateStartStopBtns(state) {
   const ids = ['btn-start-stop', 'btn-start-stop-2', 'btn-start-stop-3'];
   ids.forEach(id => {
@@ -2722,17 +2901,16 @@ function updateStartStopBtns(state) {
     if (!btn) return;
     if (state === 'RUNNING') {
       btn.className = 'btn btn-red';
-      btn.innerHTML = '<svg viewBox="0 0 12 12"><rect x="2.5" y="2.5" width="7" height="7"/></svg>STOP';
-      btn.disabled = false;
-    } else if (state === 'IDLE') {
-      btn.className = 'btn btn-green';
-      btn.innerHTML = '<svg viewBox="0 0 12 12"><polygon points="3,2 10,6 3,10"/></svg>START';
+      btn.innerHTML = '<svg viewBox="0 0 12 12"><rect x="2.5" y="2.5" width="7" height="7"/></svg>STOP LOG';
       btn.disabled = false;
     } else {
-      btn.className = 'btn';
-      btn.innerHTML = '<svg viewBox="0 0 12 12"><polygon points="3,2 10,6 3,10"/></svg>START';
-      btn.disabled = true;
+      btn.className = state === 'IDLE' && _measuring ? 'btn btn-green' : 'btn';
+      btn.innerHTML = '<svg viewBox="0 0 12 12"><circle cx="6" cy="6" r="3.5"/></svg>START LOG';
+      btn.disabled = !(state === 'IDLE' && _measuring);
     }
+  });
+  document.querySelectorAll('.btn-zero').forEach(btn => {
+    btn.disabled = !(_measuring && (state === 'IDLE' || state === 'RUNNING'));
   });
 }
 
@@ -2766,17 +2944,21 @@ function setLockBtnState(locking) {
   });
 }
 
-function onStateChange(state) {
+function onStateChange(state, measuring) {
+  _measuring = !!measuring;
+  // RUNNING is a run being logged; IDLE while measuring is the sensor running
+  // without a log.
+  const label = state === 'RUNNING' ? 'LOGGING' : (state === 'IDLE' && _measuring ? 'MEASURING' : state);
   const pill = document.getElementById('status-pill');
-  pill.className = 'status-pill ' + state.toLowerCase();
-  document.getElementById('state-label').textContent = state.toUpperCase();
+  pill.className = 'status-pill ' + (label === 'MEASURING' ? 'sweeping' : state.toLowerCase());
+  document.getElementById('state-label').textContent = label;
 
   const wasRunning = _isRunning;
   _isRunning = state === 'RUNNING';
 
-  // Nothing is being compensated outside a run, so a hold marker left over from
-  // the last sample of the previous run would be claiming something untrue.
-  if (!_isRunning) setTempHeld(false);
+  // Nothing is being compensated without a measurement, so a hold marker left
+  // over from the last sample would be claiming something untrue.
+  if (!_measuring) setTempHeld(false);
 
   // Sweep button: ABORT while sweeping, disabled while running, RUN SWEEP otherwise
   const sweepBtn = document.getElementById('btn-sweep-toggle');
@@ -2828,27 +3010,25 @@ function toggleStartStop() {
   const btn = document.getElementById('btn-start-stop');
   if (btn && btn.classList.contains('btn-red')) {
     sendCommand('stop');
+  } else if (!_measuring) {
+    showToast('Nothing is being measured yet: GET LOCK first', true);
   } else {
-    // An uncompensated run needs the mass mode alone.
-    const needTemp = _measMode !== 'uncompensated';
-    if (!lockMass || (needTemp && !lockTemp)) {
-      const status = (locked, parked) => locked ? '✓ LOCKED' : (parked ? '✗ PARKED' : '✗ UNLOCKED');
-      document.getElementById('confirm-mass-status').textContent = status(lockMass, _parked.mass);
-      document.getElementById('confirm-temp-status').textContent = needTemp
-        ? status(lockTemp, _parked.temp) : '— not used (uncompensated)';
-      document.getElementById('confirm-mass-status').style.color = lockMass ? 'var(--green)' : 'var(--red)';
-      document.getElementById('confirm-temp-status').style.color = !needTemp ? 'var(--text-dim)'
-        : (lockTemp ? 'var(--green)' : 'var(--red)');
-      document.getElementById('modal-confirm-start').style.display = 'flex';
-    } else {
-      sendCommand('start');
-    }
+    sendCommand('start');
   }
 }
 
-function doStartAnyway() {
-  document.getElementById('modal-confirm-start').style.display = 'none';
-  sendCommand('start');
+// A new thickness reference, from ZERO, the PLC's start or the worker after a
+// lock (before any ZERO). The thickness charts start again with it, so the
+// drop to 0 does not squash their scale.
+function onZero(ev) {
+  for (const c of [charts.mainComp, charts.mainUncomp, charts.mainRate, charts.mainRateUncomp, charts.compA, charts.tempA]) {
+    if (!c) continue;
+    c.data.labels = []; c.data.datasets.forEach(d => d.data = []); c.update('none');
+  }
+  _runStartFm = null;
+  const how = ev.compensated ? 'compensated' : 'UNCOMPENSATED: the temp mode was not locked';
+  if (ev.auto) showToast(`Thickness reference taken after the lock (${how}) — ZERO sets your own`, false, !ev.compensated);
+  else showToast(`Thickness zeroed at T start ${Number(ev.t_start).toFixed(2)} °C (${ev.t_source}), ${how}`, false, !ev.compensated);
 }
 
 // Throttled heartbeat: keeps the dots and the quality tiles honest while the
@@ -2891,6 +3071,7 @@ function onStartFreqAutoUpdated(ev) {
     _baseline['s-crystal-freq-mass'] = mass.value;
     _baseline['s-crystal-freq-temp'] = temp.value;
     updateDirtyState();
+    updateAimHint();
     return;
   }
   // End of a run: the operator is meant to notice and decide whether to save
@@ -2900,7 +3081,8 @@ function onStartFreqAutoUpdated(ev) {
   mass.value = ev.freq_mass;
   temp.value = ev.freq_temp;
   updateDirtyState();
-  showToast(`Start freqs updated: ${(ev.freq_mass/1e6).toFixed(3)} / ${(ev.freq_temp/1e6).toFixed(3)} MHz`);
+  updateAimHint();
+  showToast(`Start freqs updated:${(ev.freq_mass/1e6).toFixed(3)} / ${(ev.freq_temp/1e6).toFixed(3)} MHz`);
 }
 
 function onOpcStatus(ev) {
@@ -2939,20 +3121,27 @@ async function setOpcEnabled(enabled) {
 async function sendCommand(action) {
   let url;
   if (action === 'start') {
+    _startRequested = true;  // marks this RUNNING transition as a fresh log (resets the row count)
+    url = `${API_URL}/measurement/start`;
+  } else if (action === 'zero') {
+    if (!lockMass) { showToast('ZERO needs the mass mode locked', true); return; }
+    if (_isRunning && !confirm('Zero the thickness in the middle of this log?\n\nThe log carries on, with a ZERO row where the reference changed.')) return;
     const t = parseFloat(document.getElementById('s-amb-temp').value);
     if (isNaN(t)) { showToast('Set a valid ambient temperature in Settings.', true); return; }
-    // T start from a thermometer is read by the Pitaya as the run starts; warn
-    // here when it is going to fall back to the typed-in value.
+    // T start from a thermometer is read by the Pitaya as the reference is
+    // taken; warn here when it is going to fall back to the typed-in value.
     const src = fieldValue('s-tstart-source') || 'manual';
     if (src !== 'manual' && tStartReading(src) == null) {
       const opt = document.querySelector(`#s-tstart-source option[value="${src}"]`);
-      showToast(`${opt ? opt.textContent : src} has no current reading — the run starts from the typed-in ${t} °C`, false, true);
+      showToast(`${opt ? opt.textContent : src} has no current reading — T start is the typed-in ${t} °C`, false, true);
     }
-    _startRequested = true;  // marks this RUNNING transition as a fresh run (clears the buffer)
-    // Film material parameters from the Measurement settings (per-run values)
+    if (_measMode !== 'uncompensated' && !lockTemp) {
+      showToast('The temp mode is not locked: this reference is uncompensated until the next ZERO', false, true);
+    }
+    // Film material parameters from the Measurement settings
     const dens = parseFloat(fieldValue('s-mat-dens'));
     const zr   = parseFloat(fieldValue('s-mat-zratio'));
-    url = `${API_URL}/measurement/start?ambient_temp=${t}&t_start_source=${encodeURIComponent(src)}`
+    url = `${API_URL}/measurement/zero?ambient_temp=${t}&t_start_source=${encodeURIComponent(src)}`
         + (isNaN(dens) ? '' : `&mat_dens=${dens}`)
         + (isNaN(zr)   ? '' : `&z_ratio=${zr}`);
   } else if (action === 'stop') {
@@ -2964,7 +3153,12 @@ async function sendCommand(action) {
     setLockBtnState(true);
     try {
       await fetch(`${API_URL}/settings/lock_frequencies?mass=${mass}&temp=${temp}`, { method: 'POST' });
-      await fetch(`${API_URL}/measurement/get_lock`, { method: 'POST' });
+      const r = await fetch(`${API_URL}/measurement/get_lock`, { method: 'POST' });
+      const d = await r.json().catch(() => ({}));
+      // With the ratio aim the Pitaya picks the temperature start itself.
+      if (d.temp != null && Math.abs(d.temp - temp) >= 1) {
+        showToast(`Temp mode aimed at ${(d.temp / 1e6).toFixed(4)} MHz from the mass lock freq`);
+      }
     } catch(e) { console.error('Lock command failed:', e); setLockBtnState(false); }
     return;
   }
@@ -3110,6 +3304,36 @@ async function applyLockSettings() {
   const interval = parseFloat(document.getElementById('s-freq-track-interval').value);
   if (isNaN(interval) || interval < 1) throw new Error('Tracking interval must be at least 1 s');
   await postOrThrow(`${API_URL}/settings/freq_tracking?enabled=${track}&interval=${interval}`);
+  const aim  = fieldValue('s-lock-aim') || 'ratio';
+  const aimT = parseFloat(fieldValue('s-lock-aim-temp'));
+  if (!(aimT >= -20 && aimT <= 120)) throw new Error('Aim temperature must be −20 to 120 °C');
+  await postOrThrow(`${API_URL}/settings/lock_aim?mode=${aim}&temperature=${aimT}`);
+}
+
+// Board clock (Settings → System). Only sent when it changed: a new coefficient
+// steps the compensated output and re-corrects every calibration point.
+var _clockTempco = 0, _clockLag = 480;   // as the Pitaya holds them (var: read by the settings load)
+async function applyClockCorrection() {
+  if (!isDirty(['s-clock-tempco', 's-clock-lag'])) return;
+  const k = parseFloat(fieldValue('s-clock-tempco'));
+  const lagMin = parseFloat(fieldValue('s-clock-lag'));
+  if (!(k >= -5 && k <= 5)) throw new Error('Clock tempco must be −5 to 5 ppm/°C');
+  if (!(lagMin >= 0 && lagMin <= 60)) throw new Error('Clock lag must be 0 to 60 min');
+  await postOrThrow(`${API_URL}/settings/clock_correction?tempco_ppm=${k}&lag_s=${lagMin * 60}`);
+  _clockTempco = k;
+  _clockLag = lagMin * 60;
+  if (_isRunning) _applyNote = 'Settings applied; the clock correction steps the compensated output — ZERO to rebase';
+}
+
+function updateClockLive(e) {
+  const el = document.getElementById('clock-live');
+  if (!el) return;
+  if (e.board_c == null) { el.textContent = '—'; return; }
+  const ppm = e.clock_ppm || 0;
+  const hz = ppm * 1e-6 * (e.freq_mass_mode || 0);
+  const sign = v => (v >= 0 ? '+' : '');
+  el.textContent = `die ${e.board_c.toFixed(2)} °C lagged · `
+    + (_clockTempco ? `${sign(ppm)}${ppm.toFixed(3)} ppm = ${sign(hz)}${hz.toFixed(2)} Hz on fM` : 'correction off');
 }
 
 async function applyStorageReclaim() {
@@ -3159,13 +3383,462 @@ async function applyAllSettings() {
   await applyAcquisition();
   await applyOutputMode();
   await applyLockSettings();
+  await applyClockCorrection();
   await applyStorageReclaim();
   // Only when the crystal form itself changed. APPLY used to push it every time,
   // so editing an unrelated field re-saved the profile from whatever happened to
   // be in the form — and re-activated it — quietly overwriting a stored
   // calibration with a stale one.
   if (isDirty(CRYSTAL_SETTING_IDS)) await applyCrystal();
+  if (isDirty(TEC_SETTING_IDS)) await applyTecSettings();
 }
+
+// ---- TEC temperature loop (Settings → TEC Control, CALIBRATE tab) ----
+// The loop runs on the Pitaya (workers/tec_worker.py). Its settings go through
+// APPLY like the rest of the panel; ON/OFF, the setpoint and the autotune act at once.
+const TEC_FIELDS = {   // settings field -> /tec/settings parameter
+  's-tec-source': 'source', 's-tec-freq': 'pwm_freq', 's-tec-max': 'max_output',
+  's-tec-heat-dir': 'heat_dir', 's-tec-kp': 'kp', 's-tec-ki': 'ki', 's-tec-kd': 'kd',
+  's-tec-tmin': 't_min', 's-tec-tmax': 't_max',
+  's-tec-at-amp': 'at_amplitude', 's-tec-at-hyst': 'at_hysteresis', 's-tec-at-rule': 'at_rule',
+  's-tec-iband': 'i_band', 's-tec-fkp': 'fused_kp', 's-tec-fki': 'fused_ki', 's-tec-fkd': 'fused_kd',
+  's-tec-fuse-tau': 'fuse_tau_s', 's-tec-fuse-lag': 'fuse_lag_s',
+};
+const TEC_SETTING_IDS = Object.keys(TEC_FIELDS);
+const TEC_MODES = {   // mode -> [pill text, pill class]
+  off:      ['OFF',      'idle'],
+  pid:      ['HOLDING',  'running'],
+  autotune: ['AUTOTUNE', 'sweeping'],
+  fault:    ['FAULT',    'error'],
+};
+let _tec = null;               // latest TecStatusEvent status
+let _tecSetpointShown = null;  // what the SETPOINT box was last filled with
+
+async function loadTecSettings() {
+  try {
+    const r = await fetch(`${API_URL}/tec`);
+    if (!r.ok) return;   // a backend without TEC control
+    const d = await r.json();
+    for (const [id, key] of Object.entries(TEC_FIELDS)) {
+      const el = document.getElementById(id);
+      if (el && d.settings[key] != null) el.value = d.settings[key];
+    }
+    onTecStatus(d.status);
+  } catch(e) { /* backend not reachable yet */ }
+}
+
+async function applyTecSettings() {
+  const params = [];
+  for (const [id, key] of Object.entries(TEC_FIELDS)) {
+    const v = fieldValue(id);
+    const el = document.getElementById(id);
+    if (el.tagName === 'INPUT' && isNaN(parseFloat(v))) {
+      const label = el.closest('.settings-row').querySelector('.settings-row-label');
+      throw new Error(`TEC ${label ? label.textContent : key} must be a number`);
+    }
+    params.push(`${key}=${encodeURIComponent(v)}`);
+  }
+  await postOrThrow(`${API_URL}/tec/settings?${params.join('&')}`);
+}
+
+async function setTecEnabled(on) {
+  try {
+    await postOrThrow(`${API_URL}/tec/enabled?enabled=${on}`);
+    showToast(on ? `TEC on — holding ${_tec ? _tec.setpoint : '?'} °C` : 'TEC off');
+  } catch(e) {
+    showToast(`TEC not switched ${on ? 'on' : 'off'} — ${e.message || e}`, true);
+    if (_tec) onTecStatus(_tec);   // put the switches back
+  }
+}
+
+async function setTecSetpoint() {
+  const v = parseFloat(fieldValue('cal-tec-setpoint'));
+  if (isNaN(v)) { showToast('Enter a setpoint temperature', true); return; }
+  try {
+    await postOrThrow(`${API_URL}/tec/settings?setpoint=${v}`);
+    _tecSetpointShown = String(v);
+    showToast(`TEC setpoint ${v} °C` + (_tec && _tec.enabled ? '' : ' — switch the TEC on to go there'));
+  } catch(e) { showToast(`Setpoint not set — ${e.message || e}`, true); }
+}
+
+async function toggleTecAutotune() {
+  if (_tec && _tec.mode === 'autotune') {
+    try { await postOrThrow(`${API_URL}/tec/autotune/abort`); }
+    catch(e) { showToast(`Autotune not stopped — ${e.message || e}`, true); }
+    return;
+  }
+  if (isDirty(TEC_SETTING_IDS)) { showToast('APPLY the TEC changes first: the autotune runs on the applied settings', true); return; }
+  const sp = _tec ? _tec.setpoint : '?';
+  if (!confirm(`Autotune the TEC loop at ${sp} °C?\n\n`
+             + `The Peltier is switched on and driven ±${fieldValue('s-tec-at-amp')} % each time the temperature `
+             + `crosses the setpoint, until the oscillation repeats itself, typically 20–60 min. The gains it `
+             + `finds replace the current ${_tec && _tec.source === 'fused' ? 'PT100 + crystal ones (the PID gains for the PT100 alone stay)' : 'ones'}, `
+             + `and the loop then goes on holding ${sp} °C.\n\n`
+             + `Change the setpoint on the CALIBRATE tab first if this is not mid-range.`)) return;
+  try { await postOrThrow(`${API_URL}/tec/autotune/start`); }
+  catch(e) { showToast(`Autotune not started — ${e.message || e}`, true); }
+}
+
+function onTecStatus(st) {
+  if (!st) return;
+  const prev = _tec;
+  _tec = st;
+  let [text, cls] = TEC_MODES[st.mode] || [String(st.mode).toUpperCase(), 'idle'];
+  if (!st.available) { text = 'N/A'; cls = 'idle'; }
+  for (const id of ['tec-pill', 'cal-tec-pill']) {
+    const pill = document.getElementById(id);
+    pill.className = 'status-pill ' + cls;
+    pill.textContent = text;
+  }
+
+  let live;
+  if (!st.available) live = st.reason || 'not available';
+  else {
+    const t = st.temperature == null ? '—' : `${st.temperature.toFixed(2)} °C`;
+    // PT100 + crystal without the crystal is running on the PT100 alone: say so.
+    const name = st.fusion && !st.fusion.in_use ? `${st.source_name} (PT100 alone)` : st.source_name;
+    live = `${name} ${t} · set ${st.setpoint.toFixed(2)} °C · drive ${st.output >= 0 ? '+' : ''}${st.output.toFixed(1)} %`;
+    const note = st.fault || st.message || (st.temperature == null ? st.reading_problem : null) || st.save_error;
+    if (note) live += ` · ${note}`;
+  }
+  for (const id of ['tec-live', 'cal-tec-live']) {
+    const el = document.getElementById(id);
+    el.textContent = live;
+    el.style.color = st.mode === 'fault' ? 'var(--red)' : '';
+  }
+  const fu = st.fusion;
+  let fl = 'only with PT100 + crystal as the feedback source';
+  if (fu && fu.in_use) {
+    fl = `in use · PT100 − crystal ${fu.offset >= 0 ? '+' : ''}${fu.offset.toFixed(3)} °C`;
+  } else if (fu) {
+    fl = `not in use: ${fu.dropped} — on the PT100 alone`;
+  }
+  setText('tec-fusion-live', fl);
+  document.getElementById('tec-fusion-live').style.color = fu && !fu.in_use ? 'var(--orange)' : '';
+
+  const on = document.getElementById('cal-tec-on');
+  on.checked = !!st.enabled;
+  on.disabled = !st.available;
+  const sel = document.getElementById('s-tec-enabled');
+  sel.value = st.enabled ? '1' : '0';
+  sel.disabled = !st.available;
+
+  // The SETPOINT box follows the Pitaya unless it is being edited.
+  const spIn = document.getElementById('cal-tec-setpoint');
+  if (spIn !== document.activeElement && (spIn.value === '' || spIn.value === _tecSetpointShown)) {
+    spIn.value = st.setpoint;
+    _tecSetpointShown = spIn.value;
+  }
+
+  const btn = document.getElementById('btn-tec-autotune');
+  btn.textContent = st.mode === 'autotune' ? 'ABORT AUTOTUNE' : 'START AUTOTUNE';
+  btn.className = 'btn ' + (st.mode === 'autotune' ? 'btn-orange' : 'btn-blue');
+  btn.disabled = !st.available;
+  let at = '—';
+  const a = st.autotune, lt = st.last_tune;
+  if (a) {
+    at = `${a.phase}, cycle ${a.cycles}/${a.needed}+ · ${Math.round(a.elapsed / 60)} min`
+       + (a.period != null ? ` · period ${Math.round(a.period)} s` : '')
+       + (a.amplitude != null ? ` · swing ±${a.amplitude.toFixed(2)} °C` : '')
+       + ` · bias ${a.bias >= 0 ? '+' : ''}${a.bias.toFixed(1)} %`;
+  } else if (lt) {
+    at = `last${lt.source === 'fused' ? ' (PT100 + crystal)' : ''}: Ku ${lt.ku.toPrecision(3)} %/°C, `
+       + `Tu ${Math.round(lt.tu)} s → Kp ${lt.kp.toPrecision(3)}, Ki ${lt.ki.toPrecision(3)}, Kd ${lt.kd.toPrecision(3)}`;
+  }
+  setText('tec-at-status', at);
+
+  // A finished autotune has written new gains: show them, unless the form is mid-edit.
+  if (prev && prev.mode === 'autotune' && st.mode === 'pid') {
+    const msg = st.message || 'Autotune finished';
+    showToast(msg, msg.indexOf('autotune stopped') === 0);
+    if (!isDirty(TEC_SETTING_IDS)) {
+      loadTecSettings().then(() => {
+        for (const id of TEC_SETTING_IDS) _baseline[id] = fieldValue(id);
+        updateDirtyState();
+      });
+    }
+  }
+  if (st.mode === 'fault' && !(prev && prev.mode === 'fault')) {
+    sendNotif('QCM — TEC switched off', st.fault || 'temperature loop fault', 'tecFault');
+  }
+}
+
+// ---- Calibration sequence (Settings → Calibration Sequence, CALIBRATE tab) ----
+// The Pitaya works through the steps (domain/calibration_sequence.py); this
+// panel edits them and saves them with its own button. Progress arrives once a
+// second inside the CalibrationStatusEvent.
+const CS_GEN_FIELDS = {   // generator input -> key kept in config.generator
+  'cs-gen-tmin': 'tmin', 'cs-gen-tmax': 'tmax', 'cs-gen-step': 'step', 'cs-gen-pattern': 'pattern',
+  'cs-gen-ref': 'reference', 'cs-gen-anneal-t': 'anneal_t', 'cs-gen-anneal-min': 'anneal_min',
+  'cs-gen-breakin-drift': 'breakin_drift', 'cs-gen-refpoints': 'refpoints',
+};
+const SEQ_STATES = {   // state -> [pill text, pill class]
+  idle:    ['IDLE',    'idle'],
+  running: ['RUNNING', 'running'],
+  done:    ['DONE',    'sweeping'],
+  stopped: ['STOPPED', 'locking'],
+  failed:  ['FAILED',  'error'],
+};
+let _csSteps = [];       // the step list being edited
+let _csSavedJson = '';   // what the Pitaya holds, to tell unsaved edits
+let _seq = null;         // latest sequence status
+
+function fmtMmss(s) {
+  s = Math.max(0, Math.round(s));
+  const h = Math.floor(s / 3600), m = Math.floor(s / 60) % 60, sec = s % 60;
+  return h ? `${h}:${String(m).padStart(2, '0')}:${String(sec).padStart(2, '0')}` : `${m}:${String(sec).padStart(2, '0')}`;
+}
+
+function csConfig() {
+  const generator = {};
+  for (const [id, key] of Object.entries(CS_GEN_FIELDS)) generator[key] = fieldValue(id);
+  return {
+    steps: _csSteps.map(s => s.kind === 'point'
+      ? { kind: 'point', setpoint: parseFloat(s.setpoint) }
+      : { kind: 'soak', setpoint: parseFloat(s.setpoint), minutes: parseFloat(s.minutes) || 0,
+          max_fm_drift: parseFloat(s.max_fm_drift) || 0 }),
+    timeout_min: parseFloat(fieldValue('cs-timeout')),
+    on_timeout: fieldValue('cs-on-timeout'),
+    tolerance: parseFloat(fieldValue('cs-tolerance')),
+    at_end: fieldValue('cs-at-end'),
+    reference: parseFloat(fieldValue('cs-gen-ref')),
+    generator,
+  };
+}
+
+function csUpdateDirty() {
+  const dirty = JSON.stringify(csConfig()) !== _csSavedJson;
+  setText('cs-dirty', dirty ? 'Unsaved changes' : 'Saved on the Pitaya');
+  document.getElementById('cs-dirty').style.color = dirty ? 'var(--orange)' : '';
+  return dirty;
+}
+
+async function loadCalSequence() {
+  try {
+    const r = await fetch(`${API_URL}/calibration/sequence`);
+    if (!r.ok) return;
+    const d = await r.json();
+    const c = d.config;
+    for (const [id, key] of Object.entries(CS_GEN_FIELDS)) {
+      if (c.generator && c.generator[key] != null && c.generator[key] !== '') document.getElementById(id).value = c.generator[key];
+    }
+    document.getElementById('cs-timeout').value = c.timeout_min;
+    document.getElementById('cs-on-timeout').value = c.on_timeout;
+    document.getElementById('cs-tolerance').value = c.tolerance;
+    document.getElementById('cs-at-end').value = c.at_end;
+    if (!(c.generator && c.generator.reference != null)) document.getElementById('cs-gen-ref').value = c.reference;
+    _csSteps = c.steps.map(s => Object.assign({ minutes: 0, max_fm_drift: 0 }, s));
+    renderCsSteps();
+    _csSavedJson = JSON.stringify(csConfig());
+    csUpdateDirty();
+    onSequenceStatus(d.status);
+  } catch(e) { /* backend not reachable yet */ }
+}
+loadCalSequence();
+
+async function saveCalSequence() {
+  try {
+    const r = await fetch(`${API_URL}/calibration/sequence`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(csConfig()) });
+    const d = await r.json().catch(() => ({}));
+    if (!r.ok) { showToast(`Sequence not saved — ${d.detail || r.status}`, true); return; }
+    _csSavedJson = JSON.stringify(csConfig());
+    csUpdateDirty();
+    showToast(`Sequence saved: ${_csSteps.length} steps`);
+  } catch(e) { showToast('Sequence not saved: no connection', true); }
+}
+
+function csTemperatures(tmin, tmax, step) {
+  const temps = [];
+  for (let t = tmin; t <= tmax + 1e-9; t += step) temps.push(Math.round(t * 100) / 100);
+  if (temps[temps.length - 1] < tmax - 0.01) temps.push(tmax);
+  return temps;
+}
+
+function generateCalSequence() {
+  const g = {};
+  for (const [id, key] of Object.entries(CS_GEN_FIELDS)) g[key] = fieldValue(id);
+  const n = k => parseFloat(g[k]);
+  for (const k of ['tmin', 'tmax', 'step', 'reference', 'breakin_drift', 'anneal_t', 'anneal_min']) {
+    if (isNaN(n(k))) { showToast(`Generator: ${k.replace('_', ' ')} must be a number`, true); return; }
+  }
+  if (!(n('tmax') > n('tmin')) || !(n('step') > 0)) { showToast('Generator: need lowest < highest and a step above 0', true); return; }
+  const temps = csTemperatures(n('tmin'), n('tmax'), n('step'));
+  let points;
+  if (g.pattern === 'interleaved') {
+    const up = temps.filter((_, i) => i % 2 === 0);
+    const down = temps.filter((_, i) => i % 2 === 1).reverse();
+    points = up.concat(down);
+  } else if (g.pattern === 'both') {
+    points = temps.concat(temps.slice(0, -1).reverse());
+  } else {
+    points = temps;
+  }
+  const ref = n('reference'), refPoints = g.refpoints === '1';
+  const steps = [];
+  // Break-in and anneal in one hot soak: heat speeds up the break-in.
+  if (n('anneal_min') > 0 || n('breakin_drift') > 0)
+    steps.push({ kind: 'soak', setpoint: n('anneal_t'), minutes: n('anneal_min'), max_fm_drift: n('breakin_drift') });
+  if (refPoints) steps.push({ kind: 'point', setpoint: ref });
+  for (const t of points) steps.push({ kind: 'point', setpoint: t });
+  if (refPoints) steps.push({ kind: 'point', setpoint: ref });
+  // A point straight after a point at the same temperature would only repeat it.
+  _csSteps = steps.filter((s, i) => !(i && s.kind === 'point' && steps[i - 1].kind === 'point'
+                                          && steps[i - 1].setpoint === s.setpoint))
+                  .map(s => Object.assign({ minutes: 0, max_fm_drift: 0 }, s));
+  renderCsSteps();
+  csUpdateDirty();
+  showToast(`Generated ${_csSteps.length} steps — SAVE SEQUENCE to keep them`);
+}
+
+function addCsStep(kind) {
+  const last = _csSteps.length ? _csSteps[_csSteps.length - 1].setpoint : parseFloat(fieldValue('cs-gen-ref')) || 25;
+  _csSteps.push({ kind, setpoint: last, minutes: kind === 'soak' ? 30 : 0, max_fm_drift: 0 });
+  renderCsSteps();
+  csUpdateDirty();
+}
+
+function clearCsSteps() {
+  if (_csSteps.length && !confirm('Remove all steps from the list?')) return;
+  _csSteps = [];
+  renderCsSteps();
+  csUpdateDirty();
+}
+
+function csEdit(i, key, value) {
+  _csSteps[i][key] = value;
+  if (key === 'kind') renderCsSteps(); else csSummary();
+  csUpdateDirty();
+}
+
+function csMove(i, d) {
+  const j = i + d;
+  if (j < 0 || j >= _csSteps.length) return;
+  const t = _csSteps[i]; _csSteps[i] = _csSteps[j]; _csSteps[j] = t;
+  renderCsSteps();
+  csUpdateDirty();
+}
+
+function csRemove(i) {
+  _csSteps.splice(i, 1);
+  renderCsSteps();
+  csUpdateDirty();
+}
+
+function renderCsSteps() {
+  const box = document.getElementById('cs-steps');
+  if (!_csSteps.length) {
+    box.innerHTML = '<div class="cs-empty">No steps: GENERATE them above, or add them below</div>';
+    csSummary();
+    return;
+  }
+  box.innerHTML = _csSteps.map((s, i) => {
+    const soak = s.kind === 'soak';
+    const extra = soak
+      ? `<input class="settings-input" type="number" step="5" min="0" value="${s.minutes}" onchange="csEdit(${i},'minutes',this.value)" title="Hold at least this long"><span>min, fM drift ≤</span>`
+        + `<input class="settings-input" type="number" step="0.01" min="0" value="${s.max_fm_drift}" onchange="csEdit(${i},'max_fm_drift',this.value)" title="0 = no drift condition"><span>Hz/min</span>`
+      : '<span>takes a point</span>';
+    return `<div class="cs-row" data-i="${i}"><span class="cs-num">${i + 1}</span>`
+      + `<select class="settings-input" onchange="csEdit(${i},'kind',this.value)"><option value="point"${soak ? '' : ' selected'}>point</option><option value="soak"${soak ? ' selected' : ''}>soak</option></select>`
+      + `<input class="settings-input" type="number" step="0.5" value="${s.setpoint}" onchange="csEdit(${i},'setpoint',this.value)"><span>°C</span>`
+      + `<span class="cs-note" style="display:flex;align-items:center;gap:6px">${extra}</span>`
+      + `<button class="cs-btn" onclick="csMove(${i},-1)" title="Move up">↑</button>`
+      + `<button class="cs-btn" onclick="csMove(${i},1)" title="Move down">↓</button>`
+      + `<button class="cs-btn" onclick="csRemove(${i})" title="Remove">✕</button></div>`;
+  }).join('');
+  csSummary();
+  csHighlight(_seq);
+}
+
+// Steps, points and a rough duration: ~15 min a point once there, soaks at
+// least their minutes, and about 2 °C/min between setpoints.
+function csSummary() {
+  const steps = _csSteps;
+  if (!steps.length) { setText('cs-summary', ''); return; }
+  let minutes = 0, T = _tec && _tec.temperature != null ? _tec.temperature : 22;
+  for (const s of steps) {
+    const sp = parseFloat(s.setpoint);
+    if (isNaN(sp)) continue;
+    minutes += Math.abs(sp - T) / 2 + (s.kind === 'point' ? 15 : Math.max(parseFloat(s.minutes) || 0, parseFloat(s.max_fm_drift) ? 20 : 0));
+    T = sp;
+  }
+  const temps = steps.filter(s => s.kind === 'point').map(s => parseFloat(s.setpoint));
+  const range = temps.length ? ` · ${Math.min.apply(null, temps)}–${Math.max.apply(null, temps)} °C` : '';
+  setText('cs-summary', `${steps.length} steps · ${temps.length} points${range} · roughly ${(minutes / 60).toFixed(1)} h`);
+}
+
+// Marks the running step, as long as the list on screen is the one saved (and
+// so the one running): after an edit the numbers no longer match.
+function csHighlight(q) {
+  const running = q && q.state === 'running' && JSON.stringify(csConfig()) === _csSavedJson;
+  document.querySelectorAll('#cs-steps .cs-row').forEach(row => {
+    const i = +row.dataset.i;
+    row.classList.toggle('cs-active', !!running && i === q.index);
+    row.classList.toggle('cs-done', !!running && i < q.index);
+  });
+}
+
+function onSequenceStatus(q) {
+  if (!q) return;
+  const prev = _seq;
+  _seq = q;
+  const [text, cls] = SEQ_STATES[q.state] || [String(q.state).toUpperCase(), 'idle'];
+  const pill = document.getElementById('cal-seq-pill');
+  pill.className = 'status-pill ' + cls;
+  pill.textContent = text;
+  const running = q.state === 'running';
+  let line;
+  if (running) {
+    line = `step ${q.index + 1}/${q.total} · ${q.description} · ${fmtMmss(q.elapsed)}`
+         + (q.waiting ? ` · ${q.waiting}` : '') + ` · ${q.points} point${q.points === 1 ? '' : 's'} so far`;
+  } else {
+    line = q.message || (_csSteps.length ? `${_csSteps.length} steps ready` : 'no sequence yet: EDIT SEQUENCE');
+  }
+  const el = document.getElementById('cal-seq-text');
+  el.textContent = line;
+  el.style.color = q.state === 'failed' ? 'var(--red)' : '';
+  const btn = document.getElementById('btn-seq-start');
+  btn.textContent = running ? 'STOP' : 'START';
+  btn.className = 'btn ' + (running ? 'btn-red' : 'btn-green');
+  document.getElementById('btn-seq-skip').disabled = !running;
+  csHighlight(q);
+  if (prev && prev.state === 'running' && !running) {
+    if (q.state === 'done') sendNotif('QCM — Calibration sequence done', q.message || '', 'calPoint');
+    else if (q.state === 'failed') sendNotif('QCM — Calibration sequence ended', q.message || '', 'calPoint');
+  }
+}
+
+async function toggleCalSequence() {
+  if (_seq && _seq.state === 'running') {
+    if (!confirm('Stop the calibration sequence?\n\nThe points taken so far are kept, and the TEC goes on holding its setpoint.')) return;
+    try { await postOrThrow(`${API_URL}/calibration/sequence/stop`); }
+    catch(e) { showToast(`Sequence not stopped — ${e.message || e}`, true); }
+    return;
+  }
+  if (csUpdateDirty()) { showToast('SAVE SEQUENCE first (Settings → Calibration Sequence): the Pitaya runs the saved one', true); return; }
+  if (!_csSteps.length) { showToast('The sequence has no steps yet: EDIT SEQUENCE', true); return; }
+  csSummary();
+  if (!confirm(`Start the calibration sequence?\n\n${document.getElementById('cs-summary').textContent}.\n\n`
+             + 'The TEC is switched on and AUTO goes on; points are taken by the settle detector with its '
+             + 'current WINDOW, drift limits and HOLD. Keep both modes locked throughout.')) return;
+  try { await postOrThrow(`${API_URL}/calibration/sequence/start`); }
+  catch(e) { showToast(`Sequence not started — ${e.message || e}`, true); }
+}
+
+async function skipCalStep() {
+  if (!confirm('Give up on this step and go to the next?')) return;
+  try { await postOrThrow(`${API_URL}/calibration/sequence/skip`); }
+  catch(e) { showToast(`Step not skipped — ${e.message || e}`, true); }
+}
+
+function openSettingsPanel(name) {
+  switchTab('settings', document.querySelector('.tab[onclick*="settings"]'));
+  const nav = document.querySelector(`.settings-nav-item[onclick*="'${name}'"]`);
+  if (nav) switchSettings(name, nav);
+}
+
+const csPanel = document.getElementById('spanel-calseq');
+if (csPanel) csPanel.addEventListener('change', () => { csUpdateDirty(); csSummary(); });
 
 // ---- Dirty-state tracking for the unified APPLY / UNDO buttons ----
 // The crystal form is tracked as its own group because APPLY writes it back to a
@@ -3185,8 +3858,10 @@ const SETTING_IDS = [
   's-osc2-int', 's-osc2-lpf', 's-osc2-inv', 's-osc2-agc', 's-osc2-gain', 's-osc2-amp',
   's-lock-phase', 's-lock-std', 's-auto-relock', 's-temp-hold',
   's-freq-track', 's-freq-track-interval', 's-output-mode',
+  's-lock-aim', 's-lock-aim-temp', 's-clock-tempco', 's-clock-lag',
   's-prune-runs', 's-trim-run',
   ...CRYSTAL_SETTING_IDS,
+  ...TEC_SETTING_IDS,
 ];
 let _baseline = {};            // last applied / loaded values
 let _baselineReady = false;
@@ -3323,7 +3998,44 @@ function initCoeffChartsIfNeeded() {
   updateCoeffCharts();
 }
 
+// ---- Temperature-mode aim (Crystal → Start Frequencies) ----
+// What GET LOCK starts the temperature mode at, worked out from the form the way
+// the Pitaya does from the applied profile (TempCompAlgorithm.aim_ratio): the
+// calibration's fT/fM at the aim temperature, times the mass lock frequency.
+function aimRatio(T) {
+  const g = id => parseFloat(fieldValue(id));
+  const m0 = g('s-coeff-fM0'), t0 = g('s-coeff-fT0');
+  const fM = m0 + g('s-coeff-fM1') * T + g('s-coeff-fM2') * T * T + g('s-coeff-fM3') * T * T * T;
+  const fT = t0 + g('s-coeff-fT1') * T + g('s-coeff-fT2') * T * T + g('s-coeff-fT3') * T * T * T;
+  if (!(m0 > 0 && t0 > 0 && fM > 0 && isFinite(fT))) return null;
+  const r = fT / fM;
+  return (r > 1.0 && r < 1.2) ? r : null;
+}
+
+function updateAimHint() {
+  const el = document.getElementById('lock-aim-hint');
+  if (!el) return;
+  el.style.color = 'var(--text-mid)';
+  const mode = fieldValue('s-lock-aim') || 'ratio';
+  const T = parseFloat(fieldValue('s-lock-aim-temp'));
+  const mass = parseFloat(fieldValue('s-crystal-freq-mass'));
+  const temp = parseFloat(fieldValue('s-crystal-freq-temp'));
+  if (temp === 0) { el.textContent = 'Temp Lock Freq 0: the temperature mode is parked'; return; }
+  if (mode !== 'ratio') { el.textContent = 'GET LOCK starts the temperature mode at the Temp Lock Freq above'; return; }
+  const r = isNaN(T) ? null : aimRatio(T);
+  if (r == null || !(mass > 0)) {
+    el.textContent = 'No usable calibration in this form (fM_0 / fT_0): GET LOCK uses the Temp Lock Freq above';
+    el.style.color = 'var(--orange)';
+    return;
+  }
+  const aimed = r * mass;
+  const off = isFinite(temp) ? aimed - temp : 0;
+  el.textContent = `fT/fM at ${T} °C = ${r.toFixed(6)}: GET LOCK aims at ${aimed.toFixed(0)} Hz`
+    + (Math.abs(off) >= 1000 ? `, ${(off / 1000).toFixed(1)} kHz from the Temp Lock Freq above` : '');
+}
+
 function updateCoeffCharts() {
+  updateAimHint();
   if (!_coeffChartsInit) return;
   const gv = id => parseFloat(fieldValue(id)) || 0;
   const fM3 = gv('s-coeff-fM3'), fM2 = gv('s-coeff-fM2'), fM1 = gv('s-coeff-fM1');
@@ -3345,6 +4057,8 @@ let _calPoints = [];
 let _calCoefM = null, _calCoefT = null;  // [c3, c2, c1, c0] each, or null when < 4 points
 let _calSettings = null;                 // as last received from the Pitaya
 let _calStatus = null;                   // latest CalibrationStatusEvent status
+let _calClock = null;                    // clock correction the points came corrected with
+let _calClockEstimate = null;            // board-clock coefficient the points suggest, ppm/°C
 
 // Each sensor's latest reading {temperature, faults}, for the TEMP field.
 let _lastTemps = {};
@@ -3410,13 +4124,19 @@ function syncCalControls() {
 
 function onCalibrationPoints(ev) {
   _calSettings = ev.settings;
+  _calClock = ev.clock || null;
+  // Fitted on the clock-corrected frequencies the Pitaya adds (board clock,
+  // Settings → System), so a profile describes the crystal, not this board.
   _calPoints = (ev.points || []).map(p => ({
-    id: p.id, t: p.temperature, fM: p.fM, fT: p.fT,
+    id: p.id, t: p.temperature, fM: ifNull(p.fM_corr, p.fM), fT: ifNull(p.fT_corr, p.fT),
+    board: p.board_c, fMraw: p.fM,
     source: p.source_name + (p.auto ? ', auto' : '') + (p.settled ? '' : ', not settled'), raw: p }));
   syncCalControls();
   refreshCalCharts();
   const p = ev.added;
-  if (p && p.auto) {
+  if (p && p.auto && _seq && _seq.state === 'running') {
+    showToast(`Calibration point ${p.temperature.toFixed(2)} °C taken; the sequence goes on`);
+  } else if (p && p.auto) {
     sendNotif('QCM — Calibration point taken',
               `${p.temperature.toFixed(2)} °C (${p.source_name}): set the next temperature`, 'calPoint');
   }
@@ -3454,7 +4174,9 @@ function onCalibrationStatus(st) {
 
   // Settled with nothing taken yet: the operator has to add the point (manual
   // source, or AUTO off). An automatic point announces itself instead.
-  if (st.state === 'settled' && !(prev && prev.state === 'settled') && !st.point_here) {
+  if (st.sequence) onSequenceStatus(st.sequence);
+  if (st.state === 'settled' && !(prev && prev.state === 'settled') && !st.point_here && !st.auto_held
+      && !(st.sequence && st.sequence.state === 'running')) {
     sendNotif('QCM — Crystal settled',
               st.source === 'manual' ? 'Enter the temperature and press ADD POINT'
                                      : 'Press ADD POINT (AUTO is off)', 'calPoint');
@@ -3555,6 +4277,7 @@ function refreshCalCharts() {
   drawCalChart(calibCharts.fT, _calCoefT, 'fT');
 
   renderCalCoeffs();
+  updateCalClockEstimate();
 
   const hint = document.getElementById('cal-fit-hint');
   if (hint) hint.textContent = pts.length >= 4 ? `cubic fit over ${pts.length} points`
@@ -3583,6 +4306,81 @@ function drawCalChart(chart, coef, key) {
   if (coef) { ax.title.text = 'Δf (Hz)'; ax.ticks.callback = v => Number(v).toFixed(0); }
   else      { ax.title.text = 'f (kHz)'; ax.ticks.callback = v => (Number(v) / 1e3).toFixed(3); }
   chart.update('none');
+}
+
+// The board-clock coefficient the points suggest: the mass-mode cubic fitted
+// together with a term in each point's (lagged) board temperature. The points
+// come corrected with the coefficient set now, so the fit finds what is still
+// missing from it. fM alone: fT carries the PT100's lag along the curve (±10 Hz
+// on 13 Nov 2026), which says nothing about the clock. It takes a spread of
+// board temperatures — the box warming after the TEC comes on gave 1.3 °C and
+// 0.25 ± 0.09 ppm/°C on 13 Nov — and says so when there is too little.
+const CAL_CLOCK_MIN_POINTS = 6;
+const CAL_CLOCK_MIN_SPAN = 0.3;   // °C of board temperature across the points
+const CAL_CLOCK_MAX_SIGMA = 0.2;  // ppm/°C; vaguer than this is not offered for USE
+
+function updateCalClockEstimate() {
+  const info = document.getElementById('cal-clock-info');
+  const btn = document.getElementById('btn-cal-clock-use');
+  _calClockEstimate = null;
+  if (btn) btn.disabled = true;
+  if (!info) return;
+  info.style.color = '';
+  const set = _calClock ? _calClock.tempco_ppm : 0;
+  const ref = _calClock ? _calClock.ref_c : 45;
+  const setTxt = `set ${set.toFixed(2)} ppm/°C`;
+  const pts = _calPoints.filter(p => p.board != null && isFinite(p.board) && isFinite(p.fM));
+  if (pts.length < CAL_CLOCK_MIN_POINTS) {
+    info.textContent = `${setTxt} · ${pts.length} point${pts.length === 1 ? '' : 's'} with a board temperature; `
+      + `${CAL_CLOCK_MIN_POINTS} are needed to estimate it`;
+    return;
+  }
+  const boards = pts.map(p => p.board);
+  const span = Math.max(...boards) - Math.min(...boards);
+  // Columns 1, x, x², x³ (x = (T − 40)/25, for conditioning) and the clock term:
+  // Hz of fM per ppm/°C at that point's board temperature.
+  const rows = pts.map(p => {
+    const x = (p.t - 40) / 25;
+    return [1, x, x * x, x * x * x, (p.fMraw || p.fM) * 1e-6 * (p.board - ref)];
+  });
+  const m = 5, n = rows.length;
+  const A = Array.from({ length: m }, () => new Array(m).fill(0));
+  const b = new Array(m).fill(0);
+  rows.forEach((r, i) => {
+    for (let j = 0; j < m; j++) { b[j] += r[j] * pts[i].fM; for (let k = 0; k < m; k++) A[j][k] += r[j] * r[k]; }
+  });
+  const c = solveLinear(A, b);
+  const e4 = solveLinear(A, [0, 0, 0, 0, 1]);
+  if (!c || !e4) { info.textContent = `${setTxt} · the board temperatures do not vary enough to tell`; return; }
+  let ss = 0;
+  rows.forEach((r, i) => { let y = 0; for (let j = 0; j < m; j++) y += r[j] * c[j]; ss += (pts[i].fM - y) ** 2; });
+  const sigma = Math.sqrt(ss / (n - m) * e4[4]);
+  const est = set + c[4];
+  const txt = `points suggest ${est.toFixed(2)} ± ${sigma.toFixed(2)} ppm/°C (${setTxt}; `
+    + `board ${span.toFixed(2)} °C across ${n} points)`;
+  if (span < CAL_CLOCK_MIN_SPAN) {
+    info.textContent = `${setTxt} · the board stayed within ${span.toFixed(2)} °C over these points: too little to tell`;
+    return;
+  }
+  info.textContent = txt;
+  if (!(sigma <= CAL_CLOCK_MAX_SIGMA) || !(est >= -5 && est <= 5)) { info.style.color = 'var(--orange)'; return; }
+  _calClockEstimate = est;
+  if (btn) btn.disabled = Math.abs(c[4]) < 0.005;
+}
+
+async function useCalClockEstimate() {
+  if (_calClockEstimate == null) return;
+  const k = Math.round(_calClockEstimate * 1000) / 1000;
+  if (!confirm(`Set this instrument's board-clock coefficient to ${k} ppm/°C?\n\n`
+             + 'Measurements are corrected with it from now on, and the calibration points are refitted '
+             + 'with it. The compensated output steps by the change: ZERO afterwards.')) return;
+  try {
+    await postOrThrow(`${API_URL}/settings/clock_correction?tempco_ppm=${k}&lag_s=${_clockLag}`);
+    _clockTempco = k;
+    const el = document.getElementById('s-clock-tempco');
+    if (el) { el.value = k; _baseline['s-clock-tempco'] = el.value; updateDirtyState(); }
+    showToast(`Board-clock coefficient set to ${k} ppm/°C`);
+  } catch(e) { showToast(`Not set — ${e.message || e}`, true); }
 }
 
 // Click-to-delete: confirm, then drop the point from both charts.
@@ -3730,25 +4528,6 @@ function clearLogs() {
   </div>
 </div>
 
-<!-- Start confirmation when PLL not locked -->
-<div id="modal-confirm-start" class="modal-overlay" style="display:none">
-  <div class="modal">
-    <div class="modal-title">⚠ PLL NOT LOCKED</div>
-    <div class="modal-body">
-      One or both PLLs are not locked. Data quality will be unreliable.<br><br>
-      <span style="font-family:'DM Mono',monospace;font-size:11px;display:block;margin-top:6px">
-        Mass mode: <span id="confirm-mass-status" style="font-weight:500">—</span><br>
-        Temp mode: <span id="confirm-temp-status" style="font-weight:500">—</span>
-      </span>
-    </div>
-    <div class="modal-footer">
-      <button class="btn btn-orange" onclick="sendCommand('lock');document.getElementById('modal-confirm-start').style.display='none'">GET LOCK FIRST</button>
-      <button class="btn btn-red" onclick="doStartAnyway()">START ANYWAY</button>
-      <button class="btn" onclick="document.getElementById('modal-confirm-start').style.display='none'">CANCEL</button>
-    </div>
-  </div>
-</div>
-
 <!-- Transfer coefficients comparison prompt -->
 <div id="modal-transfer-coeffs" class="modal-overlay" style="display:none">
   <div class="modal" style="max-width:680px">
@@ -3820,7 +4599,7 @@ function clearLogs() {
       <br>
       The measurement is still running and the flag is set on the OPC server
       (<span style="font-family:'DM Mono',monospace;font-size:11px">GVL_QCM.READ.TargetReached</span>)
-      and the REST API. It clears when the next run starts.
+      and the REST API. It clears at the next ZERO.
     </div>
     <div class="modal-footer">
       <button class="btn btn-red" id="target-stop-btn" onclick="stopFromTarget()">STOP MEASUREMENT</button>

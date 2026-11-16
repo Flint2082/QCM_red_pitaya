@@ -27,10 +27,28 @@ class SetCoefficientsCommand(ApiCommand):
 
 @dataclass
 class StartMeasurementCommand(ApiCommand):
+    """Start logging; zero takes a new reference first with these parameters."""
     ambient_temp: float
     mat_dens: float = 19320.0  # kg/m^3 — deposited film density
     z_ratio: float = 1.0       # quartz/film acoustic impedance ratio
     t_start_source: str = "manual"  # T start from ambient_temp, "crystal", or an LTC2986 sensor key
+    zero: bool = False
+
+@dataclass
+class ZeroCommand(ApiCommand):
+    """Zero the thickness: take a new reference with these parameters."""
+    ambient_temp: float
+    mat_dens: float = 19320.0
+    z_ratio: float = 1.0
+    t_start_source: str = "manual"
+
+@dataclass
+class SetReferenceParamsCommand(ApiCommand):
+    """The parameters automatic references are taken with."""
+    ambient_temp: float
+    mat_dens: float = 19320.0
+    z_ratio: float = 1.0
+    t_start_source: str = "manual"
 
 @dataclass
 class StopMeasurementCommand(ApiCommand):
@@ -124,6 +142,13 @@ class SetFreqTrackingCommand(ApiCommand):
     are now rather than where they were when the crystal was activated."""
     enabled: bool
     interval: float  # seconds between updates
+
+@dataclass
+class SetClockCorrectionCommand(ApiCommand):
+    """Correct both frequencies for the reference clock's drift with board
+    temperature (domain/clock_correction.py)."""
+    tempco_ppm: float  # ppm per °C of lagged Zynq die temperature; 0 = off
+    lag_s: float       # time constant of the lag on the die temperature
 
 @dataclass
 class SetStorageReclaimCommand(ApiCommand):

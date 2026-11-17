@@ -231,6 +231,15 @@ LTC2986 fault named in `temp_sensor_faults`. They are blank while there is no
 current reading. `temperature_c` is something else: the crystal temperature the
 compensation solves from the two modes.
 
+The calibration Peltier's loop is logged beside each sample too:
+- `tec_on`: 1 while the loop drives (holding or autotuning), 0 while it is off
+  or has tripped;
+- `tec_setpoint_c`: its setpoint, blank while it is off;
+- `tec_output_pct`: the drive written to the PWM at the loop's last step, in %
+  of full, positive heating; 0 while off.
+
+All three are blank on a bitstream without the PWM registers.
+
 The reference's start temperature (T start, the crystal temperature the
 compensation starts from) can come from one of these sensors instead of the
 typed-in ambient temperature: **Settings → Measurement → T Start Source**, or

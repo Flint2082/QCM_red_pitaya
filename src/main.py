@@ -64,8 +64,10 @@ def build_system(enable_opcua: bool = True):
         command_queue=worker_command_queue,
         event_queue=worker_event_queue,
         version=version,
-        # The run log records the newest sensor readings beside every sample.
+        # The run log records the newest sensor readings beside every sample,
+        # and the TEC loop's state and drive.
         temperatures=lambda: temperature_worker.latest,
+        tec=tec_worker.log_values,
     )
 
     # OPC-UA bridge (optional — system works without a PLC)

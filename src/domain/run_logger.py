@@ -55,6 +55,11 @@ TEMPERATURE_COLUMNS = [f"{s.key}_c" for s in SENSORS]
 # The Zynq's die temperature (domain/zynq_temperature.py), a proxy for the
 # Pitaya's reference oscillator; written whether or not the LTC2986 is there.
 DIE_COLUMN = "zynq_die_c"
+# The calibration Peltier's loop (workers/tec_worker.py): 1 while it drives,
+# 0 while off or tripped; its setpoint, blank while off; and the drive in % of
+# full, positive heating, 0 while off. All blank on a bitstream without the
+# PWM registers.
+TEC_COLUMNS = ["tec_on", "tec_setpoint_c", "tec_output_pct"]
 
 # Read by tools/csv_plotter.py. This file is the only export — the browser keeps
 # no copy of a run, it just downloads this one back via /runs/{name}/download.
@@ -68,6 +73,7 @@ HEADERS = [
     # and compensated frequency were worked out (domain/clock_correction.py);
     # freq_mass_hz and freq_temp_hz are as measured. 0 with the correction off.
     "clock_ppm",
+    *TEC_COLUMNS,
     "event_type", "event_detail",
 ]
 
@@ -147,16 +153,19 @@ class RunLogger:
 
     temperatures() returns the newest TemperatureEvent from the temperature
     worker, or None; its readings go into the TEMPERATURE_COLUMNS and the
-    DIE_COLUMN of every row."""
+    DIE_COLUMN of every row. tec() returns the TEC loop's (on, setpoint °C,
+    drive %), or None without a TEC, for the TEC_COLUMNS."""
 
     def __init__(self, directory: str = RUNS_DIR, on_error=None, on_start=None,
-                 on_reclaim=None, temperatures=None):
+                 on_reclaim=None, temperatures=None, tec=None):
         self.directory = directory
         self._on_error = on_error
         self._on_start = on_start
         self._on_reclaim = on_reclaim
         self._temperatures = temperatures
         self._temperature_error = None  # last failure reading them, said once
+        self._tec = tec
+        self._tec_error = None          # likewise for the TEC
         self._file = None
         self._writer = None
         self.path = None
@@ -441,6 +450,7 @@ class RunLogger:
                 "quality_temp": "" if data.quality_temp is None else data.quality_temp,
                 **self._temperature_columns(ts),
                 "clock_ppm": round(getattr(data, "clock_ppm", 0.0) or 0.0, 5),
+                **self._tec_columns(),
                 "event_type": "", "event_detail": "",
             })
             self._file.flush()
@@ -490,6 +500,30 @@ class RunLogger:
                 print(f"[RunLogger] Could not add the temperature sensor readings: {e}")
                 self._temperature_error = str(e)
             out = dict.fromkeys(out, "")
+        return out
+
+    def _tec_columns(self) -> dict:
+        """The TEC loop as it stands at this row (see TEC_COLUMNS). The drive
+        is the one written to the PWM at the loop's last step, so it reads
+        what heated the holder up to this sample. A problem in here costs
+        these columns only, never the row."""
+        out = dict.fromkeys(TEC_COLUMNS, "")
+        if self._tec is None:
+            return out
+        try:
+            values = self._tec()
+            if values is None:
+                return out
+            on, setpoint, output = values
+            out["tec_on"] = 1 if on else 0
+            out["tec_setpoint_c"] = round(setpoint, 3) if on else ""
+            out["tec_output_pct"] = round(output, 4)
+            self._tec_error = None
+        except Exception as e:
+            if str(e) != self._tec_error:
+                print(f"[RunLogger] Could not add the TEC loop: {e}")
+                self._tec_error = str(e)
+            out = dict.fromkeys(TEC_COLUMNS, "")
         return out
 
     def _housekeeping(self) -> None:

@@ -334,6 +334,15 @@ class TECWorker(threading.Thread):
         with self._lock:
             return self._status(time.time())
 
+    def log_values(self) -> tuple[bool, float, float] | None:
+        """(loop on, setpoint °C, drive %) for the run log, or None without
+        the PWM registers. Read without the lock: the QCM worker asks at the
+        log rate and must never wait on the TEC loop, and each value is one
+        attribute replaced whole, so a row is at worst one step behind."""
+        if not self.available:
+            return None
+        return self.mode in ("pid", "autotune"), self.settings.setpoint, self.output
+
     def contents(self) -> dict:
         """Settings, status and what the settings may be, for GET /tec."""
         with self._lock:

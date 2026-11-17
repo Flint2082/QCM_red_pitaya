@@ -1119,31 +1119,72 @@ function switchSettings(name, el) {
 // ---- Chart factory ----
 const TC = '#8a95a8';  // tick color — matches --text-dim
 const YAXIS = { display: true, ticks: { color: TC, font: { family: 'DM Mono', size: 9 }, maxTicksLimit: 4 }, grid: { color: 'rgba(255,255,255,0.03)' }, border: { color: 'transparent' } };
-// sampleSize: fitting the time labels measures 5 of them instead of every one
-// (3000 on Main), which was a third of each redraw. They are all HH:MM:SS, so the
-// sample gives the same ticks.
-const TAXIS = { display: true, ticks: { color: TC, font: { family: 'DM Mono', size: 9 }, maxTicksLimit: 5, autoSkip: true, sampleSize: 5 }, grid: { display: false }, border: { color: 'transparent' } };
+// Live time axis: the sample's time in ms on a linear scale, ticked on round
+// clock times (10 s, 1 min, 15 min, ...) rather than the scale's round numbers
+// of milliseconds, which land on times like 15:41:40. bounds 'data': the line
+// runs to both edges instead of stopping short of a rounded-out tick.
+const CLOCK_STEPS = [1, 2, 5, 10, 15, 30, 60, 120, 300, 600, 900, 1800, 3600, 7200, 10800, 21600, 43200, 86400].map(s => s * 1000);
+function clockTicks(scale) {
+  const span = scale.max - scale.min;
+  if (!(span > 0)) return;
+  const step = CLOCK_STEPS.find(s => s >= span / 4) || CLOCK_STEPS[CLOCK_STEPS.length - 1];
+  const ticks = [];
+  for (let t = Math.ceil(scale.min / step) * step; t <= scale.max; t += step) ticks.push({ value: t });
+  scale.ticks = ticks;
+}
+const TAXIS = { type: 'linear', bounds: 'data', display: true, afterBuildTicks: clockTicks, ticks: { color: TC, font: { family: 'DM Mono', size: 9 }, maxTicksLimit: 6, callback: v => new Date(v).toLocaleTimeString() }, grid: { display: false }, border: { color: 'transparent' } };
 const ZOOM_CFG = { zoom: { drag: { enabled: true, backgroundColor: 'rgba(74,158,255,0.06)', borderColor: 'rgba(74,158,255,0.35)', borderWidth: 1 }, mode: 'x' } };
 const BASE_OPTS = { responsive: true, maintainAspectRatio: false, animation: false, plugins: { legend: { display: false }, tooltip: { enabled: false }, zoom: ZOOM_CFG }, scales: { x: TAXIS, y: YAXIS } };
 
+// Options of the live time series. Each point is {x: time in ms, y}, and
+// Chart.js's min-max decimation draws a long window as a few points per pixel
+// column. Drawing every point cost ~0.75 µs a point per redraw, ten redraws a
+// second: the four Main charts at 30 000 points each took 80 % of a core, and
+// at 100 000 the page fell behind the WebSocket; decimated, one redraw takes
+// ~2 ms at 3 000 points and ~3 ms at 100 000. Decimation needs parsing off and
+// the points in time order, which `normalized` promises. Straight segments:
+// bezier smoothing would overshoot between the min and max of a column.
+// TAXIS goes in by reference because deepCopy drops its functions.
+function liveOpts() {
+  const o = deepCopy(BASE_OPTS);
+  o.parsing = false;
+  o.normalized = true;
+  o.plugins.decimation = { enabled: true, algorithm: 'min-max' };
+  o.scales.x = TAXIS;
+  return o;
+}
+
+// A live chart's points live in chart._pts, one array per dataset, which only
+// this page touches; Chart.js gets a copy of them when the chart is drawn
+// (drawLive). Chart.js watches every push and splice on the arrays it is given
+// and queues each one until the chart next updates, and the charts on hidden
+// tabs do not update: an hour on another tab left ~85 000 queued changes per
+// line, all replayed at once on switching back (1.7 s for Monitor on 17 Nov,
+// growing with every hour away). A copy it never sees change leaves it nothing
+// to queue.
+function liveChart(chart) {
+  chart._pts = chart.data.datasets.map(() => []);
+  return chart;
+}
+
 function makeChart(id, color) {
   const ctx = document.getElementById(id); if (!ctx) return null;
-  return new Chart(ctx, { type: 'line', data: { labels: [], datasets: [{ data: [], borderColor: color, borderWidth: 1.5, pointRadius: 0, tension: 0.2, fill: true, backgroundColor: color + '14' }] }, options: deepCopy(BASE_OPTS) });
+  return liveChart(new Chart(ctx, { type: 'line', data: { datasets: [{ data: [], borderColor: color, borderWidth: 1.5, pointRadius: 0, tension: 0, fill: true, backgroundColor: color + '14' }] }, options: liveOpts() }));
 }
 
 function makeDualChart(id, c1, c2) {
   const ctx = document.getElementById(id); if (!ctx) return null;
-  return new Chart(ctx, {
+  const opts = liveOpts();
+  opts.plugins.legend = { display: true, labels: { color: TC, font: { family: 'DM Mono', size: 9 }, boxWidth: 14, padding: 8 } };
+  opts.scales = { x: TAXIS, y: { ...YAXIS, position: 'left' }, y2: { ...YAXIS, position: 'right', grid: { drawOnChartArea: false } } };
+  return liveChart(new Chart(ctx, {
     type: 'line',
-    data: { labels: [], datasets: [
-      { data: [], borderColor: c1, borderWidth: 1.5, pointRadius: 0, tension: 0.2, fill: false, yAxisID: 'y', label: 'AMP' },
-      { data: [], borderColor: c2, borderWidth: 1.5, pointRadius: 0, tension: 0.2, fill: false, yAxisID: 'y2', borderDash: [4,2], label: 'PHASE' },
+    data: { datasets: [
+      { data: [], borderColor: c1, borderWidth: 1.5, pointRadius: 0, tension: 0, fill: false, yAxisID: 'y', label: 'AMP' },
+      { data: [], borderColor: c2, borderWidth: 1.5, pointRadius: 0, tension: 0, fill: false, yAxisID: 'y2', borderDash: [4,2], label: 'PHASE' },
     ]},
-    options: { ...deepCopy(BASE_OPTS),
-      plugins: { tooltip: { enabled: false }, legend: { display: true, labels: { color: TC, font: { family: 'DM Mono', size: 9 }, boxWidth: 14, padding: 8 } }, zoom: ZOOM_CFG },
-      scales: { x: TAXIS, y: { ...YAXIS, position: 'left' }, y2: { ...YAXIS, position: 'right', grid: { drawOnChartArea: false } } }
-    }
-  });
+    options: opts
+  }));
 }
 
 const charts = {
@@ -1341,7 +1382,7 @@ function setupZoomGroup(chartList) {
         c.resetZoom('none');
         // Trim data that accumulated while frozen, then resume live view
         if (c._maxPts != null) trimToWindow(c, c._maxPts);
-        c.update('none');
+        drawLive(c);
       });
       state.syncing = false;
     });
@@ -1676,16 +1717,36 @@ setInterval(() => {
   if (document.hidden) return;  // skip repaints in background tabs; data still accumulates
   for (const c of _dirtyCharts) {
     if (!chartOnVisibleTab(c)) continue;
-    c.update('none');
+    drawLive(c);
     _dirtyCharts.delete(c);
   }
 }, CHART_REDRAW_MS);
 
-function push(chart, value, dsIdx = 0, max = MAX_PTS_MAIN, label = '') {
+// A sample's time in ms for the live charts' x axis: the Pitaya's timestamp,
+// or now when the event carries none.
+function sampleTime(e) { return e.timestamp ? e.timestamp * 1000 : Date.now(); }
+
+// Draw a live chart from its own points (liveChart). Each dataset gets a fresh
+// copy: assigning `data` is the one way in that works whether or not Chart.js
+// is decimating it (it then keeps the points behind a getter for the
+// decimated ones). The copy costs ~0.1 ms per 10 000 points.
+function drawLive(chart) {
+  if (chart._pts) chart._pts.forEach((p, i) => { chart.data.datasets[i].data = p.slice(); });
+  chart.update('none');
+}
+
+// Empty a live chart, its own points and what it shows.
+function clearLive(chart) {
   if (!chart) return;
-  const d = chart.data;
-  if (dsIdx === 0) d.labels.push(label);
-  d.datasets[dsIdx].data.push(value);
+  if (chart._pts) chart._pts.forEach(p => { p.length = 0; });
+  drawLive(chart);
+}
+
+// x: the sample's time in ms (sampleTime). Every dataset of a chart gets its own
+// x, so the two of a dual chart need not stay in step.
+function push(chart, value, dsIdx = 0, max = MAX_PTS_MAIN, x = Date.now()) {
+  if (!chart) return;
+  chart._pts[dsIdx].push({ x, y: value });
   trimToWindow(chart, max);
 }
 
@@ -1697,9 +1758,7 @@ function trimToWindow(chart, max) {
   if (!chart) return;
   chart._maxPts = max;
   if (chart._zoomGroupState && chart._zoomGroupState.zoomed) return;
-  const d = chart.data;
-  if (d.labels.length > max) d.labels.splice(0, d.labels.length - max);
-  d.datasets.forEach(ds => { if (ds.data.length > max) ds.data.splice(0, ds.data.length - max); });
+  chart._pts.forEach(p => { if (p.length > max) p.splice(0, p.length - max); });
   _dirtyCharts.add(chart);
 }
 
@@ -1821,7 +1880,7 @@ function setTempHeld(held) {
 // and TelemetryEvent so the monitor behaves identically whether or not a run is
 // in progress — the only difference is that the compensated values are absent
 // outside a run, and those are handled by onMeasurement alone.
-function applyTelemetry(e, ts) {
+function applyTelemetry(e, t) {
   noteCrystalTemp(e.crystal_temp);
   setText('val-fM', fmt(e.freq_mass_mode, 2));
   setText('val-fT', fmt(e.freq_temp_mode, 2));
@@ -1832,14 +1891,14 @@ function applyTelemetry(e, ts) {
   setText('val-cal-fT', fmt(e.freq_temp_mode, 2));
   setMeta('meta-cal-fM-live', e.freq_mass_mode, 'Hz');
   setMeta('meta-cal-fT-live', e.freq_temp_mode, 'Hz');
-  push(charts.calFmLive, e.freq_mass_mode, 0, MAX_PTS_MONITOR, ts);
-  push(charts.calFtLive, e.freq_temp_mode, 0, MAX_PTS_MONITOR, ts);
+  push(charts.calFmLive, e.freq_mass_mode, 0, MAX_PTS_MONITOR, t);
+  push(charts.calFtLive, e.freq_temp_mode, 0, MAX_PTS_MONITOR, t);
 
-  push(charts.fM, e.freq_mass_mode, 0, MAX_PTS_MONITOR, ts);
-  push(charts.fT, e.freq_temp_mode, 0, MAX_PTS_MONITOR, ts);
+  push(charts.fM, e.freq_mass_mode, 0, MAX_PTS_MONITOR, t);
+  push(charts.fT, e.freq_temp_mode, 0, MAX_PTS_MONITOR, t);
 
-  if (e.amp_mass != null) { push(charts.lpf1, e.amp_mass, 0, MAX_PTS_MONITOR, ts); push(charts.lpf1, e.phase_mass, 1, MAX_PTS_MONITOR); }
-  if (e.amp_temp != null) { push(charts.lpf2, e.amp_temp, 0, MAX_PTS_MONITOR, ts); push(charts.lpf2, e.phase_temp, 1, MAX_PTS_MONITOR); }
+  if (e.amp_mass != null) { push(charts.lpf1, e.amp_mass, 0, MAX_PTS_MONITOR, t); push(charts.lpf1, e.phase_mass, 1, MAX_PTS_MONITOR, t); }
+  if (e.amp_temp != null) { push(charts.lpf2, e.amp_temp, 0, MAX_PTS_MONITOR, t); push(charts.lpf2, e.phase_temp, 1, MAX_PTS_MONITOR, t); }
 
   setLockQuality('mass', e.quality_mass);
   setLockQuality('temp', e.quality_temp);
@@ -1855,13 +1914,13 @@ function applyTelemetry(e, ts) {
 // Raw readings pushed while no run is in progress. Deliberately does not touch
 // the sample counter or the compensated tiles: nothing here is part of a run.
 function onTelemetry(e) {
-  applyTelemetry(e, e.timestamp ? new Date(e.timestamp * 1000).toLocaleTimeString() : '');
+  applyTelemetry(e, sampleTime(e));
 }
 
 function onMeasurement(e) {
-  const ts = e.timestamp ? new Date(e.timestamp * 1000).toLocaleTimeString() : '';
+  const t = sampleTime(e);
 
-  applyTelemetry(e, ts);
+  applyTelemetry(e, t);
   setCompensatedView(e.compensated !== false);
   updateClockLive(e);
 
@@ -1881,12 +1940,12 @@ function onMeasurement(e) {
   setText('val-uncomp-a',fmt(e.uncompensated_thickness, 4));
   setText('val-T-a',     fmt(e.calculated_temp, 6));
 
-  push(charts.mainComp,       e.calculated_thickness,    0, MAX_PTS_MAIN,    ts);
-  push(charts.mainUncomp,     e.uncompensated_thickness, 0, MAX_PTS_MAIN,    ts);
-  push(charts.mainRate,       ifNull(e.calculated_rate, null),    0, MAX_PTS_MAIN, ts);
-  push(charts.mainRateUncomp, ifNull(e.uncompensated_rate, null), 0, MAX_PTS_MAIN, ts);
-  push(charts.compA,    e.calculated_thickness,  0, MAX_PTS_MONITOR, ts);
-  push(charts.tempA,    e.calculated_temp,       0, MAX_PTS_MONITOR, ts);
+  push(charts.mainComp,       e.calculated_thickness,    0, MAX_PTS_MAIN,    t);
+  push(charts.mainUncomp,     e.uncompensated_thickness, 0, MAX_PTS_MAIN,    t);
+  push(charts.mainRate,       ifNull(e.calculated_rate, null),    0, MAX_PTS_MAIN, t);
+  push(charts.mainRateUncomp, ifNull(e.uncompensated_rate, null), 0, MAX_PTS_MAIN, t);
+  push(charts.compA,    e.calculated_thickness,  0, MAX_PTS_MONITOR, t);
+  push(charts.tempA,    e.calculated_temp,       0, MAX_PTS_MONITOR, t);
 
   setMeta('meta-comp',        e.calculated_thickness,    'nm');
   setMeta('meta-uncomp',      e.uncompensated_thickness, 'nm');
@@ -1908,7 +1967,7 @@ function onMeasurement(e) {
 
 function clearCharts() {
   sampleCount = 0; setText('val-n','0'); setText('footer-left','n = 0');
-  Object.values(charts).forEach(c => { if (!c) return; c.data.labels=[]; c.data.datasets.forEach(d=>d.data=[]); c.update('none'); });
+  Object.values(charts).forEach(clearLive);
 }
 
 // ---- Temperature sensors (LTC2986) — the temporary TEMP SENSORS tab ----
@@ -1929,13 +1988,13 @@ function onTemperature(ev) {
   pill.className = 'status-pill ' + (ev.available ? 'running' : 'error');
   pill.textContent = ev.available ? 'READING' : 'UNAVAILABLE';
   setText('temps-error', ev.available ? '' : (ev.error || ''));
-  const ts = ev.timestamp ? new Date(ev.timestamp * 1000).toLocaleTimeString() : '';
+  const t = sampleTime(ev);
   // The die sensor is reported whether or not the LTC2986 is there.
   const die = ifNull(ev.zynq_die_c, null);
   setText('val-temp-zynq_die', fmt(die, 2));
   setText('unit-temp-zynq_die', die == null ? 'unavailable' : '°C');
   setMeta('meta-temp-zynq_die', die, '°C');
-  push(tempCharts.zynq_die, die, 0, MAX_PTS_TEMPS, ts);
+  push(tempCharts.zynq_die, die, 0, MAX_PTS_TEMPS, t);
   if (!ev.available) {
     // Blank the tiles rather than leave the last readings looking live, and
     // break the lines so the outage shows on the charts.
@@ -1949,7 +2008,7 @@ function onTemperature(ev) {
       setText('meta-temp-' + key, '—');
       setText('unit-temp-' + key, '°C');
       document.getElementById('unit-temp-' + key).style.color = '';
-      if (tempCharts[key] && tempCharts[key].data.labels.length) push(tempCharts[key], null, 0, MAX_PTS_TEMPS, ts);
+      if (tempCharts[key] && tempCharts[key]._pts[0].length) push(tempCharts[key], null, 0, MAX_PTS_TEMPS, t);
     }
     return;
   }
@@ -1968,7 +2027,7 @@ function onTemperature(ev) {
     unit.textContent = faults.length ? '°C · ' + faults.join(', ') : '°C';
     unit.style.color = faults.length ? 'var(--red)' : '';
     setMeta('meta-temp-' + s.key, s.temperature, '°C');
-    push(tempCharts[s.key], s.temperature, 0, MAX_PTS_TEMPS, ts);
+    push(tempCharts[s.key], s.temperature, 0, MAX_PTS_TEMPS, t);
   }
   document.getElementById('temps-tab-dot').style.background = anyFault ? 'var(--orange)' : 'var(--green)';
   updateCalTemp();
@@ -2021,7 +2080,7 @@ function updateTStartLive(unavailableReason) {
 }
 
 function clearTempCharts() {
-  Object.values(tempCharts).forEach(c => { if (!c) return; c.data.labels=[]; c.data.datasets.forEach(d=>d.data=[]); c.update('none'); });
+  Object.values(tempCharts).forEach(clearLive);
 }
 
 // ---- WebSocket ----
@@ -3011,10 +3070,7 @@ function toggleStartStop() {
 // lock (before any ZERO). The thickness charts start again with it, so the
 // drop to 0 does not squash their scale.
 function onZero(ev) {
-  for (const c of [charts.mainComp, charts.mainUncomp, charts.mainRate, charts.mainRateUncomp, charts.compA, charts.tempA]) {
-    if (!c) continue;
-    c.data.labels = []; c.data.datasets.forEach(d => d.data = []); c.update('none');
-  }
+  [charts.mainComp, charts.mainUncomp, charts.mainRate, charts.mainRateUncomp, charts.compA, charts.tempA].forEach(clearLive);
   _runStartFm = null;
   const how = ev.compensated ? 'compensated' : 'UNCOMPENSATED: the temp mode was not locked';
   if (ev.auto) showToast(`Thickness reference taken after the lock (${how}) — ZERO sets your own`, false, !ev.compensated);

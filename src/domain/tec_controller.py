@@ -15,9 +15,9 @@ pwm_words() is the one place that knows how a frequency and a duty cycle become
 those words. PWM_thresh being 27 bits wide, full drive is 2^27 - 1: 2^27 itself
 would wrap to 0 and turn full drive into none.
 
-This module is the logic: the settings and their limits, a PID controller on a
-temperature reading, the PT100 + crystal combination it can regulate on, and a
-relay autotuner that measures the loop and proposes gains.
+This module is the logic: the settings and their limits, a PID controller on
+the PT100, the checks on the crystal reading its derivative can act on
+instead, and a relay autotuner that measures the loop and proposes gains.
 workers/tec_worker.py runs it: it reads the thermometers, steps the controller
 and writes the registers.
 
@@ -34,9 +34,8 @@ switches it on again.
 import json
 import math
 import os
+from collections import deque
 from dataclasses import asdict, dataclass, fields
-
-from domain.temperature_sensors import SENSORS
 
 # data/tec.json at the repo root (this file is src/domain/tec_controller.py).
 SETTINGS_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..", "data", "tec.json")
@@ -44,10 +43,13 @@ SETTINGS_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "
 REGISTERS = ("PWM_en", "PWM_freq", "PWM_thresh", "PWM_dir")
 PHASE_BITS = 27   # width of the PWM's phase accumulator, PWM_freq and PWM_thresh
 
-# What the loop can regulate on: an LTC2986 sensor, the crystal's own absolute
-# temperature from its two locked modes (see absolute_temperature in
-# processing/TempCompAlgorithm.py), or the two combined (see Fusion).
-SOURCES = {**{s.key: s.name for s in SENSORS}, "crystal": "Crystal", "fused": "PT100 + crystal"}
+# What the loop regulates on. Always the PT100 for P and I; the derivative acts
+# on the PT100 too, or on the crystal's own temperature from its two locked
+# modes (see absolute_temperature in processing/TempCompAlgorithm.py and
+# CrystalCheck).
+SOURCES = {"pt100": "PT100", "pt100_crystal_d": "PT100 + crystal for D"}
+# Sources of earlier versions, and what a saved one becomes.
+OLD_SOURCES = {"fused": "pt100_crystal_d", "crystal": "pt100_crystal_d"}
 
 # Tuning rules for the relay autotuner, as multiples of the ultimate gain Ku and
 # the ultimate period Tu: Kp = a·Ku, Ti = b·Tu, Td = c·Tu.
@@ -70,11 +72,6 @@ LIMITS = {
     "at_amplitude":  (1.0, 100.0),         # %
     "at_hysteresis": (0.0, 5.0),           # °C
     "i_band":        (0.0, 100.0),         # °C, 0 = no band
-    "fused_kp":      (0.0, 1000.0),        # as kp, ki and kd
-    "fused_ki":      (0.0, 100.0),
-    "fused_kd":      (0.0, 100_000.0),
-    "fuse_tau_s":    (30.0, 7200.0),       # s
-    "fuse_lag_s":    (0.0, 300.0),         # s
 }
 
 
@@ -83,7 +80,7 @@ class Settings:
     pwm_freq: float = 1000.0        # Hz
     kp: float = 20.0                # % per °C
     ki: float = 0.2                 # % per °C·s
-    kd: float = 0.0                 # % per °C/s
+    kd: float = 0.0                 # % per °C/s, on the PT100 or the crystal (see CrystalCheck)
     source: str = "pt100"           # a key of SOURCES
     max_output: float = 100.0       # %, cap on the drive either way
     heat_dir: int = 0               # the PWM_dir value that heats
@@ -94,26 +91,9 @@ class Settings:
     at_hysteresis: float = 0.1      # °C, relay hysteresis: above the sensor noise
     at_rule: str = "tyreus_luyben"  # a key of RULES
     i_band: float = 1.0             # °C: the integral only moves this close to the setpoint (0 = always)
-    # PT100 + crystal: its own gains (kp, ki and kd above stay for the single
-    # sensors, and for the PT100 alone when the crystal drops out), how long
-    # the PT100 - crystal offset is averaged over, and how far the PT100 lags
-    # the crystal.
-    fused_kp: float = 20.0
-    fused_ki: float = 0.2
-    fused_kd: float = 0.0
-    fuse_tau_s: float = 900.0       # s
-    fuse_lag_s: float = 20.0        # s
 
 
 GAINS = ("kp", "ki", "kd")
-
-
-def with_gains(s: Settings, fused: bool) -> Settings:
-    """s with the gains the loop runs on: the PT100 + crystal ones while the
-    crystal is in use, the single-sensor ones otherwise."""
-    if not fused:
-        return s
-    return Settings(**{**asdict(s), **{k: getattr(s, "fused_" + k) for k in GAINS}})
 
 
 def validated(current: dict, changes: dict) -> dict:
@@ -162,17 +142,21 @@ def load_settings(path: str = SETTINGS_FILE) -> Settings:
         print(f"[TEC] Settings not read, using the defaults: {e}")
         return Settings()
     known = {f.name for f in fields(Settings)}
+    source = saved.get("source")
+    if source is not None and source not in SOURCES:
+        # The crystal alone and PT100 + crystal (fused) of earlier versions
+        # become D on the crystal; their own gains (fused_kp ...) are dropped,
+        # being tuned for P and I on the crystal: kp, ki and kd were the
+        # PT100's. Another LTC2986 sensor becomes the PT100.
+        new = OLD_SOURCES.get(source, "pt100")
+        print(f"[TEC] Saved feedback source {source!r} no longer exists: using {SOURCES[new]}")
+        saved = {**saved, "source": new}
     for key, value in saved.items():
         if key in known:
             try:
                 settings = validated(settings, {key: value})
             except (TypeError, ValueError) as e:
                 print(f"[TEC] Ignoring saved setting {key}={value!r}: {e}")
-    # Settings from before PT100 + crystal: start its gains from the tuned
-    # single-sensor ones rather than the defaults.
-    for k in GAINS:
-        if "fused_" + k not in saved:
-            settings["fused_" + k] = settings[k]
     return Settings(**settings)
 
 
@@ -231,15 +215,19 @@ class PID:
         self._last_pv = None
         self._slope = 0.0
 
-    def step(self, s: Settings, pv: float, dt: float) -> float:
+    def step(self, s: Settings, pv: float, dt: float, d_pv: float | None = None,
+             kd: float | None = None) -> float:
+        """The drive for reading pv. The derivative acts on d_pv instead when
+        given (the crystal), with gain kd instead of s.kd when given."""
         e = s.setpoint - pv
+        d_pv = pv if d_pv is None else d_pv
         if self._last_pv is not None and dt > 0:
-            raw = (pv - self._last_pv) / dt
+            raw = (d_pv - self._last_pv) / dt
             self._slope += dt / (dt + self.D_FILTER_S) * (raw - self._slope)
-        self._last_pv = pv
+        self._last_pv = d_pv
         umax = s.max_output
         self.p = s.kp * e
-        self.d = -s.kd * self._slope
+        self.d = -(s.kd if kd is None else kd) * self._slope
         i = _clamp(self.i + (s.ki * e * dt if self._integrates(s, e) else 0.0), -umax, umax)
         u = self.p + i + self.d
         if (u > umax and e > 0) or (u < -umax and e < 0):
@@ -261,117 +249,160 @@ class PID:
         return toward * (s.kp / s.ki) < abs(e)
 
 
-class Fusion:
-    """The PT100 + crystal feedback: the PT100 says where the temperature is,
-    the crystal how it moves.
+class CrystalCheck:
+    """Whether the crystal can carry the derivative on "PT100 + crystal for D".
 
-    The loop is fed crystal + offset, the offset being PT100 - crystal averaged
-    over fuse_tau_s. Slower than that the PT100 decides: the offset makes the
-    two agree on average, so the PT100 ends up at the setpoint. Faster, the loop
-    follows the crystal, which reads ten times a second with next to no noise,
-    leads the PT100 (it sits closer to the Peltier), and feels what the PT100
-    never sees, such as the heat it loses to the air around it. Only the
-    crystal's changes count, never its absolute reading, so a calibration that
-    is off, or one still being made, only scales the short-term corrections by
-    the error in its slope.
+    P and I act on the PT100 there, the derivative on the crystal's own
+    temperature. The crystal reads ten times a second with next to no noise and
+    runs ahead of the PT100 (it sits closer to the Peltier; the PT100 lags 12 s
+    at 45 °C on the infi2439 holder), so it damps the loop where the PT100's lag
+    and its ~13 mK of noise allow little derivative. The PT100 stays the one
+    reference for where the temperature sits.
 
-    The PT100 is compared with the crystal passed through a first-order lag of
-    fuse_lag_s, standing in for the PT100's own lag: during a ramp the PT100
-    running behind is then not taken for a change in the offset.
+    Only the crystal's rate of change counts, never its reading: an offset from
+    the PT100, even of degrees, does nothing, so the crystal needs no
+    calibration. Its slope counts as a factor on Kd: a profile that reads the
+    crystal's changes g times too large (one from another crystal, say) makes
+    the derivative g times stronger. Simulated on the holder model
+    (tools/tec_simulator.py) with Kp 40, Ki 0.2 and Kd 2000, a 10 °C step
+    settles to 20 mK in 9-12 min with at most 6 mK overshoot for g from 0.75
+    to 1.5, in 16 min with 60 mK at g = 2, and in 12 min with 180 mK at
+    g = 0.5. Kd·g much above 4500 rings (Kd 2500 at g = 2 does). The PT100
+    alone on 39.9/0.196/585 takes 12 min and overshoots by 250 mK.
 
-    A crystal reading is not trusted when it jumps by more than JUMP_C between
-    two samples (a mode hop or a false lock moves it by degrees at once; a real
-    temperature cannot), or when it is more than APART_C from the PT100. It is
-    then dropped until it has read steadily, with neither, for REJOIN_S (or
-    three PT100 delays, if longer), and meanwhile the loop runs on the PT100
-    alone. The offset is worked out afresh over that wait (see _filter).
+    A crystal reading is not used:
+      - while either mode is unlocked, or its newest reading is not current;
+      - when it jumps by more than JUMP_C between two samples (a mode hop or a
+        false lock moves it by degrees at once; a real temperature cannot);
+      - when it moves the wrong way, or less than a quarter or more than twice
+        as much as the PT100 (another mode, or a profile far off). Each time
+        both have held still for STEADY_S (see _compare_moves) their readings
+        become the reference; once the PT100 has moved SCALE_MOVE_C or more
+        from there, the crystal's change (lagged like the PT100) must lie
+        within SCALE_RANGE times the PT100's. Backwards, the derivative would
+        push the loop on instead of damping it; twice too large, Kd 2000 is
+        near ringing. Early in a move the ratio reads up to 40 % low (the PT100
+        and the lag do not quite match: simulated 0.61-1.04 times the settled
+        ratio), hence the low lower bound; a crystal that reads slow only
+        weakens the derivative. The ratio is measured whether or not the
+        crystal is in use, and a bad one holds until a later move measures a
+        good one.
+    It is then dropped until it has read steadily, with neither, for REJOIN_S.
+    It is first used, and used again after a jump, only once a move has
+    measured the ratio within range: on a plateau nothing is measured, and a
+    crystal joining there backwards would run away until the PT100 had moved
+    SCALE_MOVE_C (simulated: 1.6 °C), one three times too steep would ring
+    until the next setpoint change (140 mK p2p). Meanwhile the derivative
+    acts on the PT100 at PT100_KD_SHARE of Kd: the full Kd on the lagging,
+    noisy PT100 rings (simulated: Kd 2500 takes 54 min to settle a step), and a
+    quarter of a Kd suited to the crystal is about what an autotune on the
+    PT100 gives (585).
     """
 
-    JUMP_C = 0.5      # °C between two crystal samples
-    APART_C = 5.0     # °C between the crystal and the PT100
-    REJOIN_S = 30.0   # s of steady crystal readings before it is used again
+    JUMP_C = 0.5               # °C between two crystal samples
+    REJOIN_S = 30.0            # s of steady crystal readings before it is used again
+    STEADY_S = 120.0           # s both readings hold still for a new reference
+    STEADY_PT100_C = 0.1       # °C p2p the PT100 may show in that time (its noise is ~13 mK rms)
+    STEADY_CRYSTAL_C = 0.4     # °C p2p the lagged crystal may show (allows for a slope 4x off)
+    SCALE_MOVE_C = 1.0         # °C the PT100 must move from the reference for a comparison
+    SCALE_RANGE = (0.25, 2.0)  # crystal change / PT100 change accepted
+    LAG_S = 20.0               # s, the PT100's lag behind the crystal (measured 12 s at 45 °C, 24 s at 65 °C)
+    PT100_KD_SHARE = 0.25      # of Kd, on the PT100 while the crystal is not used
 
     def __init__(self):
         self.reset()
 
     def reset(self):
-        self.offset: float | None = None    # PT100 - lagged crystal, averaged; None while not in use
         self.dropped: str | None = "waiting for a steady crystal reading"   # None while in use
         self.crystal: float | None = None   # the newest crystal reading taken in
-        self._lagged: float | None = None   # the crystal through the PT100's lag
-        self._estimate: float | None = None # the running PT100 - lagged crystal average
-        self._t: float | None = None        # timestamp the filters last stepped to
         self._last: tuple[float, float] | None = None   # (timestamp, °C) of the newest crystal sample
         self._steady_since: float | None = None
-        self._out: tuple[float, float] | None = None    # the newest fused (timestamp, °C)
+        self._moves: deque = deque()        # (timestamp, PT100, lagged crystal) over STEADY_S
+        self._move_lag: tuple[float, float] | None = None   # (timestamp, °C): the crystal through the PT100's lag
+        self._reference: tuple[float, float] | None = None  # (PT100, lagged crystal) when last steady
+        self.scale: float | None = None     # crystal change / PT100 change, the newest measured
 
     @property
     def in_use(self) -> bool:
         return self.dropped is None
 
-    def update(self, s: Settings, p_ts: float, p: float, c_ts: float | None, c: float | None,
-               problem: str | None = None) -> tuple[float, float]:
-        """(timestamp, °C) for the loop from the newest PT100 reading (p, taken
-        at p_ts) and crystal reading (c at c_ts; None when there is no current
-        one, with `problem` saying why): the crystal plus the offset while the
-        crystal is in use, the PT100 otherwise. The same crystal sample again
-        changes nothing."""
+    def update(self, p: float, c_ts: float | None, c: float | None, problem: str | None = None) -> bool:
+        """Take in the newest crystal reading (c at c_ts; None when there is no
+        current one, with `problem` saying why) beside the newest PT100 reading
+        p; returns whether the derivative may act on the crystal. The same
+        crystal sample again changes nothing."""
         if c is None or c_ts is None:
             self._drop(problem or "no crystal temperature")
-            return p_ts, p
+            return False
         if self._last is not None and c_ts == self._last[0]:
-            return self._out if self.in_use else (p_ts, p)
+            return self.in_use
         prev, self._last, self.crystal = self._last, (c_ts, c), c
         if prev is not None and abs(c - prev[1]) > self.JUMP_C:
+            # the jump is no move of the crystal's temperature, and the crystal
+            # may now read another mode: measure it afresh before it is used
+            self._moves.clear()
+            self._move_lag = self._reference = self.scale = None
             self._drop(f"the crystal reading jumped {c - prev[1]:+.2f} °C (mode hop or false lock?)")
-            return p_ts, p
-        if abs(c - p) > self.APART_C:
-            self._drop(f"the crystal reads {c - p:+.1f} °C from the PT100 (wrong mode?)")
-            return p_ts, p
+            return False
+        self._compare_moves(c_ts, p, c)
+        lo, hi = self.SCALE_RANGE
+        if self.scale is not None and not lo <= self.scale <= hi:
+            self._drop(f"the crystal moves {self.scale:+.2f}× as much as the PT100 "
+                       f"(another mode, or a profile far off?)")
+            return False
         if self._steady_since is None:
-            # The first sample of a steady stretch: the filters start here.
-            self._steady_since = self._t = c_ts
-            self._lagged = c
-            self._estimate = None
-        else:
-            self._filter(s, c_ts, p, c)
+            self._steady_since = c_ts
         if not self.in_use:
-            wait = max(self.REJOIN_S, 3 * s.fuse_lag_s)
-            if c_ts - self._steady_since < wait or self._estimate is None:
+            if c_ts - self._steady_since < self.REJOIN_S:
                 self.dropped = (f"crystal steady for {c_ts - self._steady_since:.0f} of "
-                                f"{wait:g} s before it is used")
-                return p_ts, p
+                                f"{self.REJOIN_S:g} s before it is used")
+                return False
+            if self.scale is None:
+                # Unmeasured, a backwards or far too steep crystal would go
+                # unseen until the next move (see the class docstring).
+                self.dropped = (f"waiting for a move of {self.SCALE_MOVE_C:g} °C or more, from where "
+                                f"the crystal and the PT100 held still together for {self.STEADY_S:g} s, "
+                                f"to show the crystal moves with the PT100")
+                return False
             self.dropped = None
-        self.offset = self._estimate
-        self._out = (c_ts, c + self.offset)
-        return self._out
+        return True
 
-    def _filter(self, s: Settings, ts: float, p: float, c: float):
-        """Step the lag on the crystal and the average of PT100 - lagged crystal.
-        The average only starts once the lag has had 2·fuse_lag_s to catch up,
-        and then as a running mean whose span grows to fuse_tau_s: a start in
-        the middle of a ramp, with the lag not quite matched, washes out within
-        minutes instead of lingering for the whole averaging time."""
-        dt = max(ts - self._t, 0.0)
-        self._t = ts
-        self._lagged = c if s.fuse_lag_s <= 0 else self._lagged + dt / (dt + s.fuse_lag_s) * (c - self._lagged)
-        since = ts - self._steady_since - 2 * s.fuse_lag_s
-        if since < 0:
-            return
-        if self._estimate is None:
-            self._estimate = p - self._lagged
-            return
-        span = min(s.fuse_tau_s, max(since, dt))
-        self._estimate += dt / (dt + span) * (p - self._lagged - self._estimate)
+    def _compare_moves(self, ts: float, p: float, c: float):
+        """Measure the crystal's change as a multiple of the PT100's.
+
+        The reference is where both last held still for STEADY_S, so a move is
+        compared from its start; the ratio is updated all through it and ends,
+        once both have settled, as the true one. A sliding window would not do:
+        at the end of a step the crystal has arrived while the PT100 is still
+        catching up (it lags with a slow tail), and the window would read the
+        crystal as hardly moving. The crystal goes through a first-order lag of
+        LAG_S, standing in for the PT100's, so it does not run ahead during the
+        ramp."""
+        if self._move_lag is None:
+            lagged = c
+        else:
+            t0, prev = self._move_lag
+            dt = max(ts - t0, 0.0)
+            lagged = prev + dt / (dt + self.LAG_S) * (c - prev)
+        self._move_lag = (ts, lagged)
+        self._moves.append((ts, p, lagged))
+        while ts - self._moves[0][0] > self.STEADY_S:
+            self._moves.popleft()
+        ps = [m[1] for m in self._moves]
+        cs = [m[2] for m in self._moves]
+        if (ts - self._moves[0][0] >= 0.9 * self.STEADY_S
+                and max(ps) - min(ps) <= self.STEADY_PT100_C
+                and max(cs) - min(cs) <= self.STEADY_CRYSTAL_C):
+            self._reference = (p, lagged)
+        elif self._reference is not None and abs(p - self._reference[0]) >= self.SCALE_MOVE_C:
+            self.scale = (lagged - self._reference[1]) / (p - self._reference[0])
 
     def _drop(self, reason: str):
         self.dropped = reason
-        self.offset = None
         self._steady_since = None
 
     def status(self) -> dict:
-        return {"in_use": self.in_use, "dropped": self.dropped, "offset": self.offset,
-                "crystal": self.crystal}
+        return {"in_use": self.in_use, "dropped": self.dropped, "crystal": self.crystal, "scale": self.scale}
 
 
 class RelayAutotune:

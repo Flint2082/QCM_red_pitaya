@@ -778,24 +778,14 @@ footer { height: 24px; background: var(--surface); border-top: 1px solid var(--b
         <div class="settings-panel" id="spanel-tec">
           <div class="settings-section-title">CONTROL</div>
           <div class="settings-group">
-            <div class="settings-row"><div><div class="settings-row-label">Temperature Control</div><div class="settings-row-desc">Drives the Peltier through the H-bridge to hold the setpoint set on the CALIBRATE tab. Takes effect at once, like the ON box there, rather than waiting for APPLY. Never remembered: after a restart of the service the TEC is always off. It also switches itself off when the feedback temperature (or the PT100, whatever the source) leaves the safety limits below, or when there has been no reading for a minute; a FAULT then says why, and switching it on again clears it</div></div><div></div><div style="display:flex;align-items:center;gap:6px"><select class="settings-input" id="s-tec-enabled" style="width:150px;text-align:left" onchange="setTecEnabled(this.value === '1')"><option value="0">Disabled</option><option value="1">Enabled</option></select></div></div>
+            <div class="settings-row"><div><div class="settings-row-label">Temperature Control</div><div class="settings-row-desc">Drives the Peltier through the H-bridge to hold the setpoint set on the CALIBRATE tab. Takes effect at once, like the ON box there, rather than waiting for APPLY. Never remembered: after a restart of the service the TEC is always off. It also switches itself off when the PT100 leaves the safety limits below, or when there has been no reading for a minute; a FAULT then says why, and switching it on again clears it</div></div><div></div><div style="display:flex;align-items:center;gap:6px"><select class="settings-input" id="s-tec-enabled" style="width:150px;text-align:left" onchange="setTecEnabled(this.value === '1')"><option value="0">Disabled</option><option value="1">Enabled</option></select></div></div>
             <div class="settings-row"><div><div class="settings-row-label">Status</div><div class="settings-row-desc">What the loop is doing, the feedback temperature, the setpoint and the drive (positive heats)</div></div><div></div><div style="display:flex;align-items:center;gap:8px"><div class="status-pill idle" id="tec-pill">—</div><span id="tec-live" style="font-family:'DM Mono',monospace;font-size:11px;color:var(--text-dim)"></span></div></div>
           </div>
 
           <div class="settings-section-title">FEEDBACK</div>
           <div class="settings-group">
-            <div class="settings-row"><div><div class="settings-row-label">Feedback Source</div><div class="settings-row-desc">The temperature the loop regulates. <b>PT100</b> sits on the holder and reads once a second. <b>Crystal</b> is the crystal's own temperature solved from its two locked modes with the active calibration: no lag behind the crystal, but it needs both modes locked and a profile calibrated on this crystal, so it is no use while calibrating a new one. <b>PT100 + crystal</b> combines the two (see below): the PT100 decides where the temperature sits, the crystal steadies it from second to second. Without a fault-free reading the drive drops to zero</div></div><div></div><div style="display:flex;align-items:center;gap:6px"><select class="settings-input" id="s-tec-source" style="width:150px;text-align:left"><option value="pt100">PT100</option><option value="thermocouple">Thermocouple</option><option value="cold_junction">Cold junction</option><option value="crystal">Crystal</option><option value="fused">PT100 + crystal</option></select></div></div>
-          </div>
-
-          <div class="settings-section-title">PT100 + CRYSTAL</div>
-          <div class="settings-group">
-            <div class="settings-row"><div><div class="settings-row-label">How It Works</div><div class="settings-row-desc">The loop regulates on the crystal's temperature plus an offset: PT100 minus crystal, averaged over the Averaging Time. Over longer times than that the PT100 decides, so it ends up at the setpoint and stays the reference for every calibration point. Over shorter ones the loop follows the crystal, which reads ten times a second with next to no noise, runs ahead of the PT100, and feels what the PT100 never sees, such as heat lost to the air. Only the crystal's changes count, never its absolute reading, so the calibration being made does not decide the temperature. The crystal is dropped, and the loop runs on the PT100 alone with the PID gains above, while either mode is unlocked, when its reading jumps by more than 0.5 °C at once (a mode hop) or when it is more than 5 °C from the PT100. It is used again after 30 s of steady readings (three PT100 Delays, if longer), over which the offset is worked out afresh</div></div><div></div><div></div></div>
-            <div class="settings-row"><div><div class="settings-row-label">Crystal</div><div class="settings-row-desc">Whether the crystal is in use now, and the averaged PT100 − crystal</div></div><div></div><span id="tec-fusion-live" style="font-family:'DM Mono',monospace;font-size:11px;color:var(--text-dim);max-width:340px;text-align:right">—</span></div>
-            <div class="settings-row"><div><div class="settings-row-label">Averaging Time</div><div class="settings-row-desc">How long PT100 − crystal is averaged over. Longer lets the crystal steady slower wander too, but after a setpoint change the PT100 takes about this long to finish settling onto the setpoint. 30–7200 s</div></div><div></div><div style="display:flex;align-items:center;gap:6px"><input class="settings-input" type="number" id="s-tec-fuse-tau" value="900" step="60" min="30" max="7200"><span class="settings-unit">s</span></div></div>
-            <div class="settings-row"><div><div class="settings-row-label">PT100 Delay</div><div class="settings-row-desc">How far the PT100 runs behind the crystal (measured on the infi2439 holder: 12 s at 45 °C, 24 s at 65 °C). The PT100 is compared with the crystal delayed by this much, so during a ramp its lag is not taken for a change in the offset. 0–300 s</div></div><div></div><div style="display:flex;align-items:center;gap:6px"><input class="settings-input" type="number" id="s-tec-fuse-lag" value="20" step="1" min="0" max="300"><span class="settings-unit">s</span></div></div>
-            <div class="settings-row"><div><div class="settings-row-label">Kp</div><div class="settings-row-desc">Proportional gain while the crystal is in use. An autotune on PT100 + crystal sets these three and leaves the PID gains above, for the PT100 alone, as they are</div></div><div></div><div style="display:flex;align-items:center;gap:6px"><input class="settings-input" type="number" id="s-tec-fkp" value="20" step="any" min="0"><span class="settings-unit">%/°C</span></div></div>
-            <div class="settings-row"><div><div class="settings-row-label">Ki</div><div class="settings-row-desc">Integral gain while the crystal is in use</div></div><div></div><div style="display:flex;align-items:center;gap:6px"><input class="settings-input" type="number" id="s-tec-fki" value="0.2" step="any" min="0"><span class="settings-unit">%/(°C·s)</span></div></div>
-            <div class="settings-row"><div><div class="settings-row-label">Kd</div><div class="settings-row-desc">Derivative gain while the crystal is in use</div></div><div></div><div style="display:flex;align-items:center;gap:6px"><input class="settings-input" type="number" id="s-tec-fkd" value="0" step="any" min="0"><span class="settings-unit">%·s/°C</span></div></div>
+            <div class="settings-row"><div><div class="settings-row-label">Feedback Source</div><div class="settings-row-desc">P and I always act on the PT100, which sits on the holder, reads once a second and stays the reference for every calibration point. <b>PT100</b>: the derivative acts on it too. <b>PT100 + crystal for D</b>: the derivative acts on the crystal's own temperature, solved from its two locked modes. That reads ten times a second with next to no noise and runs ahead of the PT100, so it damps the loop where the PT100's lag and noise allow little derivative (simulated: a 10 °C step settles in 12 min without overshoot, against 12 min and 250 mK on the PT100 alone). Only the crystal's rate of change counts, never its reading, so it needs no calibration; its slope does count, as a factor on Kd (see Kd). The crystal is set aside, and a quarter of Kd acts on the PT100 instead, while either mode is unlocked, when its reading jumps by more than 0.5 °C at once (a mode hop), or when it moves backwards against the PT100, or less than a quarter or more than twice as much: checked on every move of 1 °C or more from where both last held still for 2 minutes. It is used again after 30 s of steady readings. At the start, and again after a jump, it waits for a move of 1 °C or more to show that it moves with the PT100: on a plateau a backwards crystal would go unseen</div></div><div></div><div style="display:flex;align-items:center;gap:6px"><select class="settings-input" id="s-tec-source" style="width:220px;text-align:left"><option value="pt100">PT100</option><option value="pt100_crystal_d">PT100 + crystal for D</option></select></div></div>
+            <div class="settings-row"><div><div class="settings-row-label">Crystal</div><div class="settings-row-desc">Whether the derivative is on the crystal now, or why not, and how far the crystal moved per degree of the PT100 on the last move (1.00 for a calibrated crystal)</div></div><div></div><span id="tec-crystal-live" style="font-family:'DM Mono',monospace;font-size:11px;color:var(--text-dim);max-width:340px;text-align:right">—</span></div>
           </div>
 
           <div class="settings-section-title">PWM</div>
@@ -807,21 +797,21 @@ footer { height: 24px; background: var(--surface); border-top: 1px solid var(--b
 
           <div class="settings-section-title">PID</div>
           <div class="settings-group">
-            <div class="settings-row"><div><div class="settings-row-label">Kp</div><div class="settings-row-desc">Proportional gain: drive per degree of error. These three are the gains on a single sensor, and on the PT100 alone whenever PT100 + crystal has dropped the crystal</div></div><div></div><div style="display:flex;align-items:center;gap:6px"><input class="settings-input" type="number" id="s-tec-kp" value="20" step="any" min="0"><span class="settings-unit">%/°C</span></div></div>
-            <div class="settings-row"><div><div class="settings-row-label">Ki</div><div class="settings-row-desc">Integral gain: drive added per second per degree of error. It stops growing while the drive is at its cap, so a long ramp does not wind it up</div></div><div></div><div style="display:flex;align-items:center;gap:6px"><input class="settings-input" type="number" id="s-tec-ki" value="0.2" step="any" min="0"><span class="settings-unit">%/(°C·s)</span></div></div>
-            <div class="settings-row"><div><div class="settings-row-label">Kd</div><div class="settings-row-desc">Derivative gain: drive per °C/s that the temperature moves. It acts on the temperature, not the error, so a new setpoint does not kick the drive, and it is smoothed over 5 s</div></div><div></div><div style="display:flex;align-items:center;gap:6px"><input class="settings-input" type="number" id="s-tec-kd" value="0" step="any" min="0"><span class="settings-unit">%·s/°C</span></div></div>
-            <div class="settings-row"><div><div class="settings-row-label">Integral Band</div><div class="settings-row-desc">The integral only moves within this distance of the setpoint, with either set of gains, or where the temperature has stalled short of it. On the way to a new setpoint it then holds the drive that held the last one, instead of piling up the error of the whole approach and overshooting by it. 0 = it moves everywhere</div></div><div></div><div style="display:flex;align-items:center;gap:6px"><input class="settings-input" type="number" id="s-tec-iband" value="1" step="0.1" min="0" max="100"><span class="settings-unit">°C</span></div></div>
+            <div class="settings-row"><div><div class="settings-row-label">Kp</div><div class="settings-row-desc">Proportional gain: drive per degree of error on the PT100</div></div><div></div><div style="display:flex;align-items:center;gap:6px"><input class="settings-input" type="number" id="s-tec-kp" value="20" step="any" min="0"><span class="settings-unit">%/°C</span></div></div>
+            <div class="settings-row"><div><div class="settings-row-label">Ki</div><div class="settings-row-desc">Integral gain: drive added per second per degree of error on the PT100. It stops growing while the drive is at its cap, so a long ramp does not wind it up</div></div><div></div><div style="display:flex;align-items:center;gap:6px"><input class="settings-input" type="number" id="s-tec-ki" value="0.2" step="any" min="0"><span class="settings-unit">%/(°C·s)</span></div></div>
+            <div class="settings-row"><div><div class="settings-row-label">Kd</div><div class="settings-row-desc">Derivative gain: drive per °C/s that the temperature moves, on the PT100 or the crystal (Feedback Source). It acts on the temperature, not the error, so a new setpoint does not kick the drive, and it is smoothed over 5 s. On the PT100 about 600 (what the autotune gives); on the crystal about 2000, about four times as much, since the crystal leads the PT100. The crystal's slope multiplies it: keep Kd times the ratio shown under Crystal below about 4500, where the loop starts to ring (2000 copes with a crystal that reads its changes 0.6 to 1.9 times as large as they are). While the crystal is set aside a quarter of Kd acts on the PT100</div></div><div></div><div style="display:flex;align-items:center;gap:6px"><input class="settings-input" type="number" id="s-tec-kd" value="0" step="any" min="0"><span class="settings-unit">%·s/°C</span></div></div>
+            <div class="settings-row"><div><div class="settings-row-label">Integral Band</div><div class="settings-row-desc">The integral only moves within this distance of the setpoint, or where the temperature has stalled short of it. On the way to a new setpoint it then holds the drive that held the last one, instead of piling up the error of the whole approach and overshooting by it. 0 = it moves everywhere</div></div><div></div><div style="display:flex;align-items:center;gap:6px"><input class="settings-input" type="number" id="s-tec-iband" value="1" step="0.1" min="0" max="100"><span class="settings-unit">°C</span></div></div>
           </div>
 
           <div class="settings-section-title">SAFETY LIMITS</div>
           <div class="settings-group">
             <div class="settings-row"><div><div class="settings-row-label">Minimum Temperature</div><div class="settings-row-desc">Below this the loop switches itself off. The setpoint has to lie between the two limits</div></div><div></div><div style="display:flex;align-items:center;gap:6px"><input class="settings-input" type="number" id="s-tec-tmin" value="5" step="1"><span class="settings-unit">°C</span></div></div>
-            <div class="settings-row"><div><div class="settings-row-label">Maximum Temperature</div><div class="settings-row-desc">Above this the loop switches itself off, on the feedback temperature and, with another source, on the PT100 too. Keep it below the bimetal thermostat on the holder, which is what stops a runaway when the software cannot</div></div><div></div><div style="display:flex;align-items:center;gap:6px"><input class="settings-input" type="number" id="s-tec-tmax" value="75" step="1"><span class="settings-unit">°C</span></div></div>
+            <div class="settings-row"><div><div class="settings-row-label">Maximum Temperature</div><div class="settings-row-desc">Above this the loop switches itself off, on the PT100. Keep it below the bimetal thermostat on the holder, which is what stops a runaway when the software cannot</div></div><div></div><div style="display:flex;align-items:center;gap:6px"><input class="settings-input" type="number" id="s-tec-tmax" value="75" step="1"><span class="settings-unit">°C</span></div></div>
           </div>
 
           <div class="settings-section-title">AUTOTUNE</div>
           <div class="settings-group">
-            <div class="settings-row"><div><div class="settings-row-label">Relay Amplitude</div><div class="settings-row-desc">The autotune drives ± this much around the drive needed to hold the setpoint, switching each time the temperature crosses it, so the loop oscillates at its natural period. It measures the period and the swing, works out the gains, takes them and goes on holding the setpoint. Run it at a setpoint in the middle of the range you use, with the temperature already close to it; it takes four or more oscillations, often 20–60 min</div></div><div></div><div style="display:flex;align-items:center;gap:6px"><input class="settings-input" type="number" id="s-tec-at-amp" value="30" step="5" min="1" max="100"><span class="settings-unit">%</span></div></div>
+            <div class="settings-row"><div><div class="settings-row-label">Relay Amplitude</div><div class="settings-row-desc">The autotune drives ± this much around the drive needed to hold the setpoint, switching each time the temperature crosses it, so the loop oscillates at its natural period. It measures the period and the swing, works out the gains, takes them and goes on holding the setpoint. The relay runs on the PT100: with PT100 + crystal for D it sets Kp and Ki and leaves Kd, which on the crystal wants about four times what the PT100 takes. Run it at a setpoint in the middle of the range you use, with the temperature already close to it; it takes four or more oscillations, often 20–60 min</div></div><div></div><div style="display:flex;align-items:center;gap:6px"><input class="settings-input" type="number" id="s-tec-at-amp" value="30" step="5" min="1" max="100"><span class="settings-unit">%</span></div></div>
             <div class="settings-row"><div><div class="settings-row-label">Hysteresis</div><div class="settings-row-desc">How far past the setpoint the temperature has to go before the relay switches: comfortably above the sensor noise</div></div><div></div><div style="display:flex;align-items:center;gap:6px"><input class="settings-input" type="number" id="s-tec-at-hyst" value="0.1" step="0.05" min="0" max="5"><span class="settings-unit">°C</span></div></div>
             <div class="settings-row"><div><div class="settings-row-label">Tuning Rule</div><div class="settings-row-desc">How the measured loop becomes gains. <b>Tyreus-Luyben</b> is gentle and robust, the usual choice for a thermal loop. <b>No overshoot</b> is slower still on the proportional gain. <b>Ziegler-Nichols</b> is fast and overshoots by about a quarter</div></div><div></div><div style="display:flex;align-items:center;gap:6px"><select class="settings-input" id="s-tec-at-rule" style="width:200px;text-align:left"><option value="tyreus_luyben">Tyreus-Luyben (gentle)</option><option value="no_overshoot">No overshoot</option><option value="ziegler_nichols">Ziegler-Nichols (fast)</option></select></div></div>
             <div class="settings-row"><div><div class="settings-row-label">Autotune</div><div class="settings-row-desc">Progress of a test in progress, or the result of the last one</div></div><div></div><span id="tec-at-status" style="font-family:'DM Mono',monospace;font-size:11px;color:var(--text-dim);max-width:340px;text-align:right">—</span></div>
@@ -3401,8 +3391,7 @@ const TEC_FIELDS = {   // settings field -> /tec/settings parameter
   's-tec-heat-dir': 'heat_dir', 's-tec-kp': 'kp', 's-tec-ki': 'ki', 's-tec-kd': 'kd',
   's-tec-tmin': 't_min', 's-tec-tmax': 't_max',
   's-tec-at-amp': 'at_amplitude', 's-tec-at-hyst': 'at_hysteresis', 's-tec-at-rule': 'at_rule',
-  's-tec-iband': 'i_band', 's-tec-fkp': 'fused_kp', 's-tec-fki': 'fused_ki', 's-tec-fkd': 'fused_kd',
-  's-tec-fuse-tau': 'fuse_tau_s', 's-tec-fuse-lag': 'fuse_lag_s',
+  's-tec-iband': 'i_band',
 };
 const TEC_SETTING_IDS = Object.keys(TEC_FIELDS);
 const TEC_MODES = {   // mode -> [pill text, pill class]
@@ -3472,7 +3461,7 @@ async function toggleTecAutotune() {
   if (!confirm(`Autotune the TEC loop at ${sp} °C?\n\n`
              + `The Peltier is switched on and driven ±${fieldValue('s-tec-at-amp')} % each time the temperature `
              + `crosses the setpoint, until the oscillation repeats itself, typically 20–60 min. The gains it `
-             + `finds replace the current ${_tec && _tec.source === 'fused' ? 'PT100 + crystal ones (the PID gains for the PT100 alone stay)' : 'ones'}, `
+             + `finds replace the current ${_tec && _tec.source === 'pt100_crystal_d' ? 'Kp and Ki (Kd, on the crystal, stays)' : 'ones'}, `
              + `and the loop then goes on holding ${sp} °C.\n\n`
              + `Change the setpoint on the CALIBRATE tab first if this is not mid-range.`)) return;
   try { await postOrThrow(`${API_URL}/tec/autotune/start`); }
@@ -3495,9 +3484,9 @@ function onTecStatus(st) {
   if (!st.available) live = st.reason || 'not available';
   else {
     const t = st.temperature == null ? '—' : `${st.temperature.toFixed(2)} °C`;
-    // PT100 + crystal without the crystal is running on the PT100 alone: say so.
-    const name = st.fusion && !st.fusion.in_use ? `${st.source_name} (PT100 alone)` : st.source_name;
-    live = `${name} ${t} · set ${st.setpoint.toFixed(2)} °C · drive ${st.output >= 0 ? '+' : ''}${st.output.toFixed(1)} %`;
+    // With D on the crystal, say where the derivative is right now.
+    const dOn = st.crystal_d ? (st.crystal_d.in_use ? ' · D on crystal' : ' · D on PT100 (crystal set aside)') : '';
+    live = `PT100 ${t}${dOn} · set ${st.setpoint.toFixed(2)} °C · drive ${st.output >= 0 ? '+' : ''}${st.output.toFixed(1)} %`;
     const note = st.fault || st.message || (st.temperature == null ? st.reading_problem : null) || st.save_error;
     if (note) live += ` · ${note}`;
   }
@@ -3506,15 +3495,15 @@ function onTecStatus(st) {
     el.textContent = live;
     el.style.color = st.mode === 'fault' ? 'var(--red)' : '';
   }
-  const fu = st.fusion;
-  let fl = 'only with PT100 + crystal as the feedback source';
-  if (fu && fu.in_use) {
-    fl = `in use · PT100 − crystal ${fu.offset >= 0 ? '+' : ''}${fu.offset.toFixed(3)} °C`;
-  } else if (fu) {
-    fl = `not in use: ${fu.dropped} — on the PT100 alone`;
+  const cd = st.crystal_d;
+  let cl = 'only with PT100 + crystal for D as the feedback source';
+  if (cd) {
+    cl = cd.in_use ? 'derivative on the crystal' : `set aside: ${cd.dropped} — a quarter of Kd on the PT100`;
+    // the crystal's change per PT100 change on the last move (1 = calibrated): a factor on Kd
+    if (typeof cd.scale === 'number') cl += ` · moves ${cd.scale.toFixed(2)}× the PT100`;
   }
-  setText('tec-fusion-live', fl);
-  document.getElementById('tec-fusion-live').style.color = fu && !fu.in_use ? 'var(--orange)' : '';
+  setText('tec-crystal-live', cl);
+  document.getElementById('tec-crystal-live').style.color = cd && !cd.in_use ? 'var(--orange)' : '';
 
   const on = document.getElementById('cal-tec-on');
   on.checked = !!st.enabled;
@@ -3542,8 +3531,9 @@ function onTecStatus(st) {
        + (a.amplitude != null ? ` · swing ±${a.amplitude.toFixed(2)} °C` : '')
        + ` · bias ${a.bias >= 0 ? '+' : ''}${a.bias.toFixed(1)} %`;
   } else if (lt) {
-    at = `last${lt.source === 'fused' ? ' (PT100 + crystal)' : ''}: Ku ${lt.ku.toPrecision(3)} %/°C, `
-       + `Tu ${Math.round(lt.tu)} s → Kp ${lt.kp.toPrecision(3)}, Ki ${lt.ki.toPrecision(3)}, Kd ${lt.kd.toPrecision(3)}`;
+    at = `last: Ku ${lt.ku.toPrecision(3)} %/°C, Tu ${Math.round(lt.tu)} s → Kp ${lt.kp.toPrecision(3)}, `
+       + `Ki ${lt.ki.toPrecision(3)}, ` + (lt.kd_kept ? `Kd kept (on the crystal; ${lt.kd.toPrecision(3)} for the PT100)`
+                                                     : `Kd ${lt.kd.toPrecision(3)}`);
   }
   setText('tec-at-status', at);
 

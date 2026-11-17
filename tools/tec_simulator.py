@@ -24,14 +24,15 @@ PARAMS were fitted on 14 Nov 2026 to an open-loop identification test on the
 rp-f0ea58 holder (PRBS on the drive around 40 and 60 degC, closed-loop steps, a
 TEC-off relaxation; drive logged throughout), the cooling map to the full-cooling
 ramps of the 13-14 Nov calibration runs. Accuracy and limits: see the README section
-"Simulating the TEC".
+"Simulating the TEC". The same model as a Simulink block: tools/simulink/
+(make_tec_holder.m builds it).
 
 Usage
 -----
   python tools/tec_simulator.py                         # the standard 15-65 degC sequence, plotted
   python tools/tec_simulator.py --setpoints 25,45,25 --dwell 30
   python tools/tec_simulator.py --source pt100 --gains 39.9,0.196,585
-  python tools/tec_simulator.py --fuse-tau 300
+  python tools/tec_simulator.py --gains 40,0.2,2500 --crystal-scale 1.8
   python tools/tec_simulator.py --tf 25,40,60           # the small-signal transfer functions
 
 Needs numpy (and matplotlib for the plot); run from anywhere: it finds src/ next to
@@ -62,10 +63,10 @@ PARAMS = {
     "Ta": 22.2,
 }
 
-# The TEC settings of the 13-14 Nov calibration (data/tec.json on rp-f0ea58).
-SETTINGS = dict(pwm_freq=100.0, max_output=100.0, i_band=1.0, fuse_tau_s=900.0, fuse_lag_s=20.0,
-                t_min=5.0, t_max=75.0, heat_dir=0, source="fused",
-                kp=39.9, ki=0.196, kd=585.0, fused_kp=78.8, fused_ki=2.74, fused_kd=566.0)
+# The TEC settings simulated by default: Kp and Ki from the 13 Nov autotune on the
+# PT100 (data/tec.json on rp-f0ea58), D on the crystal at 2000.
+SETTINGS = dict(pwm_freq=100.0, max_output=100.0, i_band=1.0, t_min=5.0, t_max=75.0, heat_dir=0,
+                source="pt100_crystal_d", kp=39.9, ki=0.196, kd=2000.0)
 
 SEQUENCE = [25, 15, 25, 35, 45, 55, 65, 60, 50, 40, 30, 20, 25]
 
@@ -83,8 +84,9 @@ class Holder:
         self.Ta = self.q["Ta"]
         T0 = self.Ta if T0 is None else T0
         self.u_hold = self.equilibrium(T0)
-        dT = T0 - self.Ta
-        self.x = [dT, dT, dT, dT]           # lag 1, lag 2 (= crystal), PT100 lead-lag, PT100
+        # degC: slow node, crystal, PT100 lead-lag, PT100. Absolute, so that a change
+        # in .Ta reaches the holder through t1, as in tools/simulink/make_tec_holder.m.
+        self.x = [T0, T0, T0, T0]
         self._queue = []                    # (time due, drive): the delay line
         self._t = 0.0
         self._u = self.u_hold
@@ -111,10 +113,11 @@ class Holder:
     def _deriv(self, x, u, enabled):
         q = self.q
         x1, x2, w, yp = x
+        Ta = self.Ta
         if enabled:
-            d1 = (self.F(u) * (1 - q["kap"] * x2) - x1) / q["t1"]
+            d1 = (Ta + self.F(u) * (1 - q["kap"] * (x2 - Ta)) - x1) / q["t1"]
         else:
-            d1 = -x1 / q["t1_off"]
+            d1 = (Ta - x1) / q["t1_off"]
         kz = q["z"] / q["ta"]
         return (d1, (x1 - x2) / q["t2"], (x2 - w) / q["ta"], (kz * x2 + (1 - kz) * w - yp) / q["tp"])
 
@@ -124,7 +127,6 @@ class Holder:
         while self._queue and self._queue[0][0] <= self._t + 1e-9:
             self._u = self._queue.pop(0)[1]
         x = [v for v in self.x]
-        # deviations from the room temperature
         k1 = self._deriv(x, self._u, enabled)
         k2 = self._deriv([v + dt * k for v, k in zip(x, k1)], self._u, enabled)
         self.x = [v + 0.5 * dt * (a + b) for v, a, b in zip(x, k1, k2)]
@@ -132,11 +134,11 @@ class Holder:
 
     @property
     def crystal(self):
-        return self.Ta + self.x[1]
+        return self.x[1]
 
     @property
     def pt100(self):
-        return self.Ta + self.x[3]
+        return self.x[3]
 
     def linearise(self, Tc):
         """Small-signal transfer functions at the hold of Tc: drive (%) -> crystal and
@@ -208,8 +210,8 @@ def run(schedule, t_end, settings=None, params=None, T0=None, pt_noise=0.013, dt
     starting at t = 0; the holder starts in equilibrium at T0 (default the first
     setpoint) with the controller's integral at the holding drive. room: optional
     function t -> room temperature. crystal_error: optional function T -> error (degC)
-    of the crystal thermometer the loop is fed (its calibration against the PT100),
-    which is what makes the PT100 + crystal loop creep after a step. Returns arrays
+    of the crystal thermometer the loop is fed (its calibration against the PT100);
+    only its slope matters, as a factor on Kd with D on the crystal. Returns arrays
     sampled once a second: t, crystal (true), pt100 (true and as read, with the
     LTC2986's ~13 mK noise) and drive (%)."""
     settings = dict(SETTINGS, **(settings or {}))
@@ -269,9 +271,11 @@ def main():
     ap = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
     ap.add_argument("--setpoints", default=",".join(map(str, SEQUENCE)), help="comma-separated, degC")
     ap.add_argument("--dwell", type=float, default=25.0, help="minutes per setpoint")
-    ap.add_argument("--source", choices=("fused", "pt100", "crystal"), default="fused")
-    ap.add_argument("--gains", help="kp,ki,kd for the chosen source")
-    ap.add_argument("--fuse-tau", type=float, help="PT100 + crystal averaging time, s")
+    ap.add_argument("--source", choices=("pt100_crystal_d", "pt100"), default="pt100_crystal_d",
+                    help="D on the crystal (default) or on the PT100")
+    ap.add_argument("--gains", help="kp,ki,kd")
+    ap.add_argument("--crystal-scale", type=float, default=1.0,
+                    help="the crystal reads changes this many times too large (a profile from another crystal)")
     ap.add_argument("--room", type=float, help="room temperature, degC")
     ap.add_argument("--tf", help="print the small-signal transfer functions at these crystal temperatures")
     ap.add_argument("--no-plot", action="store_true")
@@ -296,13 +300,14 @@ def main():
     settings = {"source": a.source}
     if a.gains:
         kp, ki, kd = (float(x) for x in a.gains.split(","))
-        pre = "fused_" if a.source == "fused" else ""
-        settings.update({pre + "kp": kp, pre + "ki": ki, pre + "kd": kd})
-    if a.fuse_tau:
-        settings["fuse_tau_s"] = a.fuse_tau
+        settings.update(kp=kp, ki=ki, kd=kd)
+    elif a.source == "pt100":
+        settings.update(kd=585.0)          # the 13 Nov autotune's Kd for the PT100
+    g = a.crystal_scale
     sps = [float(x) for x in a.setpoints.split(",")]
     sched = sequence_schedule(sps, a.dwell)
-    out = run(sched, len(sps) * a.dwell * 60, settings, params)
+    out = run(sched, len(sps) * a.dwell * 60, settings, params,
+              crystal_error=(lambda T: (g - 1) * (T - 25.0)) if g != 1 else None)
     for t, sp in sched:
         m = (out["t"] > t) & (out["t"] <= t + a.dwell * 60)
         fin = out["crystal"][m][-60:].mean()

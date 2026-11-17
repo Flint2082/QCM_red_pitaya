@@ -600,22 +600,26 @@ curl -X POST "http://192.168.1.50:8000/measurement/stop"
 
 [`tec_simulator.py`](tec_simulator.py) simulates the calibration holder on its
 Peltier, driven by the real TEC controller code (`src/workers/tec_worker.py`:
-the PID, the PT100 + crystal fusion, the limits) on a virtual clock. Use it to
-try gains, the fusion settings or a calibration sequence before running them
-on the holder. Four hours of holder time take a few seconds.
+the PID, the derivative on the crystal with its checks, the limits) on a
+virtual clock. Use it to try gains or a calibration sequence before running
+them on the holder. Four hours of holder time take a few seconds.
 
 ```bash
 python tools/tec_simulator.py                                   # the standard 15-65 °C sequence, plotted
 python tools/tec_simulator.py --setpoints 25,45,25 --dwell 30
 python tools/tec_simulator.py --source pt100 --gains 39.9,0.196,585
-python tools/tec_simulator.py --fuse-tau 300 --no-plot
+python tools/tec_simulator.py --gains 40,0.2,2500 --crystal-scale 1.8 --no-plot
 python tools/tec_simulator.py --tf 25,40,60                     # small-signal transfer functions
 ```
 
+By default it runs "PT100 + crystal for D" with Kp 39.9, Ki 0.196 and Kd 2000.
+`--crystal-scale` makes the crystal read its changes that many times too large,
+like a profile from another crystal; with D on the crystal that multiplies Kd.
+
 From Python, `tec_simulator.run(schedule, t_end, settings, params, ...)` returns
 the crystal, PT100 and drive once a second. `crystal_error=` adds a calibration
-error to the crystal temperature the loop is fed, and `room=` makes the room
-temperature a function of time. `Holder` is the thermal model on its own:
+error to the crystal temperature the loop is fed (only its slope matters), and
+`room=` makes the room temperature a function of time. `Holder` is the thermal model on its own:
 `step(u, dt)` advances it, and `linearise(T)` gives the transfer functions.
 
 ### Transfer functions
@@ -638,7 +642,8 @@ rp-f0ea58 holder on 14 Nov 2026 with a PRBS on the drive (±15 % around 40 °C,
 - **Check:** with this model the controller's own relay autotune reproduces
   both autotunes run on the real holder on 13 Nov:
   - PT100 loop: Ku 84–87 %/°C, Tu 90–91 s (real: 87.8, 92 s);
-  - PT100 + crystal loop: Ku 132–136, Tu 57–58 s (real: 131, 57.5 s).
+  - the PT100 + crystal (fused) loop of the time: Ku 132–136, Tu 57–58 s
+    (real: 131, 57.5 s).
 
 ### The model (large signal)
 
@@ -660,6 +665,113 @@ crystal − Ta = e^(−2.3 s) / ((312 s + 1)(12.2 s + 1)) · w      kap = −0.0
   - fast part (delay, crystal lag, PT100 path): the PRBS frequency response;
   - map and slow poles: the time series of the test;
   - cooling side: the full-cooling ramps of the 13-14 Nov runs.
+- **Room temperature:** the room enters through the slow pole (t1, or t1_off
+  with the bridge off), so a change in room temperature reaches the holder
+  over minutes rather than at once.
+
+### Simulink
+
+[`simulink/tec_holder_lib.slx`](simulink/tec_holder_lib.slx) is a library with
+the same model as one masked block, **TEC holder**:
+
+| | Port | Unit |
+|---|---|---|
+| Input 1 | drive | %, +100 = full heating; limited to ±100 |
+| Input 2 | enabled | 1 = bridge on, 0 = off (the drive is then ignored) |
+| Input 3 | room | °C |
+| Output 1 | crystal | °C |
+| Output 2 | PT100 | °C |
+
+- **Mask parameters:** the mask holds the parameters above, defaulting to the
+  fitted values. It also sets the starting point: the crystal at T0 in a room
+  at Ta0. The block starts in equilibrium there, with the delay line holding
+  the drive that keeps it there.
+- **Demo:** [`simulink/tec_holder_demo.slx`](simulink/tec_holder_demo.slx)
+  puts the block in a PID loop on the PT100. That is the TEC worker on its
+  PT100 source:
+  - the PT100 gains;
+  - the derivative on the measurement through a 5 s filter;
+  - clamping anti-windup and a ±100 % output limit;
+  - a step every 0.5 s on a PT100 read once a second.
+
+  It changes setpoint every 30 min. To use other setpoints, define
+  `tec_setpoints = [t_s, degC; ...]` in the base workspace before running it.
+- **What the demo leaves out:** the worker's integral band (`i_band`) and the
+  derivative on the crystal. The TEC controller block below has both.
+- **Rebuilding:** [`simulink/make_tec_holder.m`](simulink/make_tec_holder.m)
+  builds both files. Run it again to rebuild them, for example after a new
+  fit or in an older MATLAB: the files are saved by R2025b, and the script
+  uses only basic blocks.
+- **Checks:**
+  - The block agrees with `tec_simulator.Holder` to within 1 mK on the logged
+    drive of the 14 Nov test.
+  - Its linearisation at 40 °C gives the transfer function in the table above.
+    `linmod` leaves out the 2.3 s transport delay, which is its default.
+
+**The controller.** [`simulink/tec_controller_lib.slx`](simulink/tec_controller_lib.slx)
+holds a second block, **TEC controller**: the Pitaya's TEC loop, ported tick
+by tick from `src/domain/tec_controller.py` and `src/workers/tec_worker.py`.
+
+| | Port | Unit |
+|---|---|---|
+| Input 1 | setpoint | °C |
+| Input 2 | PT100 | °C; read inside once a second, like the LTC2986 |
+| Input 3 | crystal reading | °C; NaN while unlocked |
+| Output 1 | drive | %, to the holder's input 1 |
+| Output 2 | enabled | 0 after a limit trip, to the holder's input 2 |
+| Output 3 | status | [derivative on the crystal; crystal/PT100 move ratio; PT100 °C] |
+
+- **Why a block of its own:** a stock PID Controller block is not the
+  worker's PID.
+  - It has no integral band. With a strong derivative the output stays below
+    its limit during the approach, clamping never acts, and the integral
+    collects the whole approach: 2 °C of overshoot on a 10 °C step.
+  - Two PID blocks, each limited to ±100 % and then added, are not one PID
+    limited once. The first block's limit cuts the P term before the second
+    block's D is taken off, so the heater gets about 30 % during a step.
+- **What it runs:** a MATLAB Function block steps every 0.1 s, like the
+  worker's tick, with the script
+  [`simulink/tec_controller_block.m`](simulink/tec_controller_block.m). It
+  contains:
+  - the PID: P and I on the PT100, the derivative on the measurement through
+    a 5 s filter, conditional integration, the integral band, a step on each
+    fresh reading at least 0.5 s apart;
+  - the derivative on the crystal with its checks (a jump; a crystal moving
+    backwards or 0.25–2× off; a first move to measure it), the rejoin wait,
+    a quarter of Kd on the PT100 meanwhile, and the derivative restarting when
+    the crystal joins or leaves;
+  - the trips on t_min/t_max.
+
+  It leaves out the relay autotune and the handling of stale readings.
+- **Sources,** as on the Pitaya: PT100, and PT100 + crystal for D. One set
+  of gains, `kp`, `ki`, `kd`; Kd about 600 on the PT100, 2000 on the
+  crystal.
+- **Demo:** [`simulink/tec_controller_demo.slx`](simulink/tec_controller_demo.slx)
+  wires it to the TEC holder block.
+  - It runs the standard 15–65 °C sequence by default, with 13 mK of PT100
+    noise.
+  - Set these in the base workspace (see its InitFcn): `tec_setpoints`,
+    `pt100_noise`, and `crystal_scale` and `crystal_offset`. The last two make
+    the crystal reading `crystal_scale·(T − 25) + 25 + crystal_offset`, a
+    crystal on another crystal's profile. The scale multiplies Kd; the offset
+    does nothing.
+  - The integral starts at the drive that holds the first setpoint.
+- **Rebuilding:** [`simulink/make_tec_controller.m`](simulink/make_tec_controller.m)
+  builds the library and the demo. It leaves the holder's files alone.
+- **Check against `tec_simulator.py`** (which runs the Python code itself),
+  noise off, setpoints 25 → 35 → 45 → 35 °C:
+  - PT100 source, Kd 585: 1.0 mK rms;
+  - D on the crystal, Kd 2000, crystal_scale 1.7 and a +7 °C offset: 4.9 mK
+    rms, all of it a 56 mK blip for some 20 s where the crystal first joins,
+    halfway up the first ramp (629 s in Simulink, 630 s in Python);
+  - a backwards crystal (crystal_scale −1): 0.1 mK rms; it never joins in
+    either;
+  - settling times equal to 0.1 min.
+
+  That is after taking out a step-timing offset of 1 s (0.5 s on the crystal).
+  The offset is only the harnesses' setpoint timing: Simulink changes the
+  setpoint on a reading's tick, while the Python harness changes it between
+  readings. The same second, landing on the join mid-ramp, makes the blip.
 
 ### Accuracy and limits
 
@@ -680,12 +792,10 @@ crystal − Ta = e^(−2.3 s) / ((312 s + 1)(12.2 s + 1)) · w      kap = −0.0
     runs.
   - **Crystal thermometer in fast ramps:** it is off by up to ~0.2 °C (thermal
     transients in the B-mode).
-- **The PT100 + crystal loop's creep after a step** comes from the crystal
-  calibration, not from the holder. The fused offset learned at one plateau is
-  wrong at the next by the change in the crystal's calibration error, and the
-  loop re-learns it over `fuse_tau_s`.
-  - On 13-14 Nov the loop most likely ran on half_cal, whose error against
-    the PT100 ranges from −0.4 °C to +1.1 °C across 15-65 °C. That would cause
-    the 0.3-0.5 °C creeps.
-  - The replay with that error (`crystal_error=`) reproduces them.
-  - With an accurate calibration, `fuse_tau_s` 900 s and 300 s settle alike.
+- **The 0.3-0.5 °C creeps after each step on 13-14 Nov** came from the crystal
+  calibration, not from the holder. The loop then ran PT100 + crystal fused
+  (P and I on the crystal plus an averaged offset; replaced on 17 Nov by D on
+  the crystal, which cannot creep). The offset learned at one plateau was
+  wrong at the next by the change in the crystal's calibration error: most
+  likely half_cal's, −0.4 °C to +1.1 °C against the PT100 across 15-65 °C. The
+  replays of those runs used that controller.

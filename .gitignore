@@ -15,7 +15,8 @@ data/sweeps/
 SysgenFeatureReport.htm
 *_sysgen*.log
 model_composer/log.log
-model_composer/slprj/
+# Simulink's build cache, wherever a model is simulated
+slprj/
 *.slxc
 *.slx.autosave
 *.slx.original
